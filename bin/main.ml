@@ -3,9 +3,9 @@ open Brr_lwd
 
 let ui =
   let playlist = Lwd.var 0 in
-  let on_click _ = Lwd.set playlist (Lwd.peek playlist + 1) in
+  let on_click _ _ = Lwd.set playlist (Lwd.peek playlist + 1) in
   let btn_mix =
-    Ui.Button.make ~on_click
+    Ui.Two_state_button.make ~on_click
       [
         `R
           (Lwd.map (Lwd.get playlist) ~f:(fun pl ->

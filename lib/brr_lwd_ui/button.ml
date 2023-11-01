@@ -8,15 +8,57 @@ end) =
 struct
   (** Make a button with reactive content. Not that the handler itself is not reactive. *)
   let make ?d ?(classes = Classes.Add []) ~on_click content =
-    let _classes = Classes.update Properties.base_classes classes in
+    let classes =
+      Classes.update Properties.base_classes classes |> Classes.to_list
+    in
+    let at = List.map classes ~f:(fun c -> `P (At.class' @@ Jstr.v c)) in
     let handler = Elwd.handler Ev.click on_click in
-    let button = Elwd.button ?d ~ev:[ `P handler ] content in
+    let button = Elwd.button ?d ~at ~ev:[ `P handler ] content in
     button
 
   (** Make a pure button. *)
   let make_pure ?d ?(classes = Classes.Add []) ~on_click content =
-    let _classes = Classes.update Properties.base_classes classes in
-    let button = El.button ?d content in
+    let classes =
+      Classes.update Properties.base_classes classes |> Classes.to_list
+    in
+    let at = List.map classes ~f:(fun c -> At.class' @@ Jstr.v c) in
+    let button = El.button ?d ~at content in
     let listener = Ev.listen Ev.click on_click (El.as_target button) in
     (button, listener)
+end
+
+module Two_state (Properties : sig
+  val base_classes : Classes.t
+  val on_classes : Classes.t
+  val off_classes : Classes.t
+end) =
+struct
+  let states : (string, bool) Hashtbl.t = Hashtbl.create 16
+
+  type state = On | Off
+
+  let toggle = function Off -> On | On -> Off
+
+  let get_state_classes = function
+    | Off -> Properties.off_classes
+    | On -> Properties.on_classes
+
+  let make ?d ?(classes = Classes.Add []) ?(state = Off) ~on_click content =
+    let open Lwd_infix in
+    let v_state = Lwd.var state in
+    let base_classes = Classes.update Properties.base_classes classes in
+    let$* state = Lwd.get v_state in
+    let at =
+      let classes = get_state_classes state in
+      Classes.union base_classes classes
+      |> Classes.to_list
+      |> List.map ~f:(fun c -> Utils.pure @@ At.class' (Jstr.v c))
+    in
+    let handler =
+      Elwd.handler Ev.click (fun ev ->
+          Lwd.set v_state @@ toggle state;
+          on_click v_state ev)
+    in
+    let button = Elwd.button ?d ~at ~ev:[ `P handler ] content in
+    button
 end
