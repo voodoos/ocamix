@@ -5,7 +5,7 @@
 (source
  (github voodoos/ocamix))
 
-(license AGPL)
+(license AGPL-3.0)
 
 (authors "Ulysse G\195\169rard")
 
@@ -16,4 +16,4 @@
  (name ocamix)
  (synopsis "A playlist generator")
  (description "A _really_ long description")
- (depends js-of-ocaml brr lwd brr-lwd))
+ (depends containers js_of_ocaml brr lwd brr-lwd))

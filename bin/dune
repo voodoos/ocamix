@@ -5,4 +5,5 @@
   (only *.bc.js)
   (into ../example)
   (until-clean))
- (libraries js_of_ocaml brr lwd brr-lwd lib))
+ (flags :standard -open Brrer)
+ (libraries js_of_ocaml brrer lwd brr-lwd ocamix.brr-lwd-ui lib))

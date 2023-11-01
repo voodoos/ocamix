@@ -4,12 +4,13 @@ synopsis: "A playlist generator"
 description: "A _really_ long description"
 maintainer: [""]
 authors: ["Ulysse Gérard"]
-license: "AGPL"
+license: "AGPL-3.0"
 homepage: "https://github.com/voodoos/ocamix"
 bug-reports: "https://github.com/voodoos/ocamix/issues"
 depends: [
   "dune" {>= "3.11"}
-  "js-of-ocaml"
+  "containers"
+  "js_of_ocaml"
   "brr"
   "lwd"
   "brr-lwd"

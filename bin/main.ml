@@ -3,18 +3,21 @@ open Brr_lwd
 
 let ui =
   let playlist = Lwd.var 0 in
-  (* let _btn_mix = El.button  *)
-  let btn_mix = El.button [ El.txt' "click" ] in
-  let _ =
-    Ev.listen Ev.click
-      (fun _ -> Lwd.set playlist (Lwd.peek playlist + 1))
-      (El.as_target btn_mix)
+  let on_click _ = Lwd.set playlist (Lwd.peek playlist + 1) in
+  let btn_mix =
+    Ui.Button.make ~on_click
+      [
+        `R
+          (Lwd.map (Lwd.get playlist) ~f:(fun pl ->
+               El.txt' ("click" ^ string_of_int pl)));
+      ]
+    |> Lwd.map ~f:(fun (btn, _) -> btn)
   in
   Elwd.div
     [
       `P (El.txt' "Click the button");
       `P (El.br ());
-      `P btn_mix;
+      `R btn_mix;
       `R
         (Elwd.p
            [
@@ -24,20 +27,15 @@ let ui =
            ]);
     ]
 
-let () =
+let _ =
   let ui = Lwd.observe ui in
   let on_invalidate _ =
     Console.(log [ str "on invalidate" ]);
-    let _ : int =
-      G.request_animation_frame @@ fun _ ->
-      let _ui = Lwd.quick_sample ui in
-      (*El.set_children (Document.body G.document) [ui]*)
-      ()
-    in
-    ()
+    ignore @@ G.request_animation_frame
+    @@ fun _ -> ignore @@ Lwd.quick_sample ui
   in
   let on_load _ =
-    Console.(log [ str "onload" ]);
+    Console.(log [ str "on load" ]);
     El.append_children (Document.body G.document) [ Lwd.quick_sample ui ];
     Lwd.set_on_invalidate ui on_invalidate
   in
