@@ -11,7 +11,6 @@ let ui =
           (Lwd.map (Lwd.get playlist) ~f:(fun pl ->
                El.txt' ("click" ^ string_of_int pl)));
       ]
-    |> Lwd.map ~f:(fun (btn, _) -> btn)
   in
   Elwd.div
     [
