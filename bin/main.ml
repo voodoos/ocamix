@@ -5,7 +5,10 @@ open! Lwd_infix
 
 let ui =
   let playlist = Lwd.var 0 in
-  let on_click _ _ = Lwd.set playlist (Lwd.peek playlist + 1) in
+  let on_click _ _ =
+    Lwd.set playlist (Lwd.peek playlist + 1);
+    Ui.Two_state_button.Toggle
+  in
   let { Ui.Two_state_button.elt = btn_mix; _ } =
     Ui.Two_state_button.make ~on_click
       [

@@ -1,10 +1,17 @@
 open Brr_lwd_ui
 
-module Two_state_button = Button.Two_state (struct
-  let base_classes = Classes.make [ "pouet_base"; "another" ]
-  let on_classes = Classes.make [ "on" ]
-  let off_classes = Classes.make [ "off" ]
-end)
+module Two_state_button = struct
+  include Button.Two_state
+
+  let config =
+    {
+      base_classes = Classes.make [ "pouet_base"; "another" ];
+      on_classes = Classes.make [ "on" ];
+      off_classes = Classes.make [ "off" ];
+    }
+
+  let make = make ~config
+end
 
 module Button = Button.Make (struct
   let base_classes = Classes.make [ "pouet_base"; "another" ]

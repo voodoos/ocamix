@@ -27,40 +27,49 @@ struct
     (button, listener)
 end
 
-module Two_state (Properties : sig
-  val base_classes : Classes.t
-  val on_classes : Classes.t
-  val off_classes : Classes.t
-end) =
-struct
+module Two_state = struct
+  type config = {
+    base_classes : Classes.t;
+    on_classes : Classes.t;
+    off_classes : Classes.t;
+  }
+
   type state = On | Off
-  type t = { elt : El.t Lwd.t; set : state -> unit }
+  type action = None | Toggle | Set of state
+  type t = { elt : El.t Lwd.t; force : action -> unit }
 
   let toggle = function Off -> On | On -> Off
 
-  let get_state_classes = function
-    | Off -> Properties.off_classes
-    | On -> Properties.on_classes
+  let get_state_classes config = function
+    | On -> config.on_classes
+    | Off -> config.off_classes
 
-  let make ?d ?(classes = Classes.Add []) ?(state = Off) ~on_click content =
+  let force var = function
+    | Set state -> Lwd.set var state
+    | Toggle -> Lwd.set var (toggle @@ Lwd.peek var)
+    | None -> ()
+
+  let make ~config ?d ?(classes = Classes.Add []) ?(state = Off) ~on_click
+      content =
     let open Lwd_infix in
     let v_state = Lwd.var state in
-    let set = Lwd.set v_state in
-    let base_classes = Classes.update Properties.base_classes classes in
+    let base_classes = Classes.update config.base_classes classes in
     let elt =
       let$* state = Lwd.get v_state in
       let at =
-        let classes = get_state_classes state in
+        let classes = get_state_classes config state in
         Classes.union base_classes classes
         |> Classes.to_list
         |> List.map ~f:(fun c -> Utils.pure @@ At.class' (Jstr.v c))
       in
       let handler =
         Elwd.handler Ev.click (fun ev ->
-            Lwd.set v_state @@ toggle state;
-            on_click state ev)
+            match on_click state ev with
+            | Toggle -> Lwd.set v_state @@ toggle state
+            | Set state -> Lwd.set v_state state
+            | None -> ())
       in
       Elwd.button ?d ~at ~ev:[ `P handler ] content
     in
-    { elt; set }
+    { elt; force = force v_state }
 end
