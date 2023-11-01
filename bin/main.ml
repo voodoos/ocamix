@@ -1,10 +1,12 @@
+open! Std
 open Brr
 open Brr_lwd
+open! Lwd_infix
 
 let ui =
   let playlist = Lwd.var 0 in
   let on_click _ _ = Lwd.set playlist (Lwd.peek playlist + 1) in
-  let btn_mix =
+  let { Ui.Two_state_button.elt = btn_mix; _ } =
     Ui.Two_state_button.make ~on_click
       [
         `R

@@ -33,9 +33,8 @@ module Two_state (Properties : sig
   val off_classes : Classes.t
 end) =
 struct
-  let states : (string, bool) Hashtbl.t = Hashtbl.create 16
-
   type state = On | Off
+  type t = { elt : El.t Lwd.t; set : state -> unit }
 
   let toggle = function Off -> On | On -> Off
 
@@ -46,19 +45,22 @@ struct
   let make ?d ?(classes = Classes.Add []) ?(state = Off) ~on_click content =
     let open Lwd_infix in
     let v_state = Lwd.var state in
+    let set = Lwd.set v_state in
     let base_classes = Classes.update Properties.base_classes classes in
-    let$* state = Lwd.get v_state in
-    let at =
-      let classes = get_state_classes state in
-      Classes.union base_classes classes
-      |> Classes.to_list
-      |> List.map ~f:(fun c -> Utils.pure @@ At.class' (Jstr.v c))
+    let elt =
+      let$* state = Lwd.get v_state in
+      let at =
+        let classes = get_state_classes state in
+        Classes.union base_classes classes
+        |> Classes.to_list
+        |> List.map ~f:(fun c -> Utils.pure @@ At.class' (Jstr.v c))
+      in
+      let handler =
+        Elwd.handler Ev.click (fun ev ->
+            Lwd.set v_state @@ toggle state;
+            on_click state ev)
+      in
+      Elwd.button ?d ~at ~ev:[ `P handler ] content
     in
-    let handler =
-      Elwd.handler Ev.click (fun ev ->
-          Lwd.set v_state @@ toggle state;
-          on_click v_state ev)
-    in
-    let button = Elwd.button ?d ~at ~ev:[ `P handler ] content in
-    button
+    { elt; set }
 end
