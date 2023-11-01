@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = git@github.com:voodoos/lwd.git
+	branch = master
+	commit = e601b631af593e3bc62959d0a73803a8885e691f
+	parent = dd3b4ee10c255ac31a703fa2697babadfd74ced7
+	method = merge
+	cmdver = 0.4.6
