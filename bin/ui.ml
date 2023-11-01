@@ -13,6 +13,7 @@ module Two_state_button = struct
   let make = make ~config
 end
 
-module Button = Button.Make (struct
+module Button = struct
   let base_classes = Classes.make [ "pouet_base"; "another" ]
-end)
+  let make = Button.Simple.make ~base_classes
+end

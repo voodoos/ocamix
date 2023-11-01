@@ -2,29 +2,21 @@ open! Std
 open Brr
 open Brr_lwd
 
-module Make (Properties : sig
-  val base_classes : Classes.t
-end) =
-struct
-  (** Make a button with reactive content. Not that the handler itself is not reactive. *)
-  let make ?d ?(classes = Classes.Add []) ~on_click content =
-    let classes =
-      Classes.update Properties.base_classes classes |> Classes.to_list
+module Generic = struct
+  let make ?(base_classes = Classes.make []) ?d ?(at = [])
+      ?(classes = Classes.Add []) ~handlers content =
+    let classes = Classes.update base_classes classes |> Classes.to_list in
+    let at_classes =
+      List.map classes ~f:(fun c -> `P (At.class' @@ Jstr.v c))
     in
-    let at = List.map classes ~f:(fun c -> `P (At.class' @@ Jstr.v c)) in
-    let handler = Elwd.handler Ev.click on_click in
-    let button = Elwd.button ?d ~at ~ev:[ `P handler ] content in
-    button
+    let at = List.rev_append at at_classes in
+    Elwd.button ?d ~at ~ev:handlers content
+end
 
-  (** Make a pure button. *)
-  let make_pure ?d ?(classes = Classes.Add []) ~on_click content =
-    let classes =
-      Classes.update Properties.base_classes classes |> Classes.to_list
-    in
-    let at = List.map classes ~f:(fun c -> At.class' @@ Jstr.v c) in
-    let button = El.button ?d ~at content in
-    let listener = Ev.listen Ev.click on_click (El.as_target button) in
-    (button, listener)
+module Simple = struct
+  (** Makes a simple button with a single [on_click] handler. *)
+  let make ~base_classes ?d ?at ?classes ~on_click content =
+    Generic.make ~base_classes ?classes ?d ?at ~handlers:[ `P on_click ] content
 end
 
 module Two_state = struct
@@ -49,18 +41,14 @@ module Two_state = struct
     | Toggle -> Lwd.set var (toggle @@ Lwd.peek var)
     | None -> ()
 
-  let make ~config ?d ?(classes = Classes.Add []) ?(state = Off) ~on_click
-      content =
+  let make ~config ?d ?classes ?(state = Off) ~on_click content =
     let open Lwd_infix in
     let v_state = Lwd.var state in
-    let base_classes = Classes.update config.base_classes classes in
     let elt =
       let$* state = Lwd.get v_state in
-      let at =
+      let base_classes =
         let classes = get_state_classes config state in
-        Classes.union base_classes classes
-        |> Classes.to_list
-        |> List.map ~f:(fun c -> Utils.pure @@ At.class' (Jstr.v c))
+        Classes.union config.base_classes classes
       in
       let handler =
         Elwd.handler Ev.click (fun ev ->
@@ -69,7 +57,7 @@ module Two_state = struct
             | Set state -> Lwd.set v_state state
             | None -> ())
       in
-      Elwd.button ?d ~at ~ev:[ `P handler ] content
+      Generic.make ~base_classes ?d ?classes ~handlers:[ `P handler ] content
     in
     { elt; force = force v_state }
 end
