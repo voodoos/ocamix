@@ -1,0 +1,8 @@
+(executable
+ (name main)
+ (modes js)
+ (promote
+  (only *.bc.js)
+  (into ../example)
+  (until-clean))
+ (libraries js_of_ocaml brr lwd brr-lwd lib))
