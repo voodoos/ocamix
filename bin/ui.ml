@@ -4,7 +4,7 @@ module Two_state_button = struct
   let base = Attrs.classes [ "button" ]
 
   let at = function
-    | Button.Two_state.On -> Attrs.classes [ "on" ]
+    | Button.On -> Attrs.classes [ "on" ]
     | Off -> Attrs.classes [ "off" ]
 
   let make ~on_click =

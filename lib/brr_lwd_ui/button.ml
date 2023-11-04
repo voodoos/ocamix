@@ -12,10 +12,6 @@ type 'state handler_with_state =
     }
       -> 'state handler_with_state
 
-let to_handler state (Handler_with_state { opts; type'; func }) =
-  let func ev = ignore @@ func state ev in
-  Elwd.handler ?opts type' func
-
 let handler ?opts type' func = Handler_with_state { opts; type'; func }
 
 module type State = sig
@@ -64,10 +60,11 @@ let with_state ?(base = Attrs.empty) (type t) (module S : State with type t = t)
   in
   (elt, get_state, set_state)
 
-module Two_state = struct
-  type t = On | Off
+type two_state = On | Off
 
-  let to_string = function On -> "On" | Off -> "Off"
+module Two_state = struct
+  type t = two_state
+
   let default = On
   let next = function On -> Off | Off -> On
 end
