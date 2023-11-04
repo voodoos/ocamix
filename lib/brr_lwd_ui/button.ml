@@ -30,10 +30,11 @@ end
 
 let apply_state state f = f state
 
-let with_state (type t) (module S : State with type t = t) ?(state = S.default)
-    ?d ?(at : (S.t -> At.t Elwd.col) option)
+let with_state ?(base = Attrs.empty) (type t) (module S : State with type t = t)
+    ?(state = S.default) ?d ?(at : (S.t -> At.t Elwd.col) option)
     ?(ev : t handler_with_state Elwd.col option)
     (content : S.t -> El.t Elwd.col) =
+  let base_at = Attrs.to_at base in
   let v_state = Lwd.var state in
   let get_state () = Lwd.get v_state in
   let set_state t = Lwd.set v_state t in
@@ -49,7 +50,11 @@ let with_state (type t) (module S : State with type t = t) ?(state = S.default)
       in
       Elwd.handler ?opts type' func
     in
-    let at = Option.map (apply_state state) at in
+    let at =
+      Option.map_or ~default:base_at
+        (fun at -> List.rev_append base_at @@ apply_state state at)
+        at
+    in
     let ev =
       Option.map
         (List.map ~f:(function
@@ -58,7 +63,7 @@ let with_state (type t) (module S : State with type t = t) ?(state = S.default)
           | `S h -> `S (Lwd_seq.map with_state h)))
         ev
     in
-    Elwd.button ?d ?at ?ev (content state)
+    Elwd.button ?d ~at ?ev (content state)
   in
   (elt, get_state, set_state)
 
@@ -69,23 +74,5 @@ module Two_state = struct
   let default = On
   let next = function On -> Off | Off -> On
 end
-
-(* let make content =
-   button
-     (module Two_state)
-     ~at:(function
-       | Two_state.On -> [ `P (At.class' @@ Jstr.v "on") ] | Off -> [])
-     ~ev:
-       [
-         on_click (fun s _ ->
-             match s with
-             | Two_state.On ->
-                 Console.log [ "STATE IS ON" ];
-                 Set Off
-             | Off ->
-                 Console.log [ "STATE IS Off" ];
-                 Set On);
-       ]
-     (fun t -> `P (Two_state.to_string t |> El.txt') :: content) *)
 
 let two_state = with_state (module Two_state)

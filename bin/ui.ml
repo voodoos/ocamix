@@ -2,8 +2,8 @@ open Brr_lwd_ui
 
 module Two_state_button = struct
   let at = function
-    | Button.Two_state.On -> [ `P (Classes.at_of_string "on") ]
-    | Off -> [ `P (Classes.at_of_string "off") ]
+    | Button.Two_state.On -> [ `P (Attrs.Classes.at_of_string "on") ]
+    | Off -> [ `P (Attrs.Classes.at_of_string "off") ]
 
   let make ~on_click =
     let on_click = Button.handler_with_state Brr.Ev.click on_click in
