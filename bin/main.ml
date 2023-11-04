@@ -7,6 +7,7 @@ let ui =
   let playlist = Lwd.var 0 in
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);
+    Lang.set Lang.En;
     Ui.Two_state_button.Toggle
   in
   let { Ui.Two_state_button.elt = btn_mix; _ } =
@@ -19,7 +20,7 @@ let ui =
   in
   Elwd.div
     [
-      `P (El.txt' "Click the button");
+      `R (Lang._s "click" El.txt);
       `P (El.br ());
       `R btn_mix;
       `R
