@@ -8,22 +8,15 @@ let ui =
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);
     Lang.set Lang.En;
-    Ui.Two_state_button.Toggle
+    Brr_lwd_ui.Button.Next
   in
-  let { Ui.Two_state_button.elt = btn_mix; _ } =
-    Ui.Two_state_button.make ~on_click
-      [
-        `R
-          (Lwd.map (Lwd.get playlist) ~f:(fun pl ->
-               El.txt' ("click" ^ string_of_int pl)));
-      ]
-  in
-  let other_btn, _get, set =
-    Brr_lwd_ui.Button.make [ `P (El.txt' "I know my state") ]
-  in
-  set Off;
-  let other_btn', _get, _set =
-    Brr_lwd_ui.Button.make [ `P (El.txt' "I know my state") ]
+  let btn_mix, _, _ =
+    Ui.Two_state_button.make ~on_click (fun _ ->
+        [
+          `R
+            (Lwd.map (Lwd.get playlist) ~f:(fun pl ->
+                 El.txt' ("click" ^ string_of_int pl)));
+        ])
   in
   Elwd.div
     [
@@ -38,8 +31,6 @@ let ui =
                     El.txt' (string_of_int v)));
            ]);
       `P (El.br ());
-      `R other_btn;
-      `R other_btn';
     ]
 
 let _ =

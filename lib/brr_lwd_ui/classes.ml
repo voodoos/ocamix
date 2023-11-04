@@ -21,3 +21,4 @@ let to_string t =
 
 let to_list = Set.to_list
 let union = Set.union
+let at_of_string c = Brr.At.class' @@ Jstr.v c
