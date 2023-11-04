@@ -1,4 +1,5 @@
 _opam
 _build
+node_modules
 .vscode
 *main.bc.js
