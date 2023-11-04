@@ -61,3 +61,89 @@ module Two_state = struct
     in
     { elt; force = force v_state }
 end
+
+type 'a update = None | Next | Set of 'a
+
+type 'state handler_with_state =
+  | Handler_with_state : {
+      opts : Ev.listen_opts option;
+      type' : 'a Ev.type';
+      func : 'state -> 'a Ev.t -> 'state update;
+    }
+      -> 'state handler_with_state
+
+let to_handler state (Handler_with_state { opts; type'; func }) =
+  let func ev = ignore @@ func state ev in
+  Elwd.handler ?opts type' func
+
+let handler_with_state ?opts type' func =
+  Handler_with_state { opts; type'; func }
+
+let on_click ?opts f = `P (handler_with_state ?opts Ev.click f)
+
+module type State = sig
+  type t
+
+  val default : t
+  val next : t -> t
+  val style : t -> At.t Elwd.col
+end
+
+let button (type t) (module S : State with type t = t) ?(state = S.default) ?d
+    ?at ?(ev : t handler_with_state Elwd.col option)
+    (content : S.t -> El.t Elwd.col) =
+  let v_state = Lwd.var state in
+  let get_state () = Lwd.get v_state in
+  let set_state t = Lwd.set v_state t in
+  let with_state state (Handler_with_state { opts; type'; func }) =
+    let func ev =
+      match func state ev with
+      | None -> ()
+      | Set s -> set_state s
+      | Next -> set_state @@ S.next (Lwd.peek v_state)
+    in
+    Elwd.handler ?opts type' func
+  in
+  let elt =
+    let open Lwd_infix in
+    let$* state = get_state () in
+    let with_state = with_state state in
+    let state_at = S.style state in
+    let at = Option.map_or ~default:state_at (List.rev_append state_at) at in
+    let ev =
+      Option.map
+        (List.map ~f:(function
+          | `P h -> `P (with_state h)
+          | `R h -> `R (Lwd.map h ~f:with_state)
+          | `S h -> `S (Lwd_seq.map with_state h)))
+        ev
+    in
+    Elwd.button ?d ~at ?ev (content state)
+  in
+  (elt, get_state, set_state)
+
+type ts_state = On | Off
+
+module TS : State with type t = ts_state = struct
+  type t = ts_state
+
+  let default = On
+  let next = function On -> Off | Off -> On
+  let style = function On -> [ `P (At.class' @@ Jstr.v "on") ] | Off -> []
+end
+
+let make content =
+  button
+    (module TS)
+    ~ev:
+      [
+        on_click (fun s _ ->
+            match s with
+            | On ->
+                Console.log [ "STATE IS ON" ];
+                Set Off
+            | Off ->
+                Console.log [ "STATE IS Off" ];
+                Set On);
+      ]
+    (fun _ -> content)

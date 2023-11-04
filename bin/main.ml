@@ -18,6 +18,13 @@ let ui =
                El.txt' ("click" ^ string_of_int pl)));
       ]
   in
+  let other_btn, _get, set =
+    Brr_lwd_ui.Button.make [ `P (El.txt' "I know my state") ]
+  in
+  set Off;
+  let other_btn', _get, _set =
+    Brr_lwd_ui.Button.make [ `P (El.txt' "I know my state") ]
+  in
   Elwd.div
     [
       `R (Lang._s "click" El.txt);
@@ -30,6 +37,9 @@ let ui =
                (Lwd.map (Lwd.get playlist) ~f:(fun v ->
                     El.txt' (string_of_int v)));
            ]);
+      `P (El.br ());
+      `R other_btn;
+      `R other_btn';
     ]
 
 let _ =
