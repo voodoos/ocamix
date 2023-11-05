@@ -18,6 +18,7 @@ let ui =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
+  let list = Ui.draggable_table () in
   Elwd.div
     [
       `R (Lang._s "click" El.txt);
@@ -31,6 +32,7 @@ let ui =
                     El.txt' (string_of_int v)));
            ]);
       `P (El.br ());
+      `R list;
     ]
 
 let _ =

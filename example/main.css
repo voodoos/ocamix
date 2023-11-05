@@ -1,3 +1,13 @@
 .on {
     background-color: red;
 }
+
+.draggable-table {
+    display: grid;
+}
+
+.draggable-table>div {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1/-1;
+}

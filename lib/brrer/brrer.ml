@@ -1,6 +1,22 @@
 module Jv = Jv
 module Jstr = Jstr
-module Brr = Brr
+
+module Brr = struct
+  include Brr
+
+  module El = struct
+    module S = Style
+    include El
+    module Style = S
+  end
+
+  module At = struct
+    include At
+
+    let draggable s = v Name.draggable s
+  end
+end
+
 module Brr_webworkers = Brr_webworkers
 module Brr_webmidi = Brr_webmidi
 module Brr_webgpu = Brr_webgpu
