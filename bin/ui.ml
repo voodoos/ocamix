@@ -64,18 +64,17 @@ module Draggable_table = struct
       let size_h = El.inner_h target in
       offset_y <. size_h /. 2.
     in
+    let get_ev_target e = Ev.current_target e |> Ev.target_to_jv |> El.of_jv in
     Lwd_seq.element
     @@
     let cells = Row.render row in
     assert (List.length cells = n);
     let on_drag_start =
-      Elwd.handler Ev.dragstart (fun e ->
-          dragged_row := Some t_row;
-          Console.log [ "dragstart"; e ])
+      Elwd.handler Ev.dragstart (fun _ -> dragged_row := Some t_row)
     in
     let on_drag_over =
       Elwd.handler Ev.dragover (fun e ->
-          let target = Ev.current_target e |> Ev.target_to_jv |> El.of_jv in
+          let target = get_ev_target e in
           remove_hints target;
           let top = is_on_top e in
           let noop =
@@ -94,7 +93,6 @@ module Draggable_table = struct
             || ((not top) && equal_next row)
           in
           if not (Option.value ~default:false noop) then (
-            Console.log [ "dragover"; target; noop ];
             add_hint ~top target;
             (* > If the mouse is released over an element that is a valid drop target,
                > that is, one that cancelled the last dragenter or dragover event,
@@ -103,14 +101,11 @@ module Draggable_table = struct
             Ev.prevent_default e))
     in
     let on_drag_leave =
-      Elwd.handler Ev.dragleave (fun e ->
-          let target = Ev.current_target e |> Ev.target_to_jv |> El.of_jv in
-          remove_hints target)
+      Elwd.handler Ev.dragleave (fun e -> remove_hints @@ get_ev_target e)
     in
     let on_drop =
       Elwd.handler Ev.drop (fun e ->
-          let target = Ev.current_target e |> Ev.target_to_jv |> El.of_jv in
-          remove_hints target;
+          remove_hints @@ get_ev_target e;
           let _ =
             let open Option in
             let* row = !dragged_row in
@@ -119,8 +114,7 @@ module Draggable_table = struct
             else ignore @@ Lwd_table.after ~set t_row;
             Lwd_table.remove row
           in
-          dragged_row := None;
-          Console.log [ "DROP"; target; row ])
+          dragged_row := None)
     in
     Elwd.div
       ~at:[ `P (At.draggable @@ Jstr.v "true") ]
@@ -162,4 +156,12 @@ let draggable_table =
   Draggable_table.make
     (module Playlist_row)
     ~columns:playlist_columns
-    ~rows:(Lwd.pure [ ("toto", "r1"); ("tata", "r2"); ("titi", "r3") ])
+    ~rows:
+      (Lwd.pure
+         [
+           ("toto", "r1");
+           ("tata", "r2");
+           ("titi", "r3");
+           ("ta", "r4");
+           ("tu", "r5");
+         ])

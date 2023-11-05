@@ -30,6 +30,7 @@
 .draggable-table>div {
     border-top: solid black 1px;
     border-left: solid black 1px;
+    box-shadow: 0px 1px 0px 0px #000000
 }
 
 .draggable-table>div>div {
