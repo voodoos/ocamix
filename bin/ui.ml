@@ -49,17 +49,29 @@ module Draggable_table = struct
 
   let make (type t) (module Row : Row with type t = t) ~columns
       ?(rows : t list Lwd.t = Lwd.return []) () =
+    let open Lwd_infix in
     let at = Attrs.to_at grid in
-    let rows =
-      Lwd.map rows
-        ~f:
-          (List.map ~f:(fun r ->
-               let cells = Row.render r in
-               assert (List.length cells = Array.length columns);
-               El.div ~at:[ At.draggable @@ Jstr.v "true" ] cells))
+    let$* rows = rows in
+    let t_rows = Lwd_table.make () in
+    let () =
+      List.iter rows ~f:(fun set -> ignore @@ Lwd_table.append ~set t_rows)
+    in
+    let table_body =
+      Lwd_table.map_reduce
+        (fun t_row row ->
+          List.map row ~f:(fun r ->
+              let cells = Row.render r in
+              assert (List.length cells = Array.length columns);
+              let on_drag_start =
+                Elwd.handler Ev.dragstart (fun _ -> Console.log [ "dragstart" ])
+              in
+              Elwd.div
+                ~at:[ `P (At.draggable @@ Jstr.v "true") ]
+                ~ev:[ `P on_drag_start ]
+                (List.map cells ~f:(fun c -> `P c))))
+        Lwd_seq.monoid t_rows
     in
     let rows = Lwd.map rows ~f:Lwd_seq.of_list in
-    let open Lwd_infix in
     let header = Columns.to_header columns in
     let$ elt = Elwd.div ~at [ `P header; `S rows ] in
     Columns.set elt columns;
