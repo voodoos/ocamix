@@ -56,24 +56,32 @@ module Draggable_table = struct
     let () =
       List.iter rows ~f:(fun set -> ignore @@ Lwd_table.append ~set t_rows)
     in
+    let table_header = Columns.to_header columns in
     let table_body =
       Lwd_table.map_reduce
-        (fun t_row row ->
-          List.map row ~f:(fun r ->
-              let cells = Row.render r in
+        (fun _t_row row ->
+          Lwd_seq.element @@
+              let cells = Row.render row in
               assert (List.length cells = Array.length columns);
               let on_drag_start =
-                Elwd.handler Ev.dragstart (fun _ -> Console.log [ "dragstart" ])
+                Elwd.handler Ev.dragstart (fun e -> Console.log [ "dragstart"; e ])
+              in
+              let on_drag_enter =
+                Elwd.handler Ev.dragenter (fun e ->
+                  let mouse_ev = Ev.Drag.as_mouse @@ Ev.as_type e in
+                  let offset_y = Ev.Mouse.offset_y mouse_ev in
+                  let size_h = Ev.target e in
+
+                  Console.log [ "dragenter"; e ];
+                  Console.log [ "dragenter"; offset_y; size_h])
               in
               Elwd.div
                 ~at:[ `P (At.draggable @@ Jstr.v "true") ]
-                ~ev:[ `P on_drag_start ]
-                (List.map cells ~f:(fun c -> `P c))))
+                ~ev:[ `P on_drag_start; `P on_drag_enter ]
+                (List.map cells ~f:(fun c -> `P c)))
         Lwd_seq.monoid t_rows
     in
-    let rows = Lwd.map rows ~f:Lwd_seq.of_list in
-    let header = Columns.to_header columns in
-    let$ elt = Elwd.div ~at [ `P header; `S rows ] in
+    let$ elt = Elwd.div ~at [ `P table_header; `S (Lwd_seq.lift table_body) ] in
     Columns.set elt columns;
     elt
 end
