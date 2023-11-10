@@ -18,7 +18,13 @@ let ui =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let list = Ui.draggable_table () in
+  let list, tbl = Ui.draggable_table () in
+  let form = Form.my_form (fun form -> Console.log [ form; form.name ];
+    match form.name with
+    | Ok name ->
+      let set =("from_form", name) in
+      ignore @@ Lwd_table.append ~set tbl
+    | _ -> ()) in
   Elwd.div
     [
       `R (Lang._s "click" El.txt);
@@ -33,6 +39,9 @@ let ui =
            ]);
       `P (El.br ());
       `R list;
+      `P (El.br ());
+      `P (El.br ());
+      `R form
     ]
 
 let _ =

@@ -10,6 +10,16 @@ module Brr = struct
     module Style = S
   end
 
+  module Ev = struct
+    include Ev
+
+    module Submit = struct
+      type 'a event = 'a t
+      type t = Jv.t
+    end
+
+    let submit = Type.void (Jstr.v "submit")
+  end
   module At = struct
     include At
 

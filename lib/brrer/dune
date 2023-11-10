@@ -1,3 +1,4 @@
 (library
  (name brrer)
+ (public_name ocamix.brrer)
  (libraries brr))
