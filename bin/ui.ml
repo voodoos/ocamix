@@ -47,8 +47,8 @@ module Draggable_table = struct
 
   let grid = Attrs.classes [ "draggable-table" ]
 
-  let render_row (type t) (module Row : Row with type t = t) ~dragged_row ~n
-      (t_row : t Lwd_table.row) row =
+  let render_row (type t) (module Row : Row with type t = t) ~global_drag_data
+      ~n (t_row : t Lwd_table.row) row =
     let add_hint ~top el =
       let c = if top then "hover-top" else "hover-bottom" in
       El.set_class (Jstr.v c) true el
@@ -70,7 +70,9 @@ module Draggable_table = struct
     let cells = Row.render row in
     assert (List.length cells = n);
     let on_drag_start =
-      Elwd.handler Ev.dragstart (fun _ -> dragged_row := Some t_row)
+      Elwd.handler Ev.dragstart (fun _ ->
+          Document.body G.document |> El.set_class (Jstr.v "dragging") true;
+          global_drag_data := Some t_row)
     in
     let on_drag_over =
       Elwd.handler Ev.dragover (fun e ->
@@ -79,7 +81,7 @@ module Draggable_table = struct
           let top = is_on_top e in
           let noop =
             let open Option in
-            let+ row = !dragged_row in
+            let+ row = !global_drag_data in
             let equal_prev row =
               Option.map_or ~default:false (Equal.physical row)
                 (Lwd_table.prev t_row)
@@ -103,43 +105,54 @@ module Draggable_table = struct
     let on_drag_leave =
       Elwd.handler Ev.dragleave (fun e -> remove_hints @@ get_ev_target e)
     in
+    let on_drag_end =
+      Elwd.handler Ev.dragend (fun _ ->
+          Document.body G.document |> El.set_class (Jstr.v "dragging") false)
+    in
     let on_drop =
       Elwd.handler Ev.drop (fun e ->
           remove_hints @@ get_ev_target e;
           let _ =
             let open Option in
-            let* row = !dragged_row in
+            let* row = !global_drag_data in
             let+ set = Lwd_table.get row in
             if is_on_top e then ignore @@ Lwd_table.before ~set t_row
             else ignore @@ Lwd_table.after ~set t_row;
             Lwd_table.remove row
           in
-          dragged_row := None)
+          global_drag_data := None)
     in
     Elwd.div
       ~at:[ `P (At.draggable @@ Jstr.v "true") ]
-      ~ev:[ `P on_drag_start; `P on_drag_over; `P on_drag_leave; `P on_drop ]
+      ~ev:
+        [
+          `P on_drag_start;
+          `P on_drag_over;
+          `P on_drag_leave;
+          `P on_drag_end;
+          `P on_drop;
+        ]
       (List.map cells ~f:(fun c -> `P c))
 
   let make (type t) (module Row : Row with type t = t) ~columns
-      ?(rows : t list Lwd.t = Lwd.return []) () =
-    let open Lwd_infix in
+      ?(table : t Lwd_table.t = Lwd_table.make ())
+      ?(global_drag_data : t Lwd_table.row option ref = ref None) () =
     let at = Attrs.to_at grid in
-    let$* rows = rows in
-    let t_rows = Lwd_table.make () in
-    let () =
-      List.iter rows ~f:(fun set -> ignore @@ Lwd_table.append ~set t_rows)
-    in
     let table_header = Columns.to_header columns in
-    let dragged_row = ref None in
     let table_body =
       Lwd_table.map_reduce
-        (render_row (module Row) ~dragged_row ~n:(Array.length columns))
-        Lwd_seq.monoid t_rows
+        (render_row (module Row) ~global_drag_data ~n:(Array.length columns))
+        Lwd_seq.monoid table
     in
-    let$ elt = Elwd.div ~at [ `P table_header; `S (Lwd_seq.lift table_body) ] in
-    Columns.set elt columns;
-    elt
+    let elt =
+      let open Lwd_infix in
+      let$ elt =
+        Elwd.div ~at [ `P table_header; `S (Lwd_seq.lift table_body) ]
+      in
+      let () = Columns.set elt columns in
+      elt
+    in
+    (elt, table)
 end
 
 let playlist_columns =
@@ -152,12 +165,17 @@ module Playlist_row = struct
   let render (l, r) = [ El.div [ El.txt' l ]; El.div [ El.txt' r ] ]
 end
 
+let make_table rows =
+  let table = Lwd_table.make () in
+  List.iter rows ~f:(fun set -> ignore @@ Lwd_table.append ~set table);
+  table
+
 let draggable_table =
   Draggable_table.make
     (module Playlist_row)
     ~columns:playlist_columns
-    ~rows:
-      (Lwd.pure
+    ~table:
+      (make_table
          [
            ("toto", "r1");
            ("tata", "r2");
