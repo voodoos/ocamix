@@ -29,9 +29,15 @@
 
 .draggable-table>div {
     user-select: none;
+    cursor:grab;
     border-top: solid black 1px;
     border-left: solid black 1px;
     box-shadow: 0px 1px 0px 0px #000000
+}
+
+body.dragging .draggable-table>div {
+    cursor:grabbing;
+
 }
 
 .draggable-table>div>div {
