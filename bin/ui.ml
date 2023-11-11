@@ -72,7 +72,7 @@ module Draggable_table = struct
     let on_drag_start =
       Elwd.handler Ev.dragstart (fun _ ->
           Document.body G.document |> El.set_class (Jstr.v "dragging") true;
-          shared_drag_data := Some t_row)
+          Lwd.set shared_drag_data @@ Some t_row)
     in
     let on_drag_over =
       Elwd.handler Ev.dragover (fun e ->
@@ -81,7 +81,7 @@ module Draggable_table = struct
           let top = is_on_top e in
           let noop =
             let open Option in
-            let+ row = !shared_drag_data in
+            let+ row = Lwd.peek shared_drag_data in
             let equal_prev row =
               Option.map_or ~default:false (Equal.physical row)
                 (Lwd_table.prev t_row)
@@ -114,13 +114,13 @@ module Draggable_table = struct
           remove_hints @@ get_ev_target e;
           let _ =
             let open Option in
-            let* row = !shared_drag_data in
+            let* row = Lwd.peek shared_drag_data in
             let+ set = Lwd_table.get row in
             if is_on_top e then ignore @@ Lwd_table.before ~set t_row
             else ignore @@ Lwd_table.after ~set t_row;
             Lwd_table.remove row
           in
-          shared_drag_data := None)
+          Lwd.set shared_drag_data None)
     in
     Elwd.div
       ~at:[ `P (At.draggable @@ Jstr.v "true") ]
@@ -136,7 +136,7 @@ module Draggable_table = struct
 
   let make (type t) (module Row : Row with type t = t) ~columns
       ?(table : t Lwd_table.t = Lwd_table.make ())
-      ?(shared_drag_data : t Lwd_table.row option ref = ref None) () =
+      ?(shared_drag_data : t Lwd_table.row option Lwd.var = Lwd.var None) () =
     let at = Attrs.to_at grid in
     let table_header = Columns.to_header columns in
     let table_body =

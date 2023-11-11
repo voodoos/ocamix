@@ -18,7 +18,7 @@ let ui =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let shared_drag_data = ref None in
+  let shared_drag_data = Lwd.var None in
   let columns = Lwd.var Lwd_seq.empty in
   let list, _tbl = Ui.draggable_table () in
   let form =
