@@ -18,13 +18,23 @@ let ui =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let list, tbl = Ui.draggable_table () in
-  let form = Form.my_form (fun form -> Console.log [ form; form.name ];
-    match form.name with
-    | Ok name ->
-      let set =("from_form", name) in
-      ignore @@ Lwd_table.append ~set tbl
-    | _ -> ()) in
+  let shared_drag_data = ref None in
+  let columns = Lwd.var Lwd_seq.empty in
+  let list, _tbl = Ui.draggable_table () in
+  let form =
+    Form.my_form (fun form ->
+        Console.log [ form; form.name ];
+        match form.name with
+        | Ok _name ->
+            let list, _tbl = Ui.draggable_table ~shared_drag_data () in
+            Lwd.set columns
+            @@ Lwd_seq.concat (Lwd.peek columns) (Lwd_seq.element list)
+        | _ -> ())
+  in
+  let el_columns =
+    let columns = Lwd.get columns in
+    Lwd_seq.lift columns
+  in
   Elwd.div
     [
       `R (Lang._s "click" El.txt);
@@ -41,7 +51,9 @@ let ui =
       `R list;
       `P (El.br ());
       `P (El.br ());
-      `R form
+      `R form;
+      `P (El.br ());
+      `S el_columns;
     ]
 
 let _ =
