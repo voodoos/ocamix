@@ -50,6 +50,7 @@ let ui =
       `P (El.br ());
       `R list;
       `P (El.br ());
+      `R (Menu.make ());
       `P (El.br ());
       `R form;
       `P (El.br ());

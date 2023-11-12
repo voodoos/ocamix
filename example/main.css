@@ -2,6 +2,30 @@
     background-color: red;
 }
 
+/* Ham menu */
+.hover-menu {
+    /* Required for absolute positionning of child */
+    /* position: relative; */
+}
+
+
+.hover-menu menu {
+    visibility: collapse;
+    position: absolute;
+    translate: -50%;
+    opacity: 0;
+    transition: all 125ms;
+}
+
+
+.hover-menu:hover menu,
+.hover-menu.active menu {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Draggable table */
+/* todo: borders shoujld be in theme */
 .draggable-table {
     display: inline-grid;
 }
@@ -18,29 +42,4 @@
 
 .draggable-table .hover-bottom {
     box-shadow: 0px -200px 15px -200px rgba(255, 200, 0, 1) inset;
-}
-
-
-/* THEME */
-
-.draggable-table {
-    border-bottom: solid black 1px;
-}
-
-.draggable-table>div {
-    user-select: none;
-    cursor:grab;
-    border-top: solid black 1px;
-    border-left: solid black 1px;
-    box-shadow: 0px 1px 0px 0px #000000
-}
-
-body.dragging .draggable-table>div {
-    cursor:grabbing;
-
-}
-
-.draggable-table>div>div {
-    padding: 4px;
-    border-right: solid black 1px;
 }
