@@ -35,6 +35,25 @@ module Authenticate_by_name = struct
   let endpoint = "/Users/AuthenticateByName"
 end
 
+module Item = struct
+  type t = { name : string [@key "Name"] }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+end
+
+module Items = struct
+  type params = { user_id : string [@key "userId"] } [@@deriving yojson]
+
+  type response = {
+    items : Item.t list; [@key "Items"]
+    total_record_count : int; [@key "TotalRecordCount"]
+    start_index : int; [@key "StartIndex"]
+  }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let method' = Get
+  let endpoint = "/Items"
+end
+
 module System = struct
   module Info = struct
     type params = unit [@@deriving yojson]
@@ -61,11 +80,14 @@ let authorization ?token () =
        Version=\"0.1\"%a"
       (pp_print_option pp_token) token)
 
-let request (type p r) ?(base_url = "") ?token ?headers
+let request (type p r) ?base_url ?token ?headers
     (module Q : Query with type params = p and type response = r) (params : p) :
     (r, Jv.Error.t) Fut.result =
   let open Brr_io.Fetch in
-  let url = String.cat base_url Q.endpoint in
+  let uri =
+    Jstr.(Uri.of_jstr ?base:(Option.map v base_url) (v Q.endpoint))
+    |> Result.get_ok
+  in
   let authorization = authorization ?token () in
   let headers =
     Headers.of_assoc ?init:headers
@@ -75,19 +97,24 @@ let request (type p r) ?(base_url = "") ?token ?headers
           (v "X-Emby-Authorization", v authorization);
         ]
   in
-  Console.log [ authorization ];
   let method' = jstr_of_method Q.method' in
-  let init =
+  let init, url =
     match Q.method' with
-    | Get -> Request.init ~headers ~method' ()
+    | Get ->
+        let params =
+          params |> Q.yojson_of_params |> Yojson.Safe.to_string |> Jstr.v
+          |> Json.decode |> Result.get_ok |> Uri.Params.of_obj
+        in
+        let uri_with_params = Uri.with_query_params uri params in
+        (Request.init ~headers ~method' (), Uri.to_jstr uri_with_params)
     | Post ->
         let body =
           params |> Q.yojson_of_params |> Yojson.Safe.to_string |> Jstr.v
           |> Body.of_jstr
         in
-        Request.init ~headers ~method' ~body ()
+        (Request.init ~headers ~method' ~body (), Uri.to_jstr uri)
   in
   let open Fut.Result_syntax in
-  let* res = request @@ Request.v ~init (Jstr.v url) in
+  let* res = request @@ Request.v ~init url in
   let+ json = Response.as_body res |> Body.text in
   Q.response_of_yojson (Yojson.Safe.from_string (Jstr.to_string json))

@@ -66,7 +66,14 @@ let db () =
       Api.Authenticate_by_name.{ username = "root"; pw = "rootlocalroot" }
   in
   let+ infos = query connexion (module Api.System.Info) () in
-  Console.log [ infos ]
+
+  let+ items =
+    query connexion
+      (module Api.Items)
+      Api.Items.{ user_id = connexion.auth_response.user.id }
+  in
+  Console.log [ infos ];
+  Console.log [ items ]
 
 let _ =
   let ui = Lwd.observe ui in
