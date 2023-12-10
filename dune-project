@@ -16,4 +16,4 @@
  (name ocamix)
  (synopsis "A playlist generator")
  (description "A _really_ long description")
- (depends containers js_of_ocaml brr lwd brr-lwd))
+ (depends containers js_of_ocaml brr lwd brr-lwd yojson ppx_yojson_conv))

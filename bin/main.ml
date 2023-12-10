@@ -57,6 +57,17 @@ let ui =
       `S el_columns;
     ]
 
+let db () =
+  let open Fut.Result_syntax in
+  let open Data_source.Jellyfin in
+  let base_url = "http://localhost:8096" in
+  let+ connexion =
+    connect ~base_url
+      Api.Authenticate_by_name.{ username = "root"; pw = "rootlocalroot" }
+  in
+  let+ infos = query connexion (module Api.System.Info) () in
+  Console.log [ infos ]
+
 let _ =
   let ui = Lwd.observe ui in
   let on_invalidate _ =
@@ -66,6 +77,7 @@ let _ =
   in
   let on_load _ =
     Console.(log [ str "on load" ]);
+    ignore @@ db ();
     El.append_children (Document.body G.document) [ Lwd.quick_sample ui ];
     Lwd.set_on_invalidate ui on_invalidate
   in
