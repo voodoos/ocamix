@@ -4,7 +4,7 @@ open Brr_lwd
 open! Lwd_infix
 
 let ui =
-  let playlist = Lwd.var 0 in
+  Brr_lwd_ui.Persist.with_var ~key:"toto" 0 @@ fun playlist ->
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);
     Lang.set Lang.En;

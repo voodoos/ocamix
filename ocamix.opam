@@ -11,11 +11,13 @@ depends: [
   "dune" {>= "3.11"}
   "containers"
   "js_of_ocaml"
+  "js_of_ocaml-ppx"
   "brr"
   "lwd"
   "brr-lwd"
   "yojson"
   "ppx_yojson_conv"
+  "base64"
   "odoc" {with-doc}
 ]
 build: [
