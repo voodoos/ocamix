@@ -8,9 +8,9 @@
   "license": "AGPL-3.0",
   "dependencies": {},
   "scripts": {
-    "dev": "web-dev-server --root-dir example/ --open --watch"
+    "dev": "esbuild --servedir=example --watch=forever"
   },
   "devDependencies": {
-    "@web/dev-server": "^0.4.0"
+    "esbuild": "^0.19.5"
   }
 }
