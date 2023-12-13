@@ -38,10 +38,120 @@ end
 module Item = struct
   type t = { name : string [@key "Name"] }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  type type_ =
+    | AggregateFolder
+    | Audio
+    | AudioBook
+    | BasePluginFolder
+    | Book
+    | BoxSet
+    | Channel
+    | ChannelFolderItem
+    | CollectionFolder
+    | Episode
+    | Folder
+    | Genre
+    | ManualPlaylistsFolder
+    | Movie
+    | LiveTvChannel
+    | LiveTvProgram
+    | MusicAlbum
+    | MusicArtist
+    | MusicGenre
+    | MusicVideo
+    | Person
+    | Photo
+    | PhotoAlbum
+    | Playlist
+    | PlaylistsFolder
+    | Program
+    | Recording
+    | Season
+    | Series
+    | Studio
+    | Trailer
+    | TvChannel
+    | TvProgram
+    | UserRootFolder
+    | UserView
+    | Video
+    | Year
+  [@@deriving yojson]
+
+  type field =
+    | AirTime
+    | CanDelete
+    | CanDownload
+    | ChannelInfo
+    | Chapters
+    | ChildCount
+    | CumulativeRunTimeTicks
+    | CustomRating
+    | DateCreated
+    | DateLastMediaAdded
+    | DisplayPreferencesId
+    | Etag
+    | ExternalUrls
+    | Genres
+    | HomePageUrl
+    | ItemCounts
+    | MediaSourceCount
+    | MediaSources
+    | OriginalTitle
+    | Overview
+    | ParentId
+    | Path
+    | People
+    | PlayAccess
+    | ProductionLocations
+    | ProviderIds
+    | PrimaryImageAspectRatio
+    | RecursiveItemCount
+    | Settings
+    | ScreenshotImageTags
+    | SeriesPrimaryImage
+    | SeriesStudio
+    | SortName
+    | SpecialEpisodeNumbers
+    | Studios
+    | BasicSyncInfo
+    | SyncInfo
+    | Taglines
+    | Tags
+    | RemoteTrailers
+    | MediaStreams
+    | SeasonUserData
+    | ServiceName
+    | ThemeSongIds
+    | ThemeVideoIds
+    | ExternalEtag
+    | PresentationUniqueKey
+    | InheritedParentalRatingValue
+    | ExternalSeriesId
+    | SeriesPresentationUniqueKey
+    | DateLastRefreshed
+    | DateLastSaved
+    | RefreshState
+    | ChannelImage
+    | EnableMediaSourceDisplay
+    | Width
+    | Height
+    | ExtraIds
+    | LocalTrailerCount
+    | IsHD
+    | SpecialFeatureCount
+  [@@deriving yojson]
 end
 
 module Items = struct
-  type params = { user_id : string [@key "userId"] } [@@deriving yojson]
+  type params = {
+    user_id : string; [@key "userId"]
+    fields : Item.field list;
+    include_item_types : Item.type_ list; [@key "includeItemTypes"]
+    recursive : bool;
+  }
+  [@@deriving yojson]
 
   type response = {
     items : Item.t list; [@key "Items"]

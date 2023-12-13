@@ -70,7 +70,13 @@ let db () =
   let+ items =
     query connexion
       (module Api.Items)
-      Api.Items.{ user_id = connexion.auth_response.user.id }
+      Api.Items.
+        {
+          user_id = connexion.auth_response.user.id;
+          fields = [];
+          include_item_types = [ Audio ];
+          recursive = true;
+        }
   in
   Console.log [ infos ];
   Console.log [ items ]
