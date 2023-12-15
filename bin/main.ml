@@ -67,7 +67,7 @@ let db () =
   in
   let+ infos = query connexion (module Api.System.Info) () in
 
-  let+ items =
+  let+ stats_query =
     query connexion
       (module Api.Items)
       Api.Items.
@@ -75,11 +75,13 @@ let db () =
           user_id = connexion.auth_response.user.id;
           fields = [];
           include_item_types = [ Audio ];
+          limit = 0;
           recursive = true;
         }
   in
+  let total_item_count = stats_query.total_record_count in
   Console.log [ infos ];
-  Console.log [ items ]
+  Console.log [ total_item_count ]
 
 let _ =
   let ui = Lwd.observe ui in

@@ -149,6 +149,7 @@ module Items = struct
     user_id : string; [@key "userId"]
     fields : Item.field list;
     include_item_types : Item.type_ list; [@key "includeItemTypes"]
+    limit : int;
     recursive : bool;
   }
   [@@deriving yojson]
