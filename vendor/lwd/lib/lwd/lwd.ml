@@ -300,13 +300,20 @@ let set (vx:_ var) x : unit =
   match vx with
   | Operator ({desc = Var v; _}) ->
     (* set the variable, and invalidate all observers *)
-    do_invalidate Strong vx;
-    v.binding <- x
+    v.binding <- x;
+    do_invalidate Strong vx
   | _ -> assert false
 
 let peek = function
   | Operator ({desc = Var v; _}) -> v.binding
   | _ -> assert false
+
+let update f v = set v (f (peek v))
+
+let may_update f v =
+  match f (peek v) with
+  | None -> ()
+  | Some x -> set v x
 
 (* Primitives *)
 type 'a prim = 'a t

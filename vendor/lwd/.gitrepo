@@ -6,7 +6,7 @@
 [subrepo]
 	remote = git@github.com:voodoos/lwd.git
 	branch = master
-	commit = e601b631af593e3bc62959d0a73803a8885e691f
-	parent = dd3b4ee10c255ac31a703fa2697babadfd74ced7
+	commit = e5fd299c662e8fdcd3bab4b9fe3211ae4d9b1249
+	parent = 0276c7bd567c160d9f418b51491a2740a0acaa8d
 	method = merge
-	cmdver = 0.4.6
+	cmdver = 0.4.5
