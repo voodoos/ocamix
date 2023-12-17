@@ -8,3 +8,6 @@ val var : key:string -> 'a -> 'a Lwd.var
   function its new value is persisted into the local_storage at the key [key].
 
   A uniqueness check on [key] is performed at runtime. *)
+
+val var_f : key:string -> (unit -> 'a) -> 'a Lwd.var
+(** Same as [var] but uses a callback to initialize the variable when needed. *)
