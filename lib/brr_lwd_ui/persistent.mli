@@ -11,3 +11,7 @@ val var : key:string -> 'a -> 'a Lwd.var
 
 val var_f : key:string -> (unit -> 'a) -> 'a Lwd.var
 (** Same as [var] but uses a callback to initialize the variable when needed. *)
+
+val var_fut :
+  key:string -> (unit -> ('a, 'b) Fut.result) -> ('a Lwd.var, 'b) Fut.result
+(** Same but stores a Future's result in the variable. *)
