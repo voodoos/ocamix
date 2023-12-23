@@ -1,5 +1,15 @@
 open Brr
 
+module type Store_content = sig
+  type t
+  type key
+
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
+  val key_path : string
+  val get_key : t -> key
+end
+
 module Events : sig
   module Version_change : sig
     type t
@@ -13,9 +23,9 @@ module Events : sig
 end
 
 module Object_store : sig
-  type t
+  type 'a t
 
-  val of_jv : Jv.t -> t
+  val of_jv : Jv.t -> 'a t
 end
 
 module Database : sig
@@ -25,10 +35,10 @@ module Database : sig
 
   val create_object_store :
     name:string ->
-    ?key_path:string ->
+    (module Store_content with type t = 't) ->
     ?auto_increment:bool ->
     t ->
-    Object_store.t
+    't Object_store.t
 end
 
 module Request : sig

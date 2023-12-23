@@ -1,5 +1,15 @@
 open Brr
 
+module type Store_content = sig
+  type t
+  type key
+
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
+  val key_path : string (* todo key_path should be optional *)
+  val get_key : t -> key
+end
+
 module Events = struct
   module Version_change = struct
     type t = Jv.t
@@ -15,9 +25,9 @@ module Events = struct
 end
 
 module Object_store = struct
-  type t = Jv.t
+  type 'a t = Jv.t
 
-  external of_jv : Jv.t -> t = "%identity"
+  external of_jv : Jv.t -> 'a t = "%identity"
 end
 
 module Database = struct
@@ -25,13 +35,11 @@ module Database = struct
 
   external of_jv : Jv.t -> t = "%identity"
 
-  let create_object_store ~name ?key_path ?(auto_increment = false) t =
+  let create_object_store (type t') ~name
+      (module S : Store_content with type t = t') ?(auto_increment = false) t :
+      t' Object_store.t =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
-    let opts =
-      match key_path with
-      | None -> opts
-      | Some kp -> ("keyPath", Jv.of_string kp) :: opts
-    in
+    let opts = ("keyPath", Jv.of_string S.key_path) :: opts in
     let options = Jv.obj @@ Array.of_list opts in
     Jv.call t "createObjectStore" [| Jv.of_string name; options |]
     |> Object_store.of_jv
