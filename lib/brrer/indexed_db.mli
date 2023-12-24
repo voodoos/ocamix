@@ -1,12 +1,15 @@
 open Brr
 
-module type Store_content = sig
+module type Store_intf = sig
   type t
   type key
 
+  val name : string
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
-  val key_path : string
+  val key_to_jv : key -> Jv.t
+  val key_of_jv : Jv.t -> key
+  val key_path : string (* todo key_path should be optional *)
   val get_key : t -> key
 end
 
@@ -22,10 +25,35 @@ module Events : sig
   val success : Ev.Type.void Ev.type'
 end
 
-module Object_store : sig
+module Request : sig
   type 'a t
 
-  val of_jv : Jv.t -> 'a t
+  val result : 'a t -> 'a
+  val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
+end
+
+module Object_store : sig
+  type 't t
+
+  val of_jv : Jv.t -> 't t
+
+  val add :
+    (module Store_intf with type t = 't and type key = 'key) ->
+    't ->
+    ?key:'key ->
+    't t ->
+    'key Request.t
+end
+
+module Transaction : sig
+  type t
+  type mode = Readonly | Readwrite | Readwriteflush
+
+  val string_of_mode : mode -> string
+  val mode_of_string : string -> mode
+
+  val object_store :
+    (module Store_intf with type t = 't) -> t -> 't Object_store.t
 end
 
 module Database : sig
@@ -34,18 +62,13 @@ module Database : sig
   val of_jv : Jv.t -> t
 
   val create_object_store :
-    name:string ->
-    (module Store_content with type t = 't) ->
+    (module Store_intf with type t = 't) ->
     ?auto_increment:bool ->
     t ->
     't Object_store.t
-end
 
-module Request : sig
-  type 'a t
-
-  val result : 'a t -> 'a
-  val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
+  val transaction :
+    stores:string list -> ?mode:Transaction.mode -> t -> Transaction.t
 end
 
 module Open_db_request : sig
