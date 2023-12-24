@@ -28,21 +28,24 @@ module Events = struct
 end
 
 module Request = struct
-  type 'a t = Jv.t
+  type 'a t = { jv : Jv.t; of_jv : Jv.t -> 'a }
 
-  external of_jv : Jv.t -> 'a t = "%identity"
-  external to_a : 'a t -> 'a = "%identity"
+  external of_jv : Jv.t -> 'a = "%identity"
+
+  let of_jv ~f j = { jv = of_jv j; of_jv = f }
 
   let result (type a) (t : a t) : a =
     (* todo this is wrong *)
-    Jv.get t "result" |> to_a
+    Jv.get t.jv "result" |> t.of_jv
 
   let on_success (type a) ~(f : Ev.Type.void Ev.t -> a t -> unit) (t : a t) =
     let f ev =
-      let req : 'a t = Ev.current_target ev |> Ev.target_to_jv |> of_jv in
+      let req : a t =
+        Ev.current_target ev |> Ev.target_to_jv |> of_jv ~f:t.of_jv
+      in
       f ev req
     in
-    ignore @@ Ev.listen Events.success f (Ev.target_of_jv t);
+    ignore @@ Ev.listen Events.success f (Ev.target_of_jv t.jv);
     t
 end
 
@@ -59,7 +62,7 @@ module Object_store = struct
       | Some key -> [| S.to_jv v; S.key_to_jv key |]
       | None -> [| S.to_jv v |]
     in
-    Jv.call t "add" args |> Request.of_jv
+    Jv.call t "add" args |> Request.of_jv ~f:S.key_of_jv
 end
 
 module Transaction = struct
@@ -108,12 +111,16 @@ end
 module Open_db_request = struct
   type t = Database.t Request.t
 
-  let on_upgrade_needed ~(f : Events.Version_change.t Ev.t -> t -> unit) t =
+  let on_upgrade_needed ~(f : Events.Version_change.t Ev.t -> t -> unit) (t : t)
+      : t =
     let f ev =
-      let req : t = Ev.current_target ev |> Ev.target_to_jv |> Request.of_jv in
+      let req : t =
+        Ev.current_target ev |> Ev.target_to_jv
+        |> Request.of_jv ~f:Database.of_jv
+      in
       f ev req
     in
-    ignore @@ Ev.listen Events.upgrade_needed f (Ev.target_of_jv t);
+    ignore @@ Ev.listen Events.upgrade_needed f (Ev.target_of_jv t.jv);
     t
 
   external as_request : t -> Database.t Request.t = "%identity"
@@ -130,6 +137,7 @@ module Factory = struct
     in
 
     Jv.call t "open" @@ Array.map Jv.of_string args
+    |> Request.of_jv ~f:Database.of_jv
 end
 
 let get ?(window = G.window) () : Factory.t =
