@@ -86,4 +86,4 @@ module Factory : sig
   val open' : name:string -> ?version:int -> t -> Open_db_request.t
 end
 
-val get : ?window:Brr.El.window -> unit -> Factory.t
+val get_factory : ?window:Brr.El.window -> unit -> Factory.t

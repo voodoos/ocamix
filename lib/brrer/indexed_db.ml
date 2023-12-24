@@ -140,5 +140,5 @@ module Factory = struct
     |> Request.of_jv ~f:Database.of_jv
 end
 
-let get ?(window = G.window) () : Factory.t =
+let get_factory ?(window = G.window) () : Factory.t =
   Jv.get (Window.to_jv window) "indexedDB"
