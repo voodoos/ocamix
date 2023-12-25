@@ -1,0 +1,6 @@
+(library
+ (name db)
+ (libraries std brrer yojson)
+ (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)
+ (preprocess
+  (pps ppx_yojson_conv)))

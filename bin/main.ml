@@ -57,14 +57,46 @@ let ui =
       `S el_columns;
     ]
 
-let db () =
+let with_idb ?version ~name f =
+  let open Brr_io.Indexed_db in
+  let f _ev dbr =
+    let db = Request.result dbr in
+    f db
+  in
+  get_factory ()
+  |> Factory.open' ~name ?version
+  |> Open_db_request.on_upgrade_needed ~f:(fun e q ->
+         let old_version, new_version =
+           let v = Ev.as_type e in
+           Events.Version_change.(old_version v, new_version v)
+         in
+         Console.info
+           [
+             "Upgrading indexed_db schema from version";
+             old_version;
+             "to";
+             new_version;
+           ];
+         let db = Request.result q in
+         Console.log [ "pouet"; db ];
+         let store =
+           Database.create_object_store
+             (module Db.Orderred_items_store)
+             ~auto_increment:true db
+         in
+         Console.log [ "pouet"; store ])
+  |> Request.on_success ~f |> ignore
+
+let db idb =
   let open Fut.Result_syntax in
   let open Data_source.Jellyfin in
   let base_url = "http://localhost:8096" in
   let+ connexion =
-    connect ~base_url
-      Api.Authenticate_by_name.{ username = "root"; pw = "rootlocalroot" }
+    Brr_lwd_ui.Persistent.var_fut ~key:"v_connexion" (fun () ->
+        connect ~base_url
+          Api.Authenticate_by_name.{ username = "root"; pw = "rootlocalroot" })
   in
+  let connexion = Lwd.peek connexion in
   let+ infos = query connexion (module Api.System.Info) () in
 
   let+ stats_query =
@@ -80,6 +112,24 @@ let db () =
         }
   in
   let total_item_count = stats_query.total_record_count in
+  (* let fetch_queue = Queue.create () in
+     let fetch_first = Stack.create () in
+     let fetch_all ?(chunk_size = 2) total_record_count =
+       let chunks = (total_record_count / chunk_size) + 1 in
+       List.fold_left
+     in *)
+  let _ =
+    let module OI = Db.Orderred_items_store in
+    Brr_io.Indexed_db.(
+      let transaction =
+        Database.transaction ~stores:[ OI.Content.name ] ~mode:Readwrite idb
+      in
+      let store = Transaction.object_store (module OI) transaction in
+      for i = 0 to total_item_count do
+        ignore @@ OI.put { id = i; item = None } store
+      done;
+      Console.log [ "success"; store ])
+  in
   Console.log [ infos ];
   Console.log [ total_item_count ]
 
@@ -92,7 +142,8 @@ let _ =
   in
   let on_load _ =
     Console.(log [ str "on load" ]);
-    ignore @@ db ();
+    with_idb ~name:"tracks" ~version:1 @@ fun idb ->
+    ignore @@ db idb;
     El.append_children (Document.body G.document) [ Lwd.quick_sample ui ];
     Lwd.set_on_invalidate ui on_invalidate
   in

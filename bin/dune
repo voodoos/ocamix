@@ -6,4 +6,12 @@
   (into ../example)
   (until-clean))
  (flags :standard -open Brrer)
- (libraries js_of_ocaml brrer lwd brr-lwd ocamix.brr-lwd-ui lib data_source))
+ (libraries
+  js_of_ocaml
+  brrer
+  lwd
+  brr-lwd
+  ocamix.brr-lwd-ui
+  lib
+  data_source
+  db))
