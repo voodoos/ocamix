@@ -1,18 +1,5 @@
 open Brr
 
-module type Store_intf = sig
-  type t
-  type key
-
-  val name : string
-  val to_jv : t -> Jv.t
-  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
-  val key_to_jv : key -> Jv.t
-  val key_of_jv : Jv.t -> key
-  val key_path : string (* todo key_path should be optional *)
-  val get_key : t -> key
-end
-
 module Events = struct
   module Version_change = struct
     type t = Jv.t
@@ -49,30 +36,52 @@ module Request = struct
     t
 end
 
-module Object_store = struct
-  type 'a t = Jv.t
+module type Store_content_intf = sig
+  type t
+  type key
 
-  external of_jv : Jv.t -> 'a t = "%identity"
+  val name : string
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
+  val key_to_jv : key -> Jv.t
+  val key_of_jv : Jv.t -> key
+  val key_path : string (* todo key_path should be optional *)
+  val get_key : t -> key
+end
 
-  let add (type t' key')
-      (module S : Store_intf with type t = t' and type key = key') v
-      ?(key : key' option) t : key' Request.t =
+module type Object_store_intf = sig
+  type t
+
+  val of_jv : Jv.t -> t
+
+  module Content : Store_content_intf
+
+  val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+end
+
+module Make_object_store (C : Store_content_intf) = struct
+  type t = Jv.t
+
+  module Content = C
+
+  external of_jv : Jv.t -> t = "%identity"
+
+  let add v ?(key : C.key option) t : C.key Request.t =
     let args =
       match key with
-      | Some key -> [| S.to_jv v; S.key_to_jv key |]
-      | None -> [| S.to_jv v |]
+      | Some key -> [| C.to_jv v; C.key_to_jv key |]
+      | None -> [| C.to_jv v |]
     in
-    Jv.call t "add" args |> Request.of_jv ~f:S.key_of_jv
+    Jv.call t "add" args |> Request.of_jv ~f:C.key_of_jv
 
-  let put (type t' key')
-      (module S : Store_intf with type t = t' and type key = key') v
-      ?(key : key' option) t : key' Request.t =
+  let put v ?(key : C.key option) t : C.key Request.t =
     let args =
       match key with
-      | Some key -> [| S.to_jv v; S.key_to_jv key |]
-      | None -> [| S.to_jv v |]
+      | Some key -> [| C.to_jv v; C.key_to_jv key |]
+      | None -> [| C.to_jv v |]
     in
-    Jv.call t "put" args |> Request.of_jv ~f:S.key_of_jv
+    Jv.call t "put" args |> Request.of_jv ~f:C.key_of_jv
 end
 
 module Transaction = struct
@@ -93,9 +102,9 @@ module Transaction = struct
     | "readwriteflush" -> Readwriteflush
     | s -> raise (Invalid_argument s)
 
-  let object_store (type t') (module S : Store_intf with type t = t') t :
-      t' Object_store.t =
-    Jv.call t "objectStore" [| Jv.of_string S.name |] |> Object_store.of_jv
+  let object_store (type t') (module S : Object_store_intf with type t = t') t :
+      t' =
+    Jv.call t "objectStore" [| Jv.of_string S.Content.name |] |> S.of_jv
 end
 
 module Database = struct
@@ -103,14 +112,16 @@ module Database = struct
 
   external of_jv : Jv.t -> t = "%identity"
 
-  let create_object_store (type t') (module S : Store_intf with type t = t')
-      ?(auto_increment = false) t : t' Object_store.t =
+  let create_object_store (type t')
+      (module S : Object_store_intf with type t = t') ?(auto_increment = false)
+      (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
-    let opts = ("keyPath", Jv.of_string S.key_path) :: opts in
+    (* TODO: move autoincrement to store_content *)
+    let opts = ("keyPath", Jv.of_string S.Content.key_path) :: opts in
     let options = Jv.obj @@ Array.of_list opts in
     (* TODO: keypath should be optionnal *)
-    Jv.call t "createObjectStore" [| Jv.of_string S.name; options |]
-    |> Object_store.of_jv
+    Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
+    |> S.of_jv
 
   let transaction ~stores ?(mode = Transaction.Readonly) t =
     let mode = Transaction.string_of_mode mode |> Jv.of_string in

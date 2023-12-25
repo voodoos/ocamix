@@ -1,18 +1,5 @@
 open Brr
 
-module type Store_intf = sig
-  type t
-  type key
-
-  val name : string
-  val to_jv : t -> Jv.t
-  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
-  val key_to_jv : key -> Jv.t
-  val key_of_jv : Jv.t -> key
-  val key_path : string (* todo key_path should be optional *)
-  val get_key : t -> key
-end
-
 module Events : sig
   module Version_change : sig
     type t
@@ -32,24 +19,32 @@ module Request : sig
   val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
 end
 
-module Object_store : sig
-  type 't t
+module type Store_content_intf = sig
+  type t
+  type key
 
-  val of_jv : Jv.t -> 't t
+  val name : string
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
+  val key_to_jv : key -> Jv.t
+  val key_of_jv : Jv.t -> key
+  val key_path : string (* todo key_path should be optional *)
+  val get_key : t -> key
+end
 
-  val add :
-    (module Store_intf with type t = 't and type key = 'key) ->
-    't ->
-    ?key:'key ->
-    't t ->
-    'key Request.t
+module type Object_store_intf = sig
+  type t
 
-  val put :
-    (module Store_intf with type t = 't and type key = 'key) ->
-    't ->
-    ?key:'key ->
-    't t ->
-    'key Request.t
+  val of_jv : Jv.t -> t
+
+  module Content : Store_content_intf
+
+  val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+end
+
+module Make_object_store (C : Store_content_intf) : sig
+  include Object_store_intf with module Content = C
 end
 
 module Transaction : sig
@@ -58,9 +53,7 @@ module Transaction : sig
 
   val string_of_mode : mode -> string
   val mode_of_string : string -> mode
-
-  val object_store :
-    (module Store_intf with type t = 't) -> t -> 't Object_store.t
+  val object_store : (module Object_store_intf with type t = 't) -> t -> 't
 end
 
 module Database : sig
@@ -69,10 +62,10 @@ module Database : sig
   val of_jv : Jv.t -> t
 
   val create_object_store :
-    (module Store_intf with type t = 't) ->
+    (module Object_store_intf with type t = 't) ->
     ?auto_increment:bool ->
     t ->
-    't Object_store.t
+    't
 
   val transaction :
     stores:string list -> ?mode:Transaction.mode -> t -> Transaction.t
