@@ -49,6 +49,26 @@ module type Store_content_intf = sig
   val get_key : t -> key
 end
 
+module Direction = struct
+  type t = Next | Next_unique | Prev | Prev_unique
+
+  let to_string = function
+    | Next -> "next"
+    | Next_unique -> "nextUnique"
+    | Prev -> "prev"
+    | Prev_unique -> "prevUnique"
+
+  let of_string = function
+    | "next" -> Next
+    | "nextUnique" -> Next_unique
+    | "prev" -> Prev
+    | "prevUnique" -> Prev_unique
+    | s -> raise (Invalid_argument s)
+
+  let to_jv d = Jv.of_string (to_string d)
+  let of_jv j = of_string (Jv.to_string j)
+end
+
 module type Object_store_intf = sig
   type t
 
@@ -56,7 +76,26 @@ module type Object_store_intf = sig
 
   module Content : Store_content_intf
 
+  module Cursor : sig
+    type t
+
+    val key : t -> Content.key option
+  end
+
+  module Cursor_with_value : sig
+    include module type of Cursor
+
+    val value : t -> Content.t option
+  end
+
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+
+  val open_cursor :
+    ?query:Jv.t ->
+    ?direction:Direction.t ->
+    t ->
+    Cursor_with_value.t option Request.t
+
   val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
 end
 
@@ -64,6 +103,24 @@ module Make_object_store (C : Store_content_intf) = struct
   type t = Jv.t
 
   module Content = C
+
+  module Cursor = struct
+    type t = Jv.t
+
+    external of_jv : Jv.t -> t = "%identity"
+
+    let key t = Jv.get t "key" |> Jv.to_option Content.key_of_jv
+  end
+
+  module Cursor_with_value = struct
+    include Cursor
+
+    let value t =
+      let of_jv j = Content.of_jv j |> Result.get_ok in
+      let v = Jv.get t "value" in
+      Console.log [ v ];
+      Jv.to_option of_jv v
+  end
 
   external of_jv : Jv.t -> t = "%identity"
 
@@ -74,6 +131,19 @@ module Make_object_store (C : Store_content_intf) = struct
       | None -> [| C.to_jv v |]
     in
     Jv.call t "add" args |> Request.of_jv ~f:C.key_of_jv
+
+  let open_cursor ?query ?direction t : Cursor_with_value.t option Request.t =
+    let direction = Option.map Direction.to_jv direction in
+    let args =
+      (* todo: query !*)
+      match (query, direction) with
+      | Some q, Some d -> [| q; d |]
+      | None, Some d -> [| Jv.null; d |]
+      | Some q, None -> [| q |]
+      | None, None -> [||]
+    in
+    let f jv = Jv.to_option Cursor_with_value.of_jv jv in
+    Jv.call t "openCursor" args |> Request.of_jv ~f
 
   let put v ?(key : C.key option) t : C.key Request.t =
     let args =
@@ -123,9 +193,12 @@ module Database = struct
     Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
     |> S.of_jv
 
-  let transaction ~stores ?(mode = Transaction.Readonly) t =
+  let transaction stores ?(mode = Transaction.Readonly) t =
     let mode = Transaction.string_of_mode mode |> Jv.of_string in
-    Jv.call t "transaction" [| Jv.of_list Jv.of_string stores; mode |]
+    let jv_of_store (module S : Object_store_intf) =
+      Jv.of_string S.Content.name
+    in
+    Jv.call t "transaction" [| Jv.of_list jv_of_store stores; mode |]
     |> Transaction.of_jv
 end
 

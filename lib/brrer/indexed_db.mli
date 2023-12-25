@@ -12,6 +12,15 @@ module Events : sig
   val success : Ev.Type.void Ev.type'
 end
 
+module Direction : sig
+  type t = Next | Next_unique | Prev | Prev_unique
+
+  val to_string : t -> string
+  val of_string : string -> t
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> t
+end
+
 module Request : sig
   type 'a t
 
@@ -39,7 +48,26 @@ module type Object_store_intf = sig
 
   module Content : Store_content_intf
 
+  module Cursor : sig
+    type t
+
+    val key : t -> Content.key option
+  end
+
+  module Cursor_with_value : sig
+    include module type of Cursor
+
+    val value : t -> Content.t option
+  end
+
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+
+  val open_cursor :
+    ?query:Jv.t ->
+    ?direction:Direction.t ->
+    t ->
+    Cursor_with_value.t option Request.t
+
   val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
 end
 
@@ -68,7 +96,10 @@ module Database : sig
     't
 
   val transaction :
-    stores:string list -> ?mode:Transaction.mode -> t -> Transaction.t
+    (module Object_store_intf) list ->
+    ?mode:Transaction.mode ->
+    t ->
+    Transaction.t
 end
 
 module Open_db_request : sig
