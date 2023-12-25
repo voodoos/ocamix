@@ -118,17 +118,30 @@ let db idb =
        let chunks = (total_record_count / chunk_size) + 1 in
        List.fold_left
      in *)
+  let module OI = Db.Orderred_items_store in
   let _ =
-    let module OI = Db.Orderred_items_store in
     Brr_io.Indexed_db.(
       let transaction =
-        Database.transaction ~stores:[ OI.Content.name ] ~mode:Readwrite idb
+        Database.transaction [ (module OI) ] ~mode:Readwrite idb
       in
       let store = Transaction.object_store (module OI) transaction in
       for i = 0 to total_item_count do
         ignore @@ OI.put { id = i; item = None } store
       done;
       Console.log [ "success"; store ])
+  in
+  let _ =
+    let open Brr_io.Indexed_db in
+    let transaction = Database.transaction [ (module OI) ] ~mode:Readonly idb in
+    let store = Transaction.object_store (module OI) transaction in
+    let req = OI.open_cursor ~direction:Prev store in
+    Request.on_success req ~f:(fun _ q ->
+        let cursor = Request.result q in
+        Console.log [ "req:"; req ];
+        Console.log [ "cursor:"; cursor ];
+        Console.log [ "key:"; Option.map OI.Cursor_with_value.key cursor ];
+        Console.log [ "value:"; Option.map OI.Cursor_with_value.value cursor ])
+    |> ignore
   in
   Console.log [ infos ];
   Console.log [ total_item_count ]

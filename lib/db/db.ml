@@ -11,7 +11,10 @@ module Orderred_items = struct
     yojson_of_t t |> Yojson.Safe.to_string |> Jstr.of_string |> Brr.Json.decode
     |> Result.get_exn
 
-  let of_jv j = Ok (Jv.to_string j |> Yojson.Safe.from_string |> t_of_yojson)
+  let of_jv j =
+    let json = Brr.Json.encode j in
+    Ok (Jstr.to_string json |> Yojson.Safe.from_string |> t_of_yojson)
+
   let key_to_jv k = Jv.of_int k
   let key_of_jv j = Jv.to_int j
   let key_path = "id"
