@@ -63,6 +63,16 @@ module Object_store = struct
       | None -> [| S.to_jv v |]
     in
     Jv.call t "add" args |> Request.of_jv ~f:S.key_of_jv
+
+  let put (type t' key')
+      (module S : Store_intf with type t = t' and type key = key') v
+      ?(key : key' option) t : key' Request.t =
+    let args =
+      match key with
+      | Some key -> [| S.to_jv v; S.key_to_jv key |]
+      | None -> [| S.to_jv v |]
+    in
+    Jv.call t "put" args |> Request.of_jv ~f:S.key_of_jv
 end
 
 module Transaction = struct

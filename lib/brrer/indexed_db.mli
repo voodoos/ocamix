@@ -43,6 +43,13 @@ module Object_store : sig
     ?key:'key ->
     't t ->
     'key Request.t
+
+  val put :
+    (module Store_intf with type t = 't and type key = 'key) ->
+    't ->
+    ?key:'key ->
+    't t ->
+    'key Request.t
 end
 
 module Transaction : sig
