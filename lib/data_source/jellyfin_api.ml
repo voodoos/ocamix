@@ -52,10 +52,10 @@ module Item = struct
     | Episode
     | Folder
     | Genre
-    | ManualPlaylistsFolder
-    | Movie
     | LiveTvChannel
     | LiveTvProgram
+    | ManualPlaylistsFolder
+    | Movie
     | MusicAlbum
     | MusicArtist
     | MusicGenre
@@ -81,8 +81,10 @@ module Item = struct
 
   type field =
     | AirTime
+    | BasicSyncInfo
     | CanDelete
     | CanDownload
+    | ChannelImage
     | ChannelInfo
     | Chapters
     | ChildCount
@@ -90,57 +92,55 @@ module Item = struct
     | CustomRating
     | DateCreated
     | DateLastMediaAdded
+    | DateLastRefreshed
+    | DateLastSaved
     | DisplayPreferencesId
+    | EnableMediaSourceDisplay
     | Etag
+    | ExternalEtag
+    | ExternalSeriesId
     | ExternalUrls
+    | ExtraIds
     | Genres
+    | Height
     | HomePageUrl
+    | InheritedParentalRatingValue
+    | IsHD
     | ItemCounts
+    | LocalTrailerCount
     | MediaSourceCount
     | MediaSources
+    | MediaStreams
     | OriginalTitle
     | Overview
     | ParentId
     | Path
     | People
     | PlayAccess
+    | PresentationUniqueKey
+    | PrimaryImageAspectRatio
     | ProductionLocations
     | ProviderIds
-    | PrimaryImageAspectRatio
     | RecursiveItemCount
-    | Settings
+    | RefreshState
+    | RemoteTrailers
     | ScreenshotImageTags
+    | SeasonUserData
+    | SeriesPresentationUniqueKey
     | SeriesPrimaryImage
     | SeriesStudio
+    | ServiceName
+    | Settings
     | SortName
     | SpecialEpisodeNumbers
+    | SpecialFeatureCount
     | Studios
-    | BasicSyncInfo
     | SyncInfo
     | Taglines
     | Tags
-    | RemoteTrailers
-    | MediaStreams
-    | SeasonUserData
-    | ServiceName
     | ThemeSongIds
     | ThemeVideoIds
-    | ExternalEtag
-    | PresentationUniqueKey
-    | InheritedParentalRatingValue
-    | ExternalSeriesId
-    | SeriesPresentationUniqueKey
-    | DateLastRefreshed
-    | DateLastSaved
-    | RefreshState
-    | ChannelImage
-    | EnableMediaSourceDisplay
     | Width
-    | Height
-    | ExtraIds
-    | LocalTrailerCount
-    | IsHD
-    | SpecialFeatureCount
   [@@deriving yojson]
 end
 
