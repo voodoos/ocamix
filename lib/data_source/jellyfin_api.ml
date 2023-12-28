@@ -36,7 +36,7 @@ module Authenticate_by_name = struct
 end
 
 module Item = struct
-  type t = { name : string [@key "Name"] }
+  type t = { name : string; [@key "Name"] id : string [@key "Id"] }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   type type_ =
@@ -149,6 +149,7 @@ module Items = struct
     user_id : string; [@key "userId"]
     fields : Item.field list;
     include_item_types : Item.type_ list; [@key "includeItemTypes"]
+    start_index : int option; [@yojson.option] [@key "startIndex"]
     limit : int;
     recursive : bool;
   }

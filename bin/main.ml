@@ -23,7 +23,7 @@ let ui =
   let list, _tbl = Ui.draggable_table () in
   let form =
     Form.my_form (fun form ->
-        Console.log [ form; form.name ];
+        Console.log [ "a"; form; form.name ];
         match form.name with
         | Ok _name ->
             let list, _tbl = Ui.draggable_table ~shared_drag_data () in
@@ -57,6 +57,8 @@ let ui =
       `S el_columns;
     ]
 
+module OI = Db.Stores.Orderred_items_store
+
 let with_idb ?version ~name f =
   let open Brr_io.Indexed_db in
   let f _ev dbr =
@@ -80,9 +82,7 @@ let with_idb ?version ~name f =
          let db = Request.result q in
          Console.log [ "pouet"; db ];
          let store =
-           Database.create_object_store
-             (module Db.Orderred_items_store)
-             ~auto_increment:true db
+           Database.create_object_store (module OI) ~auto_increment:true db
          in
          Console.log [ "pouet"; store ])
   |> Request.on_success ~f |> ignore
@@ -96,55 +96,8 @@ let db idb =
         connect ~base_url
           Api.Authenticate_by_name.{ username = "root"; pw = "rootlocalroot" })
   in
-  let connexion = Lwd.peek connexion in
-  let+ infos = query connexion (module Api.System.Info) () in
-
-  let+ stats_query =
-    query connexion
-      (module Api.Items)
-      Api.Items.
-        {
-          user_id = connexion.auth_response.user.id;
-          fields = [];
-          include_item_types = [ Audio ];
-          limit = 0;
-          recursive = true;
-        }
-  in
-  let total_item_count = stats_query.total_record_count in
-  (* let fetch_queue = Queue.create () in
-     let fetch_first = Stack.create () in
-     let fetch_all ?(chunk_size = 2) total_record_count =
-       let chunks = (total_record_count / chunk_size) + 1 in
-       List.fold_left
-     in *)
-  let module OI = Db.Orderred_items_store in
-  let _ =
-    Brr_io.Indexed_db.(
-      let transaction =
-        Database.transaction [ (module OI) ] ~mode:Readwrite idb
-      in
-      let store = Transaction.object_store (module OI) transaction in
-      for i = 0 to total_item_count do
-        ignore @@ OI.put { id = i; item = None } store
-      done;
-      Console.log [ "success"; store ])
-  in
-  let _ =
-    let open Brr_io.Indexed_db in
-    let transaction = Database.transaction [ (module OI) ] ~mode:Readonly idb in
-    let store = Transaction.object_store (module OI) transaction in
-    let req = OI.open_cursor ~direction:Prev store in
-    Request.on_success req ~f:(fun _ q ->
-        let cursor = Request.result q in
-        Console.log [ "req:"; req ];
-        Console.log [ "cursor:"; cursor ];
-        Console.log [ "key:"; Option.map OI.Cursor_with_value.key cursor ];
-        Console.log [ "value:"; Option.map OI.Cursor_with_value.value cursor ])
-    |> ignore
-  in
-  Console.log [ infos ];
-  Console.log [ total_item_count ]
+  let source = Lwd.peek connexion in
+  Db.Sync.check_and_sync ~source idb
 
 let _ =
   let ui = Lwd.observe ui in

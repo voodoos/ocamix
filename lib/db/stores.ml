@@ -1,5 +1,6 @@
 open! Std
 open Brrer
+open Brr_io
 
 module Orderred_items = struct
   type t = { id : int; item : string option } [@@deriving yojson]
@@ -21,5 +22,4 @@ module Orderred_items = struct
   let get_key t = t.id
 end
 
-module Orderred_items_store =
-  Brr_io.Indexed_db.Make_object_store (Orderred_items)
+module Orderred_items_store = Indexed_db.Make_object_store (Orderred_items)
