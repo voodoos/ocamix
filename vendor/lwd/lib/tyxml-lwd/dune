@@ -2,6 +2,7 @@
  (name tyxml_lwd)
  (wrapped false)
  (public_name tyxml-lwd)
+ (enabled_if false)
  (modes byte)
  (preprocess
   (pps js_of_ocaml-ppx))
