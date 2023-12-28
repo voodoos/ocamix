@@ -80,12 +80,16 @@ module type Object_store_intf = sig
     type t
 
     val key : t -> Content.key option
+    val advance : int -> t -> t
+    val continue : ?key:Content.key -> t -> unit
   end
 
   module Cursor_with_value : sig
     include module type of Cursor
 
     val value : t -> Content.t option
+    val delete : t -> unit Request.t
+    val update : Content.t -> t -> Content.key Request.t
   end
 
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
@@ -110,6 +114,16 @@ module Make_object_store (C : Store_content_intf) = struct
     external of_jv : Jv.t -> t = "%identity"
 
     let key t = Jv.get t "key" |> Jv.to_option Content.key_of_jv
+
+    let advance count t =
+      ignore @@ Jv.call t "advance" [| Jv.of_int count |];
+      t
+
+    let continue ?key t =
+      let args =
+        match key with None -> [||] | Some key -> [| Content.key_to_jv key |]
+      in
+      ignore @@ Jv.call t "continue" args
   end
 
   module Cursor_with_value = struct
@@ -118,8 +132,13 @@ module Make_object_store (C : Store_content_intf) = struct
     let value t =
       let of_jv j = Content.of_jv j |> Result.get_ok in
       let v = Jv.get t "value" in
-      Console.log [ v ];
       Jv.to_option of_jv v
+
+    let delete t = Jv.call t "delete" [||] |> Request.of_jv ~f:(fun _ -> ())
+
+    let update v t =
+      Jv.call t "update" [| Content.to_jv v |]
+      |> Request.of_jv ~f:Content.key_of_jv
   end
 
   external of_jv : Jv.t -> t = "%identity"

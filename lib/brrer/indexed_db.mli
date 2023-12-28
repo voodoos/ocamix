@@ -52,12 +52,20 @@ module type Object_store_intf = sig
     type t
 
     val key : t -> Content.key option
+    val advance : int -> t -> t
+
+    val continue : ?key:Content.key -> t -> unit
+    (** [continue t] advances the cursor to the next position along its
+      direction, to the item whose key matches the optional key parameter. This
+      will re-trigger the [on_success] event of the cursor's query. *)
   end
 
   module Cursor_with_value : sig
     include module type of Cursor
 
     val value : t -> Content.t option
+    val delete : t -> unit Request.t
+    val update : Content.t -> t -> Content.key Request.t
   end
 
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
