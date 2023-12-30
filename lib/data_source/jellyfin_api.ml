@@ -1,3 +1,4 @@
+module Yojson = Std.Yojson
 open Brr
 
 type method' = Get | Post
@@ -46,7 +47,9 @@ module Item = struct
     let assoc = List.map (fun (key, v) -> (key, `String v)) i in
     `Assoc assoc
 
-  type image_blur_hashes = { primary : image_blur_hash [@key "Primary"] }
+  type image_blur_hashes = {
+    primary : image_blur_hash option; [@yojson.option] [@key "Primary"]
+  }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   type t = {
@@ -249,4 +252,10 @@ let request (type p r) ?base_url ?token ?headers
   let open Fut.Result_syntax in
   let* res = request @@ Request.v ~init url in
   let+ json = Response.as_body res |> Body.text in
+  (*
+     https://discuss.ocaml.org/t/json-encode-decode-in-js-of-ocaml/8539/10
+     orbitz: One thing to note if you use yojson in the browser: it's decoder
+     for lists is a recursive call which jsoo is not able to transform into a
+     form that does not cause a stack overflow, so if you are using it to decode
+     large lists you'll have to define your of_yojson yourself.*)
   Q.response_of_yojson (Yojson.Safe.from_string (Jstr.to_string json))

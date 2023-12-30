@@ -6,7 +6,7 @@ module Source = Data_source.Jellyfin
 module OI = Stores.Orderred_items_store
 module I = Stores.Items_store
 
-let chunk_size = 100
+let chunk_size = 500
 
 let fetch_total_item_count source =
   let open Fut.Result_syntax in
@@ -167,8 +167,6 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
             }
         in
         Queue.add req fetch_queue;
-        Console.log
-          [ "Fetching"; limit; "items, starting at index"; start_index ];
         enqueue ~start_index:(start_index + limit) (todo - limit))
     in
     enqueue ~start_index:first total;

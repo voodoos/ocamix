@@ -24,5 +24,6 @@
   lwd
   brr-lwd
   yojson
+  jsonxt
   ppx_yojson_conv
   base64))

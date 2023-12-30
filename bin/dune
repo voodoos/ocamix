@@ -1,6 +1,9 @@
 (executable
  (name main)
  (modes js)
+ (js_of_ocaml
+  (flags
+   (:standard --no-inline)))
  (promote
   (only *.bc.js)
   (into ../example)
