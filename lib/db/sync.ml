@@ -159,7 +159,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
             {
               (* todo make sort explicit (by date added date) *)
               user_id = source.auth_response.user.id;
-              fields = [ ParentId ];
+              fields = [];
               include_item_types = [ Audio ];
               start_index = Some start_index;
               limit;
@@ -170,30 +170,38 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         enqueue ~start_index:(start_index + limit) (todo - limit))
     in
     enqueue ~start_index:first total;
-    let rec run_queue ?(_threads = 1) q =
-      match Queue.take_opt q with
-      | None -> Fut.ok ()
-      | Some req ->
-          let* { Api.Items.start_index; items; _ } =
-            query source (module Api.Items) req
+    let rec run_queue ?(threads = 1) q =
+      assert (threads > 0);
+      let rec take_n acc n =
+        if n = 0 then List.rev acc
+        else
+          match Queue.take_opt q with
+          | None -> List.rev acc
+          | Some elt -> take_n (elt :: acc) (n - 1)
+      in
+      let f req =
+        let+ { Api.Items.start_index; items; _ } =
+          query source (module Api.Items) req
+        in
+        let () = report { remaining = Queue.length fetch_queue } in
+        let idb_put ~start_index items =
+          let open Brr_io.Indexed_db in
+          let transaction =
+            Database.transaction [ (module OI); (module I) ] ~mode:Readwrite idb
           in
-          let () = report { remaining = Queue.length fetch_queue } in
-          let idb_put ~start_index items =
-            let open Brr_io.Indexed_db in
-            let transaction =
-              Database.transaction
-                [ (module OI); (module I) ]
-                ~mode:Readwrite idb
-            in
-            let s_list = Transaction.object_store (module OI) transaction in
-            let s_items = Transaction.object_store (module I) transaction in
-            List.iteri items ~f:(fun index ({ Api.Item.id; _ } as item) ->
-                ignore
-                  (OI.put { id = start_index + index; item = Some id } s_list);
-                ignore (I.put item s_items))
-          in
-          idb_put ~start_index items;
-          run_queue q
+          let s_list = Transaction.object_store (module OI) transaction in
+          let s_items = Transaction.object_store (module I) transaction in
+          List.iteri items ~f:(fun index ({ Api.Item.id; _ } as item) ->
+              ignore
+                (OI.put { id = start_index + index; item = Some id } s_list);
+              ignore (I.put item s_items))
+        in
+        idb_put ~start_index items
+      in
+      let reqs = take_n [] threads in
+      let open Fut.Syntax in
+      let* reqs = Fut.of_list (List.map ~f reqs) in
+      if List.is_empty reqs then Fut.ok () else run_queue q
     in
     run_queue fetch_queue
   in
