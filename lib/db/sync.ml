@@ -4,6 +4,7 @@ open Brr
 open Brr_io.Indexed_db
 module Source = Data_source.Jellyfin
 module OI = Stores.Orderred_items_store
+module I = Stores.Items_store
 
 let chunk_size = 100
 
@@ -131,7 +132,9 @@ let check_status ~source idb =
             Partial_fetch { first_unfetched_key = 0; last_source_item_key })
     | _ -> Inconsistent
 
-let sync ~(source : Source.connexion) idb =
+type progress = { remaining : int }
+
+let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   let make_placeholders first last =
     (* todo: error handling *)
@@ -156,7 +159,7 @@ let sync ~(source : Source.connexion) idb =
             {
               (* todo make sort explicit (by date added date) *)
               user_id = source.auth_response.user.id;
-              fields = [];
+              fields = [ ParentId ];
               include_item_types = [ Audio ];
               start_index = Some start_index;
               limit;
@@ -176,15 +179,20 @@ let sync ~(source : Source.connexion) idb =
           let* { Api.Items.start_index; items; _ } =
             query source (module Api.Items) req
           in
+          let () = report { remaining = Queue.length fetch_queue } in
           let idb_put ~start_index items =
             let open Brr_io.Indexed_db in
             let transaction =
-              Database.transaction [ (module OI) ] ~mode:Readwrite idb
+              Database.transaction
+                [ (module OI); (module I) ]
+                ~mode:Readwrite idb
             in
-            let store = Transaction.object_store (module OI) transaction in
-            List.iteri items ~f:(fun index { Api.Item.id; _ } ->
+            let s_list = Transaction.object_store (module OI) transaction in
+            let s_items = Transaction.object_store (module I) transaction in
+            List.iteri items ~f:(fun index ({ Api.Item.id; _ } as item) ->
                 ignore
-                @@ OI.put { id = start_index + index; item = Some id } store)
+                  (OI.put { id = start_index + index; item = Some id } s_list);
+                ignore (I.put item s_items))
           in
           idb_put ~start_index items;
           run_queue q
@@ -200,8 +208,8 @@ let sync ~(source : Source.connexion) idb =
       fetch_missing_items first_unfetched_key last_source_item_key
   | _ -> Fut.ok ()
 
-let check_and_sync ~source idb =
+let check_and_sync ?report ~source idb =
   let open Fut.Result_syntax in
   let* status = check_status ~source idb in
   log_status status;
-  sync ~source idb status
+  sync ?report ~source idb status

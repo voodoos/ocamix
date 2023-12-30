@@ -32,7 +32,10 @@
 
 *)
 
+type progress = { remaining : int }
+
 val check_and_sync :
+  ?report:(progress -> unit) ->
   source:Data_source.Jellyfin.connexion ->
   Brrer.Brr_io.Indexed_db.Database.t ->
   (unit, Jv.Error.t) Fut.result

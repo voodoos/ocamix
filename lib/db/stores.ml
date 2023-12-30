@@ -23,4 +23,20 @@ module Orderred_items = struct
   let get_key t = t.id
 end
 
+module Items = struct
+  open Data_source.Jellyfin.Api
+
+  type t = Item.t
+  type key = string
+
+  let name = "items"
+  let to_jv t = t_to_jv Item.yojson_of_t t
+  let of_jv j = jv_to_t Item.t_of_yojson j
+  let key_to_jv k = Jv.of_string k
+  let key_of_jv j = Jv.to_string j
+  let key_path = "Id"
+  let get_key t = t.Item.id
+end
+
 module Orderred_items_store = Indexed_db.Make_object_store (Orderred_items)
+module Items_store = Indexed_db.Make_object_store (Items)
