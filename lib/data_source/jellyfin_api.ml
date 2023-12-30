@@ -36,7 +36,27 @@ module Authenticate_by_name = struct
 end
 
 module Item = struct
-  type t = { name : string; [@key "Name"] id : string [@key "Id"] }
+  type image_blur_hash = (string * string) list
+
+  let image_blur_hash_of_yojson y =
+    let assoc = Yojson.Safe.Util.to_assoc y in
+    List.map (fun (key, v) -> (key, Yojson.Safe.Util.to_string v)) assoc
+
+  let yojson_of_image_blur_hash i : Yojson.Safe.t =
+    let assoc = List.map (fun (key, v) -> (key, `String v)) i in
+    `Assoc assoc
+
+  type image_blur_hashes = { primary : image_blur_hash [@key "Primary"] }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  type t = {
+    name : string; [@key "Name"]
+    sort_name : string option; [@yojson.option] [@key "SortName"]
+    id : string; [@key "Id"]
+    album_id : string; [@key "AlbumId"]
+    parent_id : string option; [@yojson.option] [@key "ParentId"]
+    image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
+  }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   type type_ =
