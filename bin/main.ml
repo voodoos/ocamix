@@ -4,6 +4,10 @@ open Brr_lwd
 module OI = Db.Stores.Orderred_items_store
 module I = Db.Stores.Items_store
 
+module Db_worker = Lib.Db_worker_api.Client (struct
+  let url = "./db_worker.bc.js"
+end)
+
 let with_idb ?version ~name f =
   let open Brr_io.Indexed_db in
   let f _ev dbr =
@@ -55,6 +59,12 @@ let app idb =
     let$ { remaining } = Lwd.get sync_progress in
     let txt = Format.sprintf "Remaining sync queries: %i" remaining in
     El.txt' txt
+  in
+  let _items =
+    let open Fut.Result_syntax in
+    Console.log [ "worker query"; Lib.Db_worker_api.Queries.Get_all () ];
+    let+ result = Db_worker.(query (Get_all ())) in
+    Console.log [ "worker answer"; result ]
   in
   let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
   let on_click _ _ =

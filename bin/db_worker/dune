@@ -1,0 +1,11 @@
+(executable
+ (name db_worker)
+ (modes js)
+ (js_of_ocaml
+  (flags
+   (:standard --no-inline)))
+ (promote
+  (only *.bc.js)
+  (into ../../example)
+  (until-clean))
+ (libraries js_of_ocaml brrer lib data_source db))
