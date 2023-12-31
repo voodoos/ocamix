@@ -11,16 +11,9 @@ let check_key key =
   else Hashtbl.add keys key ()
 
 let local_storage = Storage.local G.window
-let encode t = Marshal.to_string t [] |> B64.encode_string |> Jstr.v
 
-let decode jstr =
-  let open Result.Infix in
-  try
-    let+ str = Jstr.to_string jstr |> B64.decode in
-    Marshal.from_string str 0
-  with _ -> Error (`Msg "Failed to unmarshal data from local_storage:")
-
-let store ~key value = encode value |> Storage.set_item local_storage key
+let store ~key value =
+  Encodings.marshal_to_jstr value |> Storage.set_item local_storage key
 
 let fetch ~key =
   let open Result.Infix in
@@ -29,7 +22,7 @@ let fetch ~key =
     | None -> Error `Not_found
     | Some v -> Ok v
   in
-  decode encoded_value
+  Encodings.unmarshal_jstr encoded_value
 
 let initial_value ~key f =
   match fetch ~key with

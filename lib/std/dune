@@ -1,4 +1,4 @@
 (library
  (name std)
  (public_name ocamix.std)
- (libraries containers jsonxt))
+ (libraries containers jsonxt brr base64))
