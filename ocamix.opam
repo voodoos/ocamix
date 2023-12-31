@@ -18,6 +18,7 @@ depends: [
   "yojson"
   "jsonxt"
   "ppx_yojson_conv"
+  "uuidm"
   "base64"
   "odoc" {with-doc}
 ]

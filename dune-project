@@ -26,4 +26,5 @@
   yojson
   jsonxt
   ppx_yojson_conv
+  uuidm
   base64))

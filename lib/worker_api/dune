@@ -1,0 +1,3 @@
+(library
+ (name worker_api)
+ (libraries std brr uuidm))
