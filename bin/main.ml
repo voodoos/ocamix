@@ -1,7 +1,6 @@
-open! Std
+open Import
 open Brr
 open Brr_lwd
-open! Lwd_infix
 module OI = Db.Stores.Orderred_items_store
 module I = Db.Stores.Items_store
 
@@ -52,6 +51,7 @@ let app idb =
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let () = ignore @@ db ~progress_var:sync_progress idb in
   let ui_progress =
+    let open Lwd_infix in
     let$ { remaining } = Lwd.get sync_progress in
     let txt = Format.sprintf "Remaining sync queries: %i" remaining in
     El.txt' txt
