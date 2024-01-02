@@ -24,7 +24,7 @@ module Make : functor (Q : Queries) -> sig
   end
 
   module type Worker = functor () -> sig
-    val on_query : 'a query -> 'a
+    val on_query : 'a query -> ('a, [ `Msg of string ]) Fut.result
     (** [on_query q] should return the result of the query q *)
   end
 

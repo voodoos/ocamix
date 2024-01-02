@@ -19,3 +19,6 @@ module Encodings = struct
 
   let unmarshal_jv jv = Jv.to_jstr jv |> unmarshal_jstr
 end
+
+let random_state = Random.get_state ()
+let new_uuid_v4 () = Uuidm.v4_gen random_state ()

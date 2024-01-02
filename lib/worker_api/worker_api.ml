@@ -12,7 +12,6 @@ module Make (Q : Queries) = struct
   (* todo:check that the worker and the client share the same api? *)
 
   let futures : (string, Jv.t -> unit) Hashtbl.t = Hashtbl.create 64
-  let random_state = Random.get_state ()
 
   module Client (P : sig
     val url : string
@@ -21,7 +20,7 @@ module Make (Q : Queries) = struct
     let worker = Brr_webworkers.Worker.create @@ Jstr.of_string P.url
 
     let query (type a) (query : a query) : (a, [ `Msg of string ]) Fut.result =
-      let uuid = Uuidm.(v4_gen random_state () |> to_string) in
+      let uuid = new_uuid_v4 () |> Uuidm.to_string in
       let fut, set = Fut.create () in
       let set jv = set @@ Encodings.unmarshal_jv jv in
       let query = { uuid; message = query } |> Encodings.marshal_to_jstr in
@@ -47,7 +46,7 @@ module Make (Q : Queries) = struct
   end
 
   module type Worker = functor () -> sig
-    val on_query : 'a query -> 'a
+    val on_query : 'a query -> ('a, [ `Msg of string ]) Fut.result
   end
 
   (** Execute W's body and configure messaging *)
@@ -63,7 +62,8 @@ module Make (Q : Queries) = struct
       let+ ({ uuid; message } : 'a query with_uuid) =
         Brr_io.Message.Ev.data message |> Jv.to_jstr |> Encodings.unmarshal_jstr
       in
-      let result = W.on_query message in
+      let open Fut.Result_syntax in
+      let+ result = W.on_query message in
       let message = Encodings.marshal_to_jstr result |> Jv.of_jstr in
       Brr_webworkers.Worker.G.post
         (Encodings.marshal_to_jstr { uuid; message } |> Jv.of_jstr)
