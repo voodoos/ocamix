@@ -125,4 +125,6 @@ module Factory : sig
   val open' : name:string -> ?version:int -> t -> Open_db_request.t
 end
 
-val get_factory : ?window:Brr.El.window -> unit -> Factory.t
+val get_factory : ?global:Jv.t -> unit -> Factory.t
+(** Returns a [Database] factory. In some browsers it might be necessary to
+    specify a global object (like [window]) with the [indexedDb] property. *)
