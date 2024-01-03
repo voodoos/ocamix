@@ -93,6 +93,8 @@ module type Object_store_intf = sig
   end
 
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val get : Content.key -> t -> Content.t option Request.t
+  val get_all : t -> Content.t Array.t Request.t
 
   val open_cursor :
     ?query:Jv.t ->
@@ -150,6 +152,14 @@ module Make_object_store (C : Store_content_intf) = struct
       | None -> [| C.to_jv v |]
     in
     Jv.call t "add" args |> Request.of_jv ~f:C.key_of_jv
+
+  let get key t =
+    let f jv = Jv.to_option (fun j -> Content.of_jv j |> Result.get_ok) jv in
+    Jv.call t "get" [| Content.key_to_jv key |] |> Request.of_jv ~f
+
+  let get_all t =
+    let f jv = Jv.to_array (fun c -> Content.of_jv c |> Result.get_ok) jv in
+    Jv.call t "getAll" [||] |> Request.of_jv ~f
 
   let open_cursor ?query ?direction t : Cursor_with_value.t option Request.t =
     let direction = Option.map Direction.to_jv direction in

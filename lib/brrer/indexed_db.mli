@@ -69,6 +69,9 @@ module type Object_store_intf = sig
   end
 
   val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val get : Content.key -> t -> Content.t option Request.t
+  val get_all : t -> Content.t Array.t Request.t
+  (* TODO: [get_all] optional parameters *)
 
   val open_cursor :
     ?query:Jv.t ->
