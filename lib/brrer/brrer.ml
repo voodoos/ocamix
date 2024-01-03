@@ -20,6 +20,7 @@ module Brr = struct
 
     let submit = Type.void (Jstr.v "submit")
   end
+
   module At = struct
     include At
 
@@ -35,3 +36,4 @@ module Brr_webaudio = Brr_webaudio
 module Brr_io = Brrer_io
 module Brr_canvas = Brr_canvas
 module Fut = Fut
+module Intersection_observer = Intersection_observer
