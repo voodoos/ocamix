@@ -1,4 +1,5 @@
-open Std
+open Import
+open Brrer
 open Brr_lwd_ui
 
 module Two_state_button = struct
@@ -184,3 +185,62 @@ let draggable_table ?shared_drag_data () =
            ("tu", "r5");
          ])
     ()
+
+type row_data = { index : int; visible : bool; el : El.t }
+
+let lazy_table ?(_batch_size = 10) ~total ~(fetch : int -> (El.t, _) Fut.result)
+    (*
+      ~(_render : 'a -> El.t) *) () =
+  let table : row_data Lwd_table.t = Lwd_table.make () in
+  (* The [rows] table is used to relate divs to the table's rows in the
+     observer's callback *)
+  let rows = Hashtbl.create 2048 in
+  let callback e _ =
+    let open Fut.Result_syntax in
+    List.iter e ~f:(fun e ->
+        let target = Intersection_observer.Entry.target e in
+        let id =
+          El.at (Jstr.v "data-index") target |> Option.map Jstr.to_string
+        in
+        if Intersection_observer.Entry.is_intersecting e then
+          let row = Option.bind id (Hashtbl.get rows) in
+          Option.iter
+            (fun row ->
+              ignore
+              @@
+              let+ set =
+                match Lwd_table.get row with
+                | None -> assert false
+                | Some row ->
+                    let+ el = fetch row.index in
+                    { row with visible = true; el }
+              in
+              Lwd_table.set row set)
+            row)
+  in
+  let observer = Intersection_observer.create ~callback () in
+  let () =
+    for i = 1 to total do
+      let uuid = new_uuid_v4 () |> Uuidm.to_string in
+      let el =
+        El.div
+          ~at:[ At.v (Jstr.v "data-index") (Jstr.v uuid) ]
+          [ El.txt' (string_of_int i) ]
+      in
+      let set = { index = i; visible = false; el } in
+      Intersection_observer.observe observer set.el;
+      Hashtbl.add rows uuid @@ Lwd_table.append ~set table
+    done
+  in
+  let render _ { visible = _; el; _ } =
+    let div = el in
+    Lwd_seq.element div
+  in
+  let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
+  Elwd.div
+    ~at:
+      [
+        `P (At.v At.Name.class' (Jstr.v "lazy_table"));
+        `P (At.id @@ Jstr.v "lazy_tbl");
+      ]
+    [ `S table_body ]
