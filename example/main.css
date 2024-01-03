@@ -43,3 +43,11 @@
 .draggable-table .hover-bottom {
     box-shadow: 0px -200px 15px -200px rgba(255, 200, 0, 1) inset;
 }
+
+
+
+.lazy_table {
+    width: 200px;
+    height: 200px;
+    overflow: auto;
+}
