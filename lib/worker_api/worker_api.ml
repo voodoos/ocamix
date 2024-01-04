@@ -8,6 +8,7 @@ end
 type 'a with_uuid = { uuid : string; message : 'a }
 
 module Make (Q : Queries) = struct
+  type error = [ `Jv of Jv.Error.t | `Msg of string ]
   type 'a query = 'a Q.query
   (* todo:check that the worker and the client share the same api? *)
 
@@ -19,7 +20,7 @@ module Make (Q : Queries) = struct
   struct
     let worker = Brr_webworkers.Worker.create @@ Jstr.of_string P.url
 
-    let query (type a) (query : a query) : (a, [ `Msg of string ]) Fut.result =
+    let query (type a) (query : a query) : (a, error) Fut.result =
       let uuid = new_uuid_v4 () |> Uuidm.to_string in
       let fut, set = Fut.create () in
       let set jv = set @@ Encodings.unmarshal_jv jv in
@@ -46,7 +47,7 @@ module Make (Q : Queries) = struct
   end
 
   module type Worker = functor () -> sig
-    val on_query : 'a query -> ('a, [ `Msg of string ]) Fut.result
+    val on_query : 'a query -> ('a, error) Fut.result
   end
 
   (** Execute W's body and configure messaging *)

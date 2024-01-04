@@ -12,31 +12,56 @@ let jv_to_t decoder j =
 
 module Orderred_items = struct
   type t = { id : int; item : string option } [@@deriving yojson]
-  type key = int
+
+  module Key = struct
+    type t = int
+
+    let to_jv k = Jv.of_int k
+    let of_jv j = Jv.to_int j
+    let path = "id"
+  end
 
   let name = "items_by_date_added"
   let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j
-  let key_to_jv k = Jv.of_int k
-  let key_of_jv j = Jv.to_int j
-  let key_path = "id"
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
   let get_key t = t.id
 end
 
 module Items = struct
   open Data_source.Jellyfin.Api
 
-  type t = Item.t
-  type key = string
+  type sorts = { date_added : int } [@@deriving yojson]
+  type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
+
+  module Key = struct
+    type t = string
+
+    let to_jv k = Jv.of_string k
+    let of_jv j = Jv.to_string j
+    let path = "item.Id"
+  end
+
+  module Key_date_added = struct
+    type t = int
+
+    let to_jv k = Jv.of_int k
+    let of_jv j = Jv.to_int j
+    let path = "sorts.date_added"
+  end
 
   let name = "items"
-  let to_jv t = t_to_jv Item.yojson_of_t t
-  let of_jv j = jv_to_t Item.t_of_yojson j
-  let key_to_jv k = Jv.of_string k
-  let key_of_jv j = Jv.to_string j
-  let key_path = "Id"
-  let get_key t = t.Item.id
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+  let get_key t = t.item.Item.id
 end
 
 module Orderred_items_store = Indexed_db.Make_object_store (Orderred_items)
 module Items_store = Indexed_db.Make_object_store (Items)
+
+module ItemsByDateAdded =
+  Indexed_db.Make_index
+    (struct
+      let name = "items_by_date_added"
+    end)
+    (Items)
+    (Items.Key_date_added)

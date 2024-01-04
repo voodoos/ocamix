@@ -192,9 +192,9 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
           let s_list = Transaction.object_store (module OI) transaction in
           let s_items = Transaction.object_store (module I) transaction in
           List.iteri items ~f:(fun index ({ Api.Item.id; _ } as item) ->
-              ignore
-                (OI.put { id = start_index + index; item = Some id } s_list);
-              ignore (I.put item s_items))
+              let index = start_index + index in
+              ignore (OI.put { id = index; item = Some id } s_list);
+              ignore (I.put { sorts = { date_added = index }; item } s_items))
         in
         idb_put ~start_index items
       in

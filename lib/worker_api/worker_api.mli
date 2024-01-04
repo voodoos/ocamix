@@ -9,6 +9,7 @@ module type Queries = sig
 end
 
 module Make : functor (Q : Queries) -> sig
+  type error = [ `Jv of Jv.Error.t | `Msg of string ]
   type 'a query = 'a Q.query
 
   (** The [Client] functor should be use to open a connexion to the worker and
@@ -20,11 +21,11 @@ module Make : functor (Q : Queries) -> sig
      end)
     -> sig
     val worker : Brr_webworkers.Worker.t
-    val query : 'a query -> ('a, [ `Msg of string ]) Fut.result
+    val query : 'a query -> ('a, error) Fut.result
   end
 
   module type Worker = functor () -> sig
-    val on_query : 'a query -> ('a, [ `Msg of string ]) Fut.result
+    val on_query : 'a query -> ('a, error) Fut.result
     (** [on_query q] should return the result of the query q *)
   end
 
