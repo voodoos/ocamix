@@ -24,21 +24,30 @@ end
 module Request : sig
   type 'a t
 
+  val error : 'a t -> Jv.Error.t
   val result : 'a t -> 'a
   val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
+  val on_error : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
+  val fut : 'a t -> ('a, [> `Jv of Jv.Error.t ]) Fut.result
+end
+
+module type Key = sig
+  type t
+
+  val path : string (* todo key_path should be optional *)
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> t
 end
 
 module type Store_content_intf = sig
   type t
-  type key
+
+  module Key : Key
 
   val name : string
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
-  val key_to_jv : key -> Jv.t
-  val key_of_jv : Jv.t -> key
-  val key_path : string (* todo key_path should be optional *)
-  val get_key : t -> key
+  val get_key : t -> Key.t
 end
 
 module type Object_store_intf = sig
@@ -47,14 +56,15 @@ module type Object_store_intf = sig
   val of_jv : Jv.t -> t
 
   module Content : Store_content_intf
+  module Primary_key = Content.Key
 
   module Cursor : sig
     type t
 
-    val key : t -> Content.key option
+    val key : t -> Primary_key.t option
     val advance : int -> t -> t
 
-    val continue : ?key:Content.key -> t -> unit
+    val continue : ?key:Primary_key.t -> t -> unit
     (** [continue t] advances the cursor to the next position along its
       direction, to the item whose key matches the optional key parameter. This
       will re-trigger the [on_success] event of the cursor's query. *)
@@ -65,11 +75,11 @@ module type Object_store_intf = sig
 
     val value : t -> Content.t option
     val delete : t -> unit Request.t
-    val update : Content.t -> t -> Content.key Request.t
+    val update : Content.t -> t -> Primary_key.t Request.t
   end
 
-  val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
-  val get : Content.key -> t -> Content.t option Request.t
+  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val get : Primary_key.t -> t -> Content.t option Request.t
   val get_all : t -> Content.t Array.t Request.t
   (* TODO: [get_all] optional parameters *)
 
@@ -79,7 +89,7 @@ module type Object_store_intf = sig
     t ->
     Cursor_with_value.t option Request.t
 
-  val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 end
 
 module Make_object_store (C : Store_content_intf) : sig

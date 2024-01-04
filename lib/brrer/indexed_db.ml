@@ -12,6 +12,7 @@ module Events = struct
     Ev.Type.create (Jstr.v "upgradeneeded")
 
   let success : Ev.Type.void Ev.type' = Ev.Type.void (Jstr.v "success")
+  let error : Ev.Type.void Ev.type' = Ev.Type.void (Jstr.v "error")
 end
 
 module Request = struct
@@ -20,33 +21,46 @@ module Request = struct
   external of_jv : Jv.t -> 'a = "%identity"
 
   let of_jv ~f j = { jv = of_jv j; of_jv = f }
+  let error t = Jv.get t.jv "error" |> Jv.to_error
 
   let result (type a) (t : a t) : a =
     (* todo this is wrong *)
     Jv.get t.jv "result" |> t.of_jv
 
   let on_success (type a) ~(f : Ev.Type.void Ev.t -> a t -> unit) (t : a t) =
-    let f ev =
-      let req : a t =
-        Ev.current_target ev |> Ev.target_to_jv |> of_jv ~f:t.of_jv
-      in
-      f ev req
-    in
+    let f ev = f ev t in
     ignore @@ Ev.listen Events.success f (Ev.target_of_jv t.jv);
     t
+
+  let on_error (type a) ~(f : Ev.Type.void Ev.t -> a t -> unit) (t : a t) =
+    let f ev = f ev t in
+    ignore @@ Ev.listen Events.error f (Ev.target_of_jv t.jv);
+    t
+
+  let fut t =
+    let result_fut, set = Fut.create () in
+    let _ = on_success ~f:(fun _ t -> set (Ok (result t))) t in
+    let _ = on_error ~f:(fun _ t -> set (Error (`Jv (error t)))) t in
+    result_fut
+end
+
+module type Key = sig
+  type t
+
+  val path : string (* todo key_path should be optional *)
+  val to_jv : t -> Jv.t
+  val of_jv : Jv.t -> t
 end
 
 module type Store_content_intf = sig
   type t
-  type key
+
+  module Key : Key
 
   val name : string
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> (t, [ `Msg of string ]) Result.t
-  val key_to_jv : key -> Jv.t
-  val key_of_jv : Jv.t -> key
-  val key_path : string (* todo key_path should be optional *)
-  val get_key : t -> key
+  val get_key : t -> Key.t
 end
 
 module Direction = struct
@@ -75,13 +89,14 @@ module type Object_store_intf = sig
   val of_jv : Jv.t -> t
 
   module Content : Store_content_intf
+  module Primary_key = Content.Key
 
   module Cursor : sig
     type t
 
-    val key : t -> Content.key option
+    val key : t -> Primary_key.t option
     val advance : int -> t -> t
-    val continue : ?key:Content.key -> t -> unit
+    val continue : ?key:Primary_key.t -> t -> unit
   end
 
   module Cursor_with_value : sig
@@ -89,11 +104,11 @@ module type Object_store_intf = sig
 
     val value : t -> Content.t option
     val delete : t -> unit Request.t
-    val update : Content.t -> t -> Content.key Request.t
+    val update : Content.t -> t -> Primary_key.t Request.t
   end
 
-  val add : Content.t -> ?key:Content.key -> t -> Content.key Request.t
-  val get : Content.key -> t -> Content.t option Request.t
+  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val get : Primary_key.t -> t -> Content.t option Request.t
   val get_all : t -> Content.t Array.t Request.t
 
   val open_cursor :
@@ -102,20 +117,21 @@ module type Object_store_intf = sig
     t ->
     Cursor_with_value.t option Request.t
 
-  val put : Content.t -> ?key:Content.key -> t -> Content.key Request.t
+  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 end
 
 module Make_object_store (C : Store_content_intf) = struct
   type t = Jv.t
 
   module Content = C
+  module Primary_key = Content.Key
 
   module Cursor = struct
     type t = Jv.t
 
     external of_jv : Jv.t -> t = "%identity"
 
-    let key t = Jv.get t "key" |> Jv.to_option Content.key_of_jv
+    let key t = Jv.get t "key" |> Jv.to_option Primary_key.of_jv
 
     let advance count t =
       ignore @@ Jv.call t "advance" [| Jv.of_int count |];
@@ -123,7 +139,7 @@ module Make_object_store (C : Store_content_intf) = struct
 
     let continue ?key t =
       let args =
-        match key with None -> [||] | Some key -> [| Content.key_to_jv key |]
+        match key with None -> [||] | Some key -> [| Primary_key.to_jv key |]
       in
       ignore @@ Jv.call t "continue" args
   end
@@ -140,22 +156,22 @@ module Make_object_store (C : Store_content_intf) = struct
 
     let update v t =
       Jv.call t "update" [| Content.to_jv v |]
-      |> Request.of_jv ~f:Content.key_of_jv
+      |> Request.of_jv ~f:Primary_key.of_jv
   end
 
   external of_jv : Jv.t -> t = "%identity"
 
-  let add v ?(key : C.key option) t : C.key Request.t =
+  let add v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
     let args =
       match key with
-      | Some key -> [| C.to_jv v; C.key_to_jv key |]
+      | Some key -> [| C.to_jv v; Primary_key.to_jv key |]
       | None -> [| C.to_jv v |]
     in
-    Jv.call t "add" args |> Request.of_jv ~f:C.key_of_jv
+    Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
 
   let get key t =
     let f jv = Jv.to_option (fun j -> Content.of_jv j |> Result.get_ok) jv in
-    Jv.call t "get" [| Content.key_to_jv key |] |> Request.of_jv ~f
+    Jv.call t "get" [| Primary_key.to_jv key |] |> Request.of_jv ~f
 
   let get_all t =
     let f jv = Jv.to_array (fun c -> Content.of_jv c |> Result.get_ok) jv in
@@ -174,13 +190,13 @@ module Make_object_store (C : Store_content_intf) = struct
     let f jv = Jv.to_option Cursor_with_value.of_jv jv in
     Jv.call t "openCursor" args |> Request.of_jv ~f
 
-  let put v ?(key : C.key option) t : C.key Request.t =
+  let put v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
     let args =
       match key with
-      | Some key -> [| C.to_jv v; C.key_to_jv key |]
+      | Some key -> [| C.to_jv v; Primary_key.to_jv key |]
       | None -> [| C.to_jv v |]
     in
-    Jv.call t "put" args |> Request.of_jv ~f:C.key_of_jv
+    Jv.call t "put" args |> Request.of_jv ~f:Primary_key.of_jv
 end
 
 module Transaction = struct
@@ -216,7 +232,7 @@ module Database = struct
       (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
     (* TODO: move autoincrement to store_content *)
-    let opts = ("keyPath", Jv.of_string S.Content.key_path) :: opts in
+    let opts = ("keyPath", Jv.of_string S.Primary_key.path) :: opts in
     let options = Jv.obj @@ Array.of_list opts in
     (* TODO: keypath should be optionnal *)
     Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
