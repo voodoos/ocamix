@@ -44,11 +44,12 @@ end
 
 module Int_uniqueue = Uniqueue (Int)
 
-type 'a row_data = { index : int; content : 'a option; el : El.t }
+type 'a row_data = { index : int; content : 'a option }
 
 let lazy_table (type data) ~columns ~total
     ~(fetch : int -> (data, _) Fut.result)
-    ~(render : int -> data -> Elwd.t list) () =
+    ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
+    ~(render : int -> data -> Elwd.t Elwd.col) () =
   ignore fetch;
   let table : data row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
@@ -89,26 +90,21 @@ let lazy_table (type data) ~columns ~total
 
   let () =
     for i = 1 to total do
-      let uuid = new_uuid_v4 () |> Uuidm.to_string in
-      let el =
-        El.div
-          ~at:[ At.v (Jstr.v "data-index") (Jstr.v uuid) ]
-          [ El.txt' (string_of_int i) ]
-      in
-      let set = { index = i; content = None; el } in
+      let _uuid = new_uuid_v4 () |> Uuidm.to_string in
+      let set = { index = i; content = None } in
       Hashtbl.add row_index i @@ Lwd_table.append ~set table;
       if i < 50 then add i
     done
   in
-  let render _ { content; el; index } =
-    let () =
+  let render _ { content; index } =
+    let elt =
       match content with
       | Some data ->
           (* todo: this won't make the row reactive *)
-          El.set_children el (render index data)
-      | None -> El.set_children el [ El.txt' "hidden" ]
+          Elwd.div (render index data)
+      | None -> Elwd.div (placeholder index)
     in
-    Lwd_seq.element (Lwd.return el)
+    Lwd_seq.element elt
   in
   let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
   let scroll_handler =
@@ -127,9 +123,11 @@ let lazy_table (type data) ~columns ~total
       let () = last_scroll_y := scroll_y in
       let total_height = height div in
       let num_rows = List.length children in
-      let row_height = height @@ List.hd children in
+      let header_height = height @@ List.hd children in
+      let row_height = height @@ List.hd @@ List.tl children in
       let number_of_visible_rows = (total_height / row_height) + 1 in
       let bleeding = number_of_visible_rows in
+      let scroll_y = scroll_y -. float_of_int header_height in
       let first_visible_row =
         int_of_float (scroll_y /. float_of_int row_height) + 1
       in

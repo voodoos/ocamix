@@ -60,4 +60,11 @@
     height: 50px;
     padding: 0.5rem;
     font-size: 1.2rem;
+    background-color: whitesmoke;
+}
+
+.lazy-table>div:first-child {
+    position: sticky;
+    top: 0;
+    height: 2rem;
 }
