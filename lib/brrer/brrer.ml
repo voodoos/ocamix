@@ -37,3 +37,4 @@ module Brr_io = Brrer_io
 module Brr_canvas = Brr_canvas
 module Fut = Fut
 module Intersection_observer = Intersection_observer
+module Mutation_observer = Mutation_observer
