@@ -6,14 +6,6 @@ module Db_worker = Lib.Db_worker_api.Client (struct
   let url = "./db_worker.bc.js"
 end)
 
-let _db =
-  let open Data_source.Jellyfin in
-  let base_url = "http://localhost:8096" in
-  let username = "root" in
-  let pw = "rootlocalroot" in
-  Brr_lwd_ui.Persistent.var_fut ~key:"v_connexion" (fun () ->
-      connect ~base_url Api.Authenticate_by_name.{ username; pw })
-
 let app _idb =
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let ui_progress =
@@ -21,13 +13,6 @@ let app _idb =
     let$ { remaining } = Lwd.get sync_progress in
     let txt = Format.sprintf "Remaining sync queries: %i" remaining in
     El.txt' txt
-  in
-  let items = Lwd.var [] in
-  let _ =
-    let open Fut.Result_syntax in
-    Console.log [ "worker query"; Lib.Db_worker_api.Queries.Get_all () ];
-    let+ result = Db_worker.(query (Get_all ())) in
-    Lwd.set items result
   in
   let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
   let on_click _ _ =
