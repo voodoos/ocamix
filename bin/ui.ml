@@ -186,39 +186,89 @@ let draggable_table ?shared_drag_data () =
          ])
     ()
 
-type row_data = { index : int; visible : bool; el : El.t }
+(* TODO, we want uniqueness and bubbling up !*)
+module Uniqueue (O : Set.OrderedType) = struct
+  module Set = Set.Make (O)
+
+  type nonrec t = { mutable queue : O.t Queue.t; mutable uniq : Set.t }
+
+  let create () =
+    let queue = Queue.create () in
+    let uniq = Set.empty in
+    { queue; uniq }
+
+  let add v t =
+    let new_elt = not (Set.mem v t.uniq) in
+    let () =
+      if new_elt then
+        let () = Queue.add v t.queue in
+        t.uniq <- Set.add v t.uniq
+      else
+        (* If the element is already in the queue we "bubble" it up *)
+        (* Todo: this is not made in a very efficient way... *)
+        let new_queue = Queue.create () in
+        Queue.iter
+          (fun v' ->
+            if not @@ Int.equal (O.compare v v') 0 then Queue.add v' new_queue)
+          t.queue;
+        Queue.add v new_queue;
+        t.queue <- new_queue
+    in
+    new_elt
+
+  let take t =
+    let i = Queue.take t.queue in
+    t.uniq <- Set.remove i t.uniq;
+    i
+
+  let length t = Queue.length t.queue
+end
+
+module Int_uniqueue = Uniqueue (Int)
+
+type row_data = { index : int; content : El.t option; el : El.t }
 
 let lazy_table ?(_batch_size = 10) ~total ~(fetch : int -> (El.t, _) Fut.result)
     (*
       ~(_render : 'a -> El.t) *) () =
+  ignore fetch;
   let table : row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
      observer's callback *)
-  let rows = Hashtbl.create 2048 in
-  let callback e _ =
-    let open Fut.Result_syntax in
-    List.iter e ~f:(fun e ->
-        let target = Intersection_observer.Entry.target e in
-        let id =
-          El.at (Jstr.v "data-index") target |> Option.map Jstr.to_string
-        in
-        if Intersection_observer.Entry.is_intersecting e then
-          let row = Option.bind id (Hashtbl.get rows) in
-          Option.iter
-            (fun row ->
-              ignore
-              @@
-              let+ set =
-                match Lwd_table.get row with
-                | None -> assert false
-                | Some row ->
-                    let+ el = fetch row.index in
-                    { row with visible = true; el }
-              in
-              Lwd_table.set row set)
-            row)
+  let row_index = Hashtbl.create 2048 in
+  let unload_queue = Int_uniqueue.create () in
+
+  let add ?(max_items = 200) i =
+    let unload i =
+      let open Option.Infix in
+      (let* row = Hashtbl.get row_index i in
+       let+ row_data = Lwd_table.get row in
+       Lwd_table.set row { row_data with content = None })
+      |> ignore
+    in
+    let load i =
+      let open Option.Infix in
+      (let* row = Hashtbl.get row_index i in
+       let+ row_data = Lwd_table.get row in
+       let open Fut.Result_syntax in
+       let+ el = fetch row_data.index in
+       Lwd_table.set row { row_data with content = Some el })
+      |> ignore
+    in
+    let cleanup () =
+      let q_length = Int_uniqueue.length unload_queue in
+      if q_length > max_items then
+        for _ = max_items to q_length do
+          let index = Int_uniqueue.take unload_queue in
+          unload index
+        done
+    in
+
+    if Int_uniqueue.add i unload_queue then (
+      load i;
+      cleanup ())
   in
-  let observer = Intersection_observer.create ~callback () in
+
   let () =
     for i = 1 to total do
       let uuid = new_uuid_v4 () |> Uuidm.to_string in
@@ -227,20 +277,72 @@ let lazy_table ?(_batch_size = 10) ~total ~(fetch : int -> (El.t, _) Fut.result)
           ~at:[ At.v (Jstr.v "data-index") (Jstr.v uuid) ]
           [ El.txt' (string_of_int i) ]
       in
-      let set = { index = i; visible = false; el } in
-      Intersection_observer.observe observer set.el;
-      Hashtbl.add rows uuid @@ Lwd_table.append ~set table
+      let set = { index = i; content = None; el } in
+      Hashtbl.add row_index i @@ Lwd_table.append ~set table;
+      if i < 50 then add i
     done
   in
-  let render _ { visible = _; el; _ } =
-    let div = el in
-    Lwd_seq.element div
+  let render _ { content; el; _ } =
+    let () =
+      match content with
+      | Some fetched_el -> El.set_children el [ fetched_el ]
+      | None -> El.set_children el [ El.txt' "hidden" ]
+    in
+    Lwd_seq.element (Lwd.return el)
   in
   let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
+  let scroll_handler =
+    let last_scroll_y = ref 0. in
+    fun div ->
+      (* todo: debounce *)
+      (* todo: adjust bleeding with speed *)
+      let height elt =
+        let jv = El.to_jv elt in
+        Jv.get jv "clientHeight" |> Jv.to_int
+      in
+
+      let children = El.children div in
+      let scroll_y = El.scroll_y div in
+      let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
+      let () = last_scroll_y := scroll_y in
+      let total_height = height div in
+      let num_rows = List.length children in
+      let row_height = height @@ List.hd children in
+      let number_of_visible_rows = (total_height / row_height) + 1 in
+      let bleeding = number_of_visible_rows in
+      let first_visible_row =
+        int_of_float (scroll_y /. float_of_int row_height) + 1
+      in
+      let last_visible_row = first_visible_row + number_of_visible_rows in
+      let first =
+        let bleeding =
+          match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
+        in
+        first_visible_row - bleeding |> max 0
+      in
+      let last =
+        let bleeding =
+          match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
+        in
+        last_visible_row + bleeding |> min num_rows
+      in
+      for i = first to last do
+        (* todo: We do way too much work and rebuild the queue each
+           time... it's very ineficient *)
+        add ~max_items:(10 * number_of_visible_rows) i
+      done
+  in
   Elwd.div
+    ~ev:
+      [
+        `P
+          (Elwd.handler Ev.scroll (fun ev ->
+               let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
+               scroll_handler div));
+      ]
     ~at:
       [
         `P (At.v At.Name.class' (Jstr.v "lazy_table"));
         `P (At.id @@ Jstr.v "lazy_tbl");
       ]
-    [ `S table_body ]
+    [ `S (Lwd_seq.lift table_body) ]
