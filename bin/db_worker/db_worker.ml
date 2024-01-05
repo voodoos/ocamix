@@ -40,26 +40,38 @@ module Worker () = struct
     Brr.Console.log
       [ "TOTO worker"; Brr_webworkers.Worker.ami () |> Jv.of_bool ]
 
-  let on_query (type a) (q : a query) : (a, [ `Msg of string ]) Fut.result =
+  let on_query (type a) (q : a query) : (a, error) Fut.result =
+    let open Fut.Result_syntax in
     match q with
     | Get_all () ->
-        let open Fut.Result_syntax in
         let* idb = idb in
         let store =
           IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
           |> IDB.Transaction.object_store (module Db.I)
         in
-        let result, set_result = Fut.create () in
-        let f = Brr.Performance.now_ms Brr.G.performance in
-        let req = Db.I.get_all store in
-        let _ =
-          IDB.Request.on_success req ~f:(fun _ req ->
-              let result = IDB.Request.result req in
-              Brr.Console.log
-                [ "took"; Brr.Performance.now_ms Brr.G.performance -. f; "ms" ];
-              set_result (Ok (Array.to_list result)))
+        let+ req = Db.I.get_all store |> IDB.Request.fut in
+        Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
+    | Create_view () ->
+        let uuid = new_uuid_v4 () in
+
+        Fut.ok { View.uuid; item_count = 100 }
+    | Get index ->
+        let* idb = idb in
+        let store =
+          IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
+          |> IDB.Transaction.object_store (module Db.I)
         in
-        result
+        let idx = Db.I.index (module Db.Stores.ItemsByDateAdded) store in
+        let v, set = Fut.create () in
+        ignore
+          (Db.Stores.ItemsByDateAdded.get index idx
+          |> IDB.Request.on_success ~f:(fun _ r ->
+                 Option.iter
+                   (fun t ->
+                     let open Db.Stores.Items in
+                     set (Ok t.item))
+                   (IDB.Request.result r)));
+        v
 
   let () = on_start ()
 end
