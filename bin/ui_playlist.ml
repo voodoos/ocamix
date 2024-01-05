@@ -3,6 +3,7 @@ open Brrer
 open Brrer.Brr
 open! Brr_lwd_ui
 open! Brr_lwd
+module Api = Data_source.Jellyfin.Api
 
 (** Part that should move to Brr_lwd_ui when ready *)
 module Uniqueue (O : Set.OrderedType) = struct
@@ -178,4 +179,16 @@ let columns =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~total ~fetch () = lazy_table ~columns ~total ~fetch ()
+let img_url id =
+  Printf.sprintf "http://localhost:8096/Items/%s/Images/Primary" id
+
+let render i { Api.Item.name; album_id; _ } =
+  [
+    `P (El.div [ El.txt' (string_of_int i) ]);
+    `P
+      (El.div
+         [ El.img ~at:[ At.src (Jstr.v @@ img_url album_id); At.width 40 ] () ]);
+    `P (El.div [ El.txt' name ]);
+  ]
+
+let make ~total ~fetch () = lazy_table ~columns ~total ~fetch ~render ()
