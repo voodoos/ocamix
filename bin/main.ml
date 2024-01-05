@@ -43,6 +43,9 @@ let app _idb =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
+  let img_url id =
+    Printf.sprintf "http://localhost:8096/Items/%s/Images/Primary" id
+  in
   Elwd.div
     [
       `R ui_progress;
@@ -59,6 +62,21 @@ let app _idb =
            ]);
       `P (El.br ());
       `R (Menu.make ());
+      `R
+        (Ui_playlist.make ~total:50
+           ~fetch:(fun i -> Db_worker.(query (Get i)))
+           ~render:(fun i { name; album_id; _ } ->
+             [
+               El.div [ El.txt' (string_of_int i) ];
+               El.div
+                 [
+                   El.img
+                     ~at:[ At.src (Jstr.v @@ img_url album_id); At.width 40 ]
+                     ();
+                 ];
+               El.div [ El.txt' name ];
+             ])
+           ());
     ]
 
 let _ =
