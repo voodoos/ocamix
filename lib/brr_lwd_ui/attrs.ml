@@ -36,7 +36,11 @@ type t = { classes : Classes.t; attrs : At.t Elwd.col }
 (** Classes attributes are handled separately but are eventually translated to At.t *)
 
 let empty = { classes = Classes.empty; attrs = [] }
-let to_at t = List.rev_append t.attrs @@ Classes.P.to_at t.classes
+
+let to_at ?id t =
+  let at = List.rev_append t.attrs @@ Classes.P.to_at t.classes in
+  match id with None -> at | Some id -> `P (At.id (Jstr.v id)) :: at
+
 let classes l = { empty with classes = Classes.of_list l }
 
 let union { classes; attrs } { classes = c; attrs = a } =
