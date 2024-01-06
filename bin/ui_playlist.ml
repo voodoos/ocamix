@@ -3,7 +3,7 @@ open Brrer
 open Brrer.Brr
 open! Brr_lwd_ui
 open! Brr_lwd
-module Api = Data_source.Jellyfin.Api
+module Api = DS.Api
 
 (** Part that should move to Brr_lwd_ui when ready *)
 module Uniqueue (O : Set.OrderedType) = struct
@@ -179,26 +179,41 @@ let columns =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let img_url id =
-  Printf.sprintf "http://localhost:8096/Items/%s/Images/Primary" id
-
-let audio_url id = Printf.sprintf "http://localhost:8096/Audio/%s/stream.ogg" id
-
-let render i { Db.Stores.Items.item = { Api.Item.name; album_id; id; _ }; _ } =
-  let play () = Lwd.set Player.now_playing (Some (audio_url id)) in
-  let play_on_click = Elwd.handler Ev.click (fun _ -> play ()) in
-  [
-    `P (El.div [ El.txt' (string_of_int i) ]);
-    `R
-      (Elwd.div
-         ~ev:[ `P play_on_click ]
-         [
-           `P
-             (El.img
-                ~at:[ At.src (Jstr.v @@ img_url album_id); At.width 40 ]
-                ());
-         ]);
-    `P (El.div [ El.txt' name ]);
-  ]
-
-let make ~total ~fetch () = lazy_table ~columns ~total ~fetch ~render ()
+let make ~servers ~total ~fetch () =
+  let audio_url server_id item_id =
+    let server : DS.connexion = List.assq server_id servers in
+    Console.log [ "server"; server ];
+    Printf.sprintf
+      "%s/Audio/%s/universal?api_key=%s&MaxStreamingBitrate=178723404&Container=opus,webm|opus,mp3,aac,m4a|aac,m4b|aac,flac,webma,webm|webma,wav,ogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac"
+      server.base_url item_id server.auth_response.access_token
+  in
+  let img_url server_id item_id =
+    let server : DS.connexion = List.assq server_id servers in
+    Console.log [ "server"; server ];
+    Printf.sprintf "%s/Items/%s/Images/Primary" server.base_url item_id
+  in
+  let render i
+      {
+        Db.Stores.Items.item = { Api.Item.name; album_id; id; server_id; _ };
+        _;
+      } =
+    let play () = Lwd.set Player.now_playing (Some (audio_url server_id id)) in
+    let play_on_click = Elwd.handler Ev.click (fun _ -> play ()) in
+    [
+      `P (El.div [ El.txt' (string_of_int i) ]);
+      `R
+        (Elwd.div
+           ~ev:[ `P play_on_click ]
+           [
+             `P
+               (El.img
+                  ~at:
+                    [
+                      At.src (Jstr.v @@ img_url server_id album_id); At.width 40;
+                    ]
+                  ());
+           ]);
+      `P (El.div [ El.txt' name ]);
+    ]
+  in
+  lazy_table ~columns ~total ~fetch ~render ()
