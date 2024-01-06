@@ -182,12 +182,22 @@ let columns =
 let img_url id =
   Printf.sprintf "http://localhost:8096/Items/%s/Images/Primary" id
 
-let render i { Api.Item.name; album_id; _ } =
+let audio_url id = Printf.sprintf "http://localhost:8096/Audio/%s/stream.ogg" id
+
+let render i { Db.Stores.Items.item = { Api.Item.name; album_id; id; _ }; _ } =
+  let play () = Lwd.set Player.now_playing (Some (audio_url id)) in
+  let play_on_click = Elwd.handler Ev.click (fun _ -> play ()) in
   [
     `P (El.div [ El.txt' (string_of_int i) ]);
-    `P
-      (El.div
-         [ El.img ~at:[ At.src (Jstr.v @@ img_url album_id); At.width 40 ] () ]);
+    `R
+      (Elwd.div
+         ~ev:[ `P play_on_click ]
+         [
+           `P
+             (El.img
+                ~at:[ At.src (Jstr.v @@ img_url album_id); At.width 40 ]
+                ());
+         ]);
     `P (El.div [ El.txt' name ]);
   ]
 

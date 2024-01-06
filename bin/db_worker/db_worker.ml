@@ -66,11 +66,7 @@ module Worker () = struct
         ignore
           (Db.Stores.ItemsByDateAdded.get index idx
           |> IDB.Request.on_success ~f:(fun _ r ->
-                 Option.iter
-                   (fun t ->
-                     let open Db.Stores.Items in
-                     set (Ok t.item))
-                   (IDB.Request.result r)));
+                 Option.iter (fun t -> set (Ok t)) (IDB.Request.result r)));
         v
 
   let () = on_start ()

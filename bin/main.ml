@@ -43,7 +43,8 @@ let app _idb =
                     El.txt' (string_of_int v)));
            ]);
       `P (El.br ());
-      `R (Menu.make ());
+      (* `R (Menu.make ()); *)
+      `R (Player.make ());
       `R
         (Ui_playlist.make ~total:50
            ~fetch:(fun i -> Db_worker.(query (Get i)))
