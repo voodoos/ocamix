@@ -10,7 +10,7 @@ module Queries = struct
     | Get_all : unit -> Api.Item.t list query
     | Create_view : unit -> View.t query
     (* | Get : View.t * int -> Api.Item.t query *)
-    | Get : int -> Api.Item.t query
+    | Get : int -> Stores.Items.t query
 end
 
 include Worker_api.Make (Queries)

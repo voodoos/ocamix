@@ -1,5 +1,5 @@
 open! Std
-open Lib.Db_worker_api
+open Db.Worker_api
 open Brrer
 module IDB = Brr_io.Indexed_db
 

@@ -14,7 +14,7 @@ module Make (Q : Queries) = struct
 
   let futures : (string, Jv.t -> unit) Hashtbl.t = Hashtbl.create 64
 
-  module Client (P : sig
+  module Start_client (P : sig
     val url : string
   end) =
   struct
@@ -46,12 +46,12 @@ module Make (Q : Queries) = struct
       @@ Brr_webworkers.Worker.as_target worker
   end
 
-  module type Worker = functor () -> sig
+  module type Worker_impl = functor () -> sig
     val on_query : 'a query -> ('a, error) Fut.result
   end
 
   (** Execute W's body and configure messaging *)
-  module Make_worker (W : Worker) = struct
+  module Make_worker (W : Worker_impl) = struct
     open Brr
     module W = W ()
 

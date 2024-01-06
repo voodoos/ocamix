@@ -14,7 +14,7 @@ module Make : functor (Q : Queries) -> sig
 
   (** The [Client] functor should be use to open a connexion to the worker and
       provides a standardized interface for querying it. *)
-  module Client : functor
+  module Start_client : functor
     (_ : sig
        val url : string
        (** The url were the implementation of the worker can be loaded from. *)
@@ -24,7 +24,7 @@ module Make : functor (Q : Queries) -> sig
     val query : 'a query -> ('a, error) Fut.result
   end
 
-  module type Worker = functor () -> sig
+  module type Worker_impl = functor () -> sig
     val on_query : 'a query -> ('a, error) Fut.result
     (** [on_query q] should return the result of the query q *)
   end
@@ -33,5 +33,5 @@ module Make : functor (Q : Queries) -> sig
       functor given in parameter contian the program t be executed, and should
       provide an [on_query] function to answer all messages defined by the API.
   *)
-  module Make_worker : functor (_ : Worker) -> sig end
+  module Make_worker : functor (_ : Worker_impl) -> sig end
 end

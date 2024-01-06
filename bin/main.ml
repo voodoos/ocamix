@@ -2,7 +2,7 @@ open Import
 open Brr
 open Brr_lwd
 
-module Db_worker = Lib.Db_worker_api.Client (struct
+module Db_worker = Db.Worker_api.Start_client (struct
   let url = "./db_worker.bc.js"
 end)
 

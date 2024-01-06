@@ -4,6 +4,7 @@ open Brrer
 open Brr
 module OI = Stores.Orderred_items_store
 module I = Stores.Items_store
+module Worker_api = Db_worker_api
 
 let on_upgrade_needed e q =
   let open Brr_io.Indexed_db in
