@@ -174,8 +174,8 @@ let lazy_table (type data) ~columns ~total
 let columns =
   Table.Columns.
     [|
-      v "Order" "2rem" @@ [ `P (El.txt' "#") ];
-      v "Order" "4rem" @@ [ `P (El.txt' "Cover") ];
+      v "Order" "4rem" @@ [ `P (El.txt' "#") ];
+      v "Cover" "4rem" @@ [ `P (El.txt' "Cover") ];
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
