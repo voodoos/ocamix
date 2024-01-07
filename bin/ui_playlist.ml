@@ -193,14 +193,12 @@ let make ~servers ~fetch view =
   in
   let audio_url server_id item_id =
     let server : DS.connexion = List.assq server_id servers in
-    Console.log [ "server"; server ];
     Printf.sprintf
       "%s/Audio/%s/universal?api_key=%s&MaxStreamingBitrate=178723404&Container=opus,webm|opus,mp3,aac,m4a|aac,m4b|aac,flac,webma,webm|webma,wav,ogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac"
       server.base_url item_id server.auth_response.access_token
   in
   let img_url server_id item_id =
     let server : DS.connexion = List.assq server_id servers in
-    Console.log [ "server"; server ];
     Printf.sprintf "%s/Items/%s/Images/Primary" server.base_url item_id
   in
   let render i
