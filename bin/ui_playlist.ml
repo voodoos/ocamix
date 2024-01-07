@@ -92,11 +92,11 @@ let lazy_table (type data) ~columns ~total
   let _ =
     let open Fut.Result_syntax in
     let+ total = total in
-    for i = 1 to total do
+    for i = 1 to total - 1 do
       let _uuid = new_uuid_v4 () |> Uuidm.to_string in
       let set = { index = i; content = None } in
       Hashtbl.add row_index i @@ Lwd_table.append ~set table;
-      if i < 50 then add i
+      if i < 50 then add i (* preload the first items *)
     done
   in
   let render _ { content; index } =
@@ -225,4 +225,5 @@ let make ~servers ~fetch view =
       `P (El.div [ El.span [ El.txt' name ] ]);
     ]
   in
-  lazy_table ~columns ~total ~fetch ~render ()
+  let placeholder i = [ `P (El.txt' @@ "..." ^ string_of_int i) ] in
+  lazy_table ~columns ~total ~fetch ~render ~placeholder ()
