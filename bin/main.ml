@@ -49,7 +49,7 @@ let app _idb =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let main_view = Db_worker.query (Create_view (Db.View.req ())) in
+  let main_view = Db_worker.query (Create_view Db.View.(req ())) in
   Elwd.div
     [
       `R ui_progress;

@@ -3,6 +3,8 @@ open Db.Worker_api
 open Brrer
 module IDB = Brr_io.Indexed_db
 
+let () = Random.self_init ()
+
 module Worker () = struct
   let source, set_source = Fut.create ()
 
@@ -46,8 +48,10 @@ module Worker () = struct
         let uuid = new_uuid_v4 () in
         let* store = read_only_store () in
         let+ item_count = Db.I.count () store |> IDB.Request.fut in
-        { Db.View.uuid; request; start_index = 0; item_count }
-    | Get (_view, index) -> (
+        let order = Db.View.Order.of_sort ~size:item_count request.sort in
+        { Db.View.uuid; request; order; start_index = 0; item_count }
+    | Get (view, index) -> (
+        let index = Db.View.Order.apply view.order index in
         let* store = read_only_store () in
         let idx = Db.I.index (module Db.Stores.ItemsByDateAdded) store in
         let* res =
