@@ -1,4 +1,5 @@
 include Std
+module DS = Data_source.Jellyfin
 
 module Utils = struct
   let with_timing ?(name = "") f =

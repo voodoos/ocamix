@@ -58,6 +58,7 @@ module Item = struct
     id : string; [@key "Id"]
     album_id : string; [@key "AlbumId"]
     parent_id : string option; [@yojson.option] [@key "ParentId"]
+    server_id : string; [@key "ServerId"]
     image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
   }
   [@@deriving yojson] [@@yojson.allow_extra_fields]

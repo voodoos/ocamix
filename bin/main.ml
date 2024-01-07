@@ -6,7 +6,28 @@ module Db_worker = Db.Worker_api.Start_client (struct
   let url = "./db_worker.bc.js"
 end)
 
+let connexion =
+  let source, set_source = Fut.create () in
+  let _ =
+    let open Data_source.Jellyfin in
+    let base_url = "http://localhost:8096" in
+    let username = "root" in
+    let password = "rootlocalroot" in
+    let open Fut.Syntax in
+    let+ source = connect { base_url; username; password } in
+    set_source source
+  in
+  source
+
+let servers =
+  let open Fut.Result_syntax in
+  let+ connexion = connexion in
+  [ (connexion.auth_response.server_id, connexion) ]
+
 let app _idb =
+  let open Fut.Result_syntax in
+  let+ servers = servers in
+  let _ = Db_worker.query @@ Servers servers in
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let ui_progress =
     let open Lwd_infix in
@@ -46,7 +67,7 @@ let app _idb =
       (* `R (Menu.make ()); *)
       `R (Player.make ());
       `R
-        (Ui_playlist.make ~total:50
+        (Ui_playlist.make ~servers ~total:80000
            ~fetch:(fun i -> Db_worker.(query (Get i)))
            ());
     ]
@@ -54,7 +75,11 @@ let app _idb =
 let _ =
   let on_load _ =
     Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
-    let app = Lwd.observe (app idb) in
+    let open Fut.Result_syntax in
+    ignore
+    @@
+    let+ app = app idb in
+    let app = Lwd.observe app in
     let on_invalidate _ =
       ignore @@ G.request_animation_frame
       @@ fun _ -> ignore @@ Lwd.quick_sample app

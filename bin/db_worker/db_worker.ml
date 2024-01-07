@@ -4,24 +4,11 @@ open Brrer
 module IDB = Brr_io.Indexed_db
 
 module Worker () = struct
-  let source =
-    let source, set_source = Fut.create () in
-    let _ =
-      let open Data_source.Jellyfin in
-      let base_url = "http://localhost:8096" in
-      let username = "root" in
-      let pw = "rootlocalroot" in
-      let open Fut.Syntax in
-      let+ source =
-        connect ~base_url Api.Authenticate_by_name.{ username; pw }
-      in
-      set_source source
-    in
-    source
+  let source, set_source = Fut.create ()
 
   let check_db idb =
     let open Fut.Result_syntax in
-    let* source = source in
+    let* _, source = source in
     Db.Sync.check_and_sync ~source idb
 
   let idb =
@@ -35,14 +22,12 @@ module Worker () = struct
     in
     idb
 
-  let on_start () =
-    Brr.Console.log [ "pouet0" ];
-    Brr.Console.log
-      [ "TOTO worker"; Brr_webworkers.Worker.ami () |> Jv.of_bool ]
-
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
+    | Servers l ->
+        set_source @@ Ok (List.hd l);
+        Fut.ok ()
     | Get_all () ->
         let* idb = idb in
         let store =
@@ -68,8 +53,6 @@ module Worker () = struct
           |> IDB.Request.on_success ~f:(fun _ r ->
                  Option.iter (fun t -> set (Ok t)) (IDB.Request.result r)));
         v
-
-  let () = on_start ()
 end
 
 include Make_worker (Worker)
