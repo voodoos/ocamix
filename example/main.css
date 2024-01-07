@@ -1,3 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Bungee+Spice&display=swap');
+
+body {
+    font-family: 'Bungee Spice', sans-serif;
+
+}
+
 .on {
     background-color: red;
 }
@@ -51,7 +58,8 @@
     width: 100%;
     height: 500px;
     overflow: auto;
-    background-color: whitesmoke;
+    border-radius: 0.5rem;
+    background-color: rgb(207, 207, 207);
 }
 
 .lazy-table>div {
@@ -61,13 +69,27 @@
     height: 50px;
     padding: 0.5rem;
     font-size: 1.2rem;
-    background-color: whitesmoke;
+    background-color: rgb(207, 207, 207);
+}
+
+.lazy-table>div>div {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .lazy-table>div:first-child {
     position: sticky;
     top: 0;
     height: 2rem;
+}
+
+.lazy-table>div:first-child>div {
+    text-align: center;
+}
+
+.lazy-table span {
+    vertical-align: middle;
 }
 
 audio {
