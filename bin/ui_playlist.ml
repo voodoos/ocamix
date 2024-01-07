@@ -89,7 +89,9 @@ let lazy_table (type data) ~columns ~total
       cleanup ())
   in
 
-  let () =
+  let _ =
+    let open Fut.Result_syntax in
+    let+ total = total in
     for i = 1 to total do
       let _uuid = new_uuid_v4 () |> Uuidm.to_string in
       let set = { index = i; content = None } in
@@ -98,11 +100,12 @@ let lazy_table (type data) ~columns ~total
     done
   in
   let render _ { content; index } =
+    let at = Attrs.(classes [ "row" ] |> to_at) in
     let elt =
       match content with
       | Some data ->
           (* todo: this won't make the row reactive *)
-          Elwd.div (render index data)
+          Elwd.div ~at (render index data)
       | None -> Elwd.div (placeholder index)
     in
     Lwd_seq.element elt
@@ -174,12 +177,20 @@ let lazy_table (type data) ~columns ~total
 let columns =
   Table.Columns.
     [|
-      v "Order" "4rem" @@ [ `P (El.txt' "#") ];
-      v "Cover" "4rem" @@ [ `P (El.txt' "Cover") ];
+      v "Order" "5rem" @@ [ `P (El.txt' "#") ];
+      v "Cover" "5rem" @@ [ `P (El.txt' "Cover") ];
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~servers ~total ~fetch () =
+let make ~servers ~fetch view =
+  let total =
+    Fut.map (Result.map (fun { Db.View.item_count; _ } -> item_count)) view
+  in
+  let fetch i =
+    let open Fut.Result_syntax in
+    let* view = view in
+    fetch view i
+  in
   let audio_url server_id item_id =
     let server : DS.connexion = List.assq server_id servers in
     Console.log [ "server"; server ];
@@ -209,11 +220,11 @@ let make ~servers ~total ~fetch () =
                (El.img
                   ~at:
                     [
-                      At.src (Jstr.v @@ img_url server_id album_id); At.width 40;
+                      At.src (Jstr.v @@ img_url server_id album_id); At.width 50;
                     ]
                   ());
            ]);
-      `P (El.div [ El.txt' name ]);
+      `P (El.div [ El.span [ El.txt' name ] ]);
     ]
   in
   lazy_table ~columns ~total ~fetch ~render ()

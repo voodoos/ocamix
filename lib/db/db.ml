@@ -1,5 +1,6 @@
 module Stores = Stores
 module Sync = Sync
+module View = View
 open Brrer
 open Brr
 module OI = Stores.Orderred_items_store

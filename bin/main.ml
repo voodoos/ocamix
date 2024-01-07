@@ -26,7 +26,7 @@ let servers =
 
 let app _idb =
   let open Fut.Result_syntax in
-  let+ servers = servers in
+  let+ servers = Fut.map (fun s -> Result.map_err (fun e -> `Jv e) s) servers in
   let _ = Db_worker.query @@ Servers servers in
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let ui_progress =
@@ -49,6 +49,7 @@ let app _idb =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
+  let main_view = Db_worker.query (Create_view (Db.View.req ())) in
   Elwd.div
     [
       `R ui_progress;
@@ -67,9 +68,9 @@ let app _idb =
       (* `R (Menu.make ()); *)
       `R (Player.make ());
       `R
-        (Ui_playlist.make ~servers ~total:80000
-           ~fetch:(fun i -> Db_worker.(query (Get i)))
-           ());
+        (Ui_playlist.make ~servers
+           ~fetch:(fun view i -> Db_worker.(query (Get (view, i))))
+           main_view);
     ]
 
 let _ =

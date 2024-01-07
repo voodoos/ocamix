@@ -22,6 +22,12 @@ module Worker () = struct
     in
     idb
 
+  let read_only_store () =
+    let open Fut.Result_syntax in
+    let+ idb = idb in
+    IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
+    |> IDB.Transaction.object_store (module Db.I)
+
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
@@ -36,23 +42,20 @@ module Worker () = struct
         in
         let+ req = Db.I.get_all store |> IDB.Request.fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
-    | Create_view () ->
+    | Create_view request ->
         let uuid = new_uuid_v4 () in
-
-        Fut.ok { View.uuid; item_count = 100 }
-    | Get index ->
-        let* idb = idb in
-        let store =
-          IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
-          |> IDB.Transaction.object_store (module Db.I)
-        in
+        let* store = read_only_store () in
+        let+ item_count = Db.I.count () store |> IDB.Request.fut in
+        { Db.View.uuid; request; start_index = 0; item_count }
+    | Get (_view, index) -> (
+        let* store = read_only_store () in
         let idx = Db.I.index (module Db.Stores.ItemsByDateAdded) store in
-        let v, set = Fut.create () in
-        ignore
-          (Db.Stores.ItemsByDateAdded.get index idx
-          |> IDB.Request.on_success ~f:(fun _ r ->
-                 Option.iter (fun t -> set (Ok t)) (IDB.Request.result r)));
-        v
+        let* res =
+          Db.Stores.ItemsByDateAdded.get index idx |> IDB.Request.fut
+        in
+        match res with
+        | Some res -> Fut.ok res
+        | None -> Fut.return (Error (`Msg "Item not found")))
 end
 
 include Make_worker (Worker)
