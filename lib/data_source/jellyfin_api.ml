@@ -218,7 +218,7 @@ let authorization ?token () =
 
 let request (type p r) ?base_url ?token ?headers
     (module Q : Query with type params = p and type response = r) (params : p) :
-    (r, Jv.Error.t) Fut.result =
+    r Fut.or_error =
   let open Brr_io.Fetch in
   let uri =
     Jstr.(Uri.of_jstr ?base:(Option.map v base_url) (v Q.endpoint))
