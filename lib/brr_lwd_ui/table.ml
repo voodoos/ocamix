@@ -10,11 +10,12 @@ module Columns = struct
   let v name css_size content = { name; css_size; content }
 
   let to_header t =
+    let style = `P (At.style (Jstr.v @@ Printf.sprintf "grid-row: 1/2")) in
     let cells =
       Array.fold_right t ~init:[] ~f:(fun { content; _ } acc ->
           `R (Elwd.div content) :: acc)
     in
-    Elwd.div cells
+    Elwd.div ~at:[ style ] cells
 
   let set_style t elt =
     let template =

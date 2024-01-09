@@ -83,93 +83,121 @@ let lazy_table (type data) ~columns ~total
           unload index
         done
     in
-
+    (* Console.log [ "add"; i ]; *)
     if Int_uniqueue.add i unload_queue then (
       load i;
       cleanup ())
   in
-
+  let num_rows = Lwd.var 0 in
   let _ =
     let open Fut.Result_syntax in
     let+ total = total in
-    for i = 1 to total - 1 do
+    if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
+    for i = 0 to total - 1 do
       let _uuid = new_uuid_v4 () |> Uuidm.to_string in
       let set = { index = i; content = None } in
       Hashtbl.add row_index i @@ Lwd_table.append ~set table;
-      if i < 50 then add i (* preload the first items *)
+      if i < 20 then add i (* preload the first items *)
     done
   in
   let render _ { content; index } =
     let at = Attrs.(classes [ "row" ] |> to_at) in
-    let elt =
-      match content with
-      | Some data ->
-          (* todo: this won't make the row reactive *)
-          Elwd.div ~at (render index data)
-      | None -> Elwd.div (placeholder index)
+    let style =
+      `P
+        (At.style
+           (Jstr.v @@ Printf.sprintf "grid-row: %i/%i" (index + 2) (index + 3)))
     in
-    Lwd_seq.element elt
+    match content with
+    | Some data ->
+        Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data)
+    | None -> Lwd_seq.empty
   in
+
   let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
   let scroll_handler =
+    let last_event = ref 0. in
     let last_scroll_y = ref 0. in
     fun div ->
-      (* todo: debounce *)
-      (* todo: adjust bleeding with speed *)
-      let height elt =
-        let jv = El.to_jv elt in
-        Jv.get jv "clientHeight" |> Jv.to_int
-      in
+      let current_time = Performance.now_ms G.performance in
+      if current_time >. !last_event +. 25. then (
+        last_event := current_time;
+        (* todo: debounce *)
+        (* todo: adjust bleeding with speed *)
+        let height elt =
+          let jv = El.to_jv elt in
+          Jv.get jv "clientHeight" |> Jv.to_int
+        in
 
-      let children = El.children div in
-      let scroll_y = El.scroll_y div in
-      let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
-      let () = last_scroll_y := scroll_y in
-      let total_height = height div in
-      let num_rows = List.length children in
-      let header_height = height @@ List.hd children in
-      let row_height = height @@ List.hd @@ List.tl children in
-      let number_of_visible_rows = (total_height / row_height) + 1 in
-      let bleeding = number_of_visible_rows in
-      let scroll_y = scroll_y -. float_of_int header_height in
-      let first_visible_row =
-        int_of_float (scroll_y /. float_of_int row_height) + 1
-      in
-      let last_visible_row = first_visible_row + number_of_visible_rows in
-      let first =
-        let bleeding =
-          match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
+        let children = El.children div in
+        let scroll_y = El.scroll_y div in
+        let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
+        let () = last_scroll_y := scroll_y in
+        let total_height = height div in
+        let num_rows = Lwd.peek num_rows in
+        let _header_height = height @@ List.hd children in
+        let _row_height = height @@ List.hd @@ List.tl children in
+        let header_height = 70 in
+        let row_height = 70 in
+        let number_of_visible_rows = (total_height / row_height) + 1 in
+        let bleeding = number_of_visible_rows in
+        let scroll_y = scroll_y -. float_of_int header_height in
+        let first_visible_row =
+          int_of_float (scroll_y /. float_of_int row_height) + 1
         in
-        first_visible_row - bleeding |> max 0
-      in
-      let last =
-        let bleeding =
-          match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
+        let last_visible_row = first_visible_row + number_of_visible_rows in
+        let first =
+          let bleeding =
+            match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
+          in
+          first_visible_row - bleeding |> max 0
         in
-        last_visible_row + bleeding |> min num_rows
-      in
-      for i = first to last do
-        (* todo: We do way too much work and rebuild the queue each
-           time... it's very ineficient *)
-        add ~max_items:(10 * number_of_visible_rows) i
-      done
+        let last =
+          let bleeding =
+            match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
+          in
+          last_visible_row + bleeding |> min num_rows
+        in
+        for i = first to last do
+          (* todo: We do way too much work and rebuild the queue each
+             time... it's very ineficient *)
+          add ~max_items:(10 * number_of_visible_rows) i
+        done)
   in
   let table_header = Table.Columns.to_header columns in
+  let table_footer =
+    Lwd.get num_rows
+    |> Lwd.map ~f:(fun num_rows ->
+           let style =
+             At.style
+               (Jstr.v
+               @@ Printf.sprintf "grid-row: %i/%i" (num_rows + 2) (num_rows + 3)
+               )
+           in
+           El.div ~at:[ style ] [ El.txt' "foot" ])
+  in
   let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
   let elt =
-    Lwd.map ~f:(Table.Columns.set_style columns)
-    @@ Elwd.div
-         ~ev:
-           [
-             `P
-               (Elwd.handler Ev.scroll (fun ev ->
-                    let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
-                    scroll_handler div));
-           ]
-         ~at
-         [ `R table_header; `S (Lwd_seq.lift table_body) ]
+    Elwd.div
+      ~ev:
+        [
+          `P
+            (Elwd.handler Ev.scroll (fun ev ->
+                 let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
+                 scroll_handler div));
+        ]
+      ~at
+      [ `R table_header; `S (Lwd_seq.lift table_body); `R table_footer ]
   in
-  elt
+  let set = ref false in
+  Lwd.app
+    (Lwd.return (fun e ->
+         (* TODO this should not always retrigger*)
+         if not !set then (
+           set := true;
+           Console.log [ "SET GRID TEMPLATE ROWS" ];
+           Table.Columns.set_style columns e)
+         else e))
+    elt
 
 (** Application part *)
 
@@ -182,7 +210,7 @@ let columns =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~servers ~fetch view =
+let make ~reset_playlist ~servers ~fetch _ view =
   let total =
     Fut.map (Result.map (fun { Db.View.item_count; _ } -> item_count)) view
   in
@@ -190,12 +218,6 @@ let make ~servers ~fetch view =
     let open Fut.Result_syntax in
     let* view = view in
     fetch view i
-  in
-  let audio_url server_id item_id =
-    let server : DS.connexion = List.assq server_id servers in
-    Printf.sprintf
-      "%s/Audio/%s/universal?api_key=%s&MaxStreamingBitrate=178723404&Container=opus,webm|opus,mp3,aac,m4a|aac,m4b|aac,flac,webma,webm|webma,wav,ogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac"
-      server.base_url item_id server.auth_response.access_token
   in
   let img_url server_id item_id =
     let server : DS.connexion = List.assq server_id servers in

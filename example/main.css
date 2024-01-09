@@ -60,6 +60,7 @@ body {
     overflow: auto;
     border-radius: 0.5rem;
     background-color: rgb(207, 207, 207);
+    grid-auto-rows: 70px;
 }
 
 .lazy-table>div {
