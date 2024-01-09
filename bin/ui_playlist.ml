@@ -51,7 +51,7 @@ let lazy_table (type data) ~columns ~total
     ~(fetch : int -> (data, _) Fut.result)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ~(render : int -> data -> Elwd.t Elwd.col) () =
-  ignore fetch;
+  ignore placeholder;
   let table : data row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
      observer's callback *)
@@ -201,15 +201,17 @@ let make ~servers ~fetch view =
     let server : DS.connexion = List.assq server_id servers in
     Printf.sprintf "%s/Items/%s/Images/Primary" server.base_url item_id
   in
-  let render i
-      {
-        Db.Stores.Items.item = { Api.Item.name; album_id; id; server_id; _ };
-        _;
-      } =
-    let play () = Lwd.set Player.now_playing (Some (audio_url server_id id)) in
-    let play_on_click = Elwd.handler Ev.click (fun _ -> play ()) in
+  let render start_index
+      { Db.Stores.Items.item = { Api.Item.name; album_id; server_id; _ }; _ } =
+    let play_from _ =
+      ignore
+        (let open Fut.Result_syntax in
+         let+ view = view in
+         reset_playlist { view with start_offset = start_index })
+    in
+    let play_on_click = Elwd.handler Ev.click play_from in
     [
-      `P (El.div [ El.txt' (string_of_int i) ]);
+      `P (El.div [ El.txt' (string_of_int (start_index + 1)) ]);
       `R
         (Elwd.div
            ~ev:[ `P play_on_click ]
@@ -225,5 +227,5 @@ let make ~servers ~fetch view =
       `P (El.div [ El.span [ El.txt' name ] ]);
     ]
   in
-  let placeholder i = [ `P (El.txt' @@ "..." ^ string_of_int i) ] in
+  let placeholder _i = [] in
   lazy_table ~columns ~total ~fetch ~render ~placeholder ()

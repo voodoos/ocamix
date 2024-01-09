@@ -6,6 +6,8 @@ module Db_worker = Db.Worker_api.Start_client (struct
   let url = "./db_worker.bc.js"
 end)
 
+let fetch view i = Db_worker.(query (Get (view, i)))
+
 let connexion =
   let source, set_source = Fut.create () in
   let _ =
@@ -20,13 +22,20 @@ let connexion =
   source
 
 let servers =
-  let open Fut.Result_syntax in
+  let open Fut.Syntax in
   let+ connexion = connexion in
+  let open Result.Infix in
+  let+ connexion = Result.map_err (fun e -> `Jv e) connexion in
   [ (connexion.auth_response.server_id, connexion) ]
+
+module Player = Player.Playback_controller (struct
+  let fetch = fetch
+  let servers = servers
+end)
 
 let app _idb =
   let open Fut.Result_syntax in
-  let+ servers = Fut.map (fun s -> Result.map_err (fun e -> `Jv e) s) servers in
+  let+ servers = servers in
   let _ = Db_worker.query @@ Servers servers in
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let ui_progress =
@@ -50,6 +59,7 @@ let app _idb =
         ])
   in
   let main_view = Db_worker.query (Create_view Db.View.(req ())) in
+  let player = Player.make () in
   Elwd.div
     [
       `R ui_progress;
@@ -66,11 +76,10 @@ let app _idb =
            ]);
       `P (El.br ());
       (* `R (Menu.make ()); *)
-      `R (Player.make ());
+      `R player;
       `R
-        (Ui_playlist.make ~servers
-           ~fetch:(fun view i -> Db_worker.(query (Get (view, i))))
-           main_view);
+        (Ui_playlist.make ~reset_playlist:Player.reset_playlist ~servers ~fetch
+           player main_view);
     ]
 
 let _ =

@@ -49,8 +49,9 @@ module Worker () = struct
         let* store = read_only_store () in
         let+ item_count = Db.I.count () store |> IDB.Request.fut in
         let order = Db.View.Order.of_sort ~size:item_count request.sort in
-        { Db.View.uuid; request; order; start_index = 0; item_count }
+        { Db.View.uuid; request; order; start_offset = 0; item_count }
     | Get (view, index) -> (
+        let index = index + view.start_offset in
         let index = Db.View.Order.apply view.order index in
         let* store = read_only_store () in
         let idx = Db.I.index (module Db.Stores.ItemsByDateAdded) store in

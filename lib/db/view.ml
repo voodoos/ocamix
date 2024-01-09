@@ -26,7 +26,7 @@ type t = {
   uuid : Uuidm.t;
   request : req;
   order : Order.t;
-  start_index : int;
+  start_offset : int;
   item_count : int;
 }
 
