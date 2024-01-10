@@ -47,11 +47,16 @@ module Int_uniqueue = Uniqueue (Int)
 
 type 'a row_data = { index : int; content : 'a option }
 
-let lazy_table (type data) ~columns ~total
+let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
     ~(fetch : int -> (data, _) Fut.result)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ~(render : int -> data -> Elwd.t Elwd.col) () =
   ignore placeholder;
+  let row_size = ui_table.row_height |> Utils.Unit.to_string in
+  let top i =
+    Printf.sprintf "top: calc(%s * %i); height: %s !important;" row_size i
+      row_size
+  in
   let table : data row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
      observer's callback *)
@@ -102,9 +107,7 @@ let lazy_table (type data) ~columns ~total
   in
   let render _ { content; index } =
     let at = Attrs.(classes [ "row" ] |> to_at) in
-    let style =
-      `P (At.style (Jstr.v @@ Printf.sprintf "top: %ipx" ((index + 1) * 70)))
-    in
+    let style = `P (At.style (Jstr.v @@ top (index + 1))) in
     match content with
     | Some data ->
         Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data)
@@ -117,26 +120,21 @@ let lazy_table (type data) ~columns ~total
     let update div =
       let height elt =
         let jv = El.to_jv elt in
-        Jv.get jv "clientHeight" |> Jv.to_int
+        Jv.get jv "offsetHeight" |> Jv.to_int
       in
-
       let children = El.children div in
       let scroll_y = El.scroll_y div in
       let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
       let () = last_scroll_y := scroll_y in
-      let total_height = height div in
+      let total_height = height div |> float_of_int in
       let num_rows = Lwd.peek num_rows in
-      (* todo: fixed height should be specified elsewhere *)
-      let _header_height = height @@ List.hd children in
-      let _row_height = height @@ List.hd @@ List.tl children in
-      let header_height = 70 in
-      let row_height = 70 in
-      let number_of_visible_rows = (total_height / row_height) + 1 in
+      let header_height = height @@ List.hd children in
+      let first_row = List.hd @@ List.tl children in
+      let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
+      let number_of_visible_rows = total_height /. row_height |> int_of_float in
       let bleeding = number_of_visible_rows in
       let scroll_y = scroll_y -. float_of_int header_height in
-      let first_visible_row =
-        int_of_float (scroll_y /. float_of_int row_height) + 1
-      in
+      let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
       let last_visible_row = first_visible_row + number_of_visible_rows in
       let first =
         let bleeding =
@@ -157,50 +155,46 @@ let lazy_table (type data) ~columns ~total
       done
     in
     let last_update = ref 0. in
-    let ticker = ref (-1) in
+    let timeout = ref (-1) in
     let reset_ticker div =
+      let debouncing_interval = 25 in
+      (* We use [last_update] to have regular debounced updates and the
+         [timeout] to ensure that the last scroll event is always taken into
+         account even it it happens during the debouncing interval. *)
       let now = Performance.now_ms G.performance in
-      if !ticker >= 0 then G.stop_timer !ticker;
-      ticker := G.set_timeout ~ms:25 (fun () -> update div);
-      if now -. !last_update >. 25. then (
+      if !timeout >= 0 then G.stop_timer !timeout;
+      timeout := G.set_timeout ~ms:debouncing_interval (fun () -> update div);
+      if now -. !last_update >. float_of_int debouncing_interval then (
         last_update := now;
         update div)
     in
     fun div -> reset_ticker div
   in
-  let table_header = Table.Columns.to_header columns in
+  let table_header = Table.header ui_table in
   let table_footer =
     Lwd.get num_rows
     |> Lwd.map ~f:(fun num_rows ->
-           let style =
-             At.style
-               (Jstr.v @@ Printf.sprintf "top: %ipx" ((num_rows + 1) * 70))
-           in
+           let style = At.style (Jstr.v @@ top (num_rows + 1)) in
            El.div ~at:[ style ] [ El.txt' "foot" ])
   in
   let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
-  let elt =
-    Elwd.div
-      ~ev:
-        [
-          `P
-            (Elwd.handler Ev.scroll (fun ev ->
-                 let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
-                 scroll_handler div));
-        ]
-      ~at
-      [ `R table_header; `S (Lwd_seq.lift table_body); `R table_footer ]
-  in
-  let set = ref false in
-  Lwd.app
-    (Lwd.return (fun e ->
-         (* TODO this should not always retrigger*)
-         if not !set then (
-           set := true;
-           Console.log [ "SET GRID TEMPLATE ROWS" ];
-           Table.Columns.set_style columns e)
-         else e))
-    elt
+  let grid_style = Table.style ui_table in
+  let at = `P (At.style (Jstr.v grid_style)) :: at in
+  Elwd.div
+    ~at:Attrs.(to_at @@ classes [ "lazy-table-wrapper" ])
+    [
+      `R
+        (Elwd.div
+           ~ev:
+             [
+               `P
+                 (Elwd.handler Ev.scroll (fun ev ->
+                      let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
+                      scroll_handler div));
+             ]
+           ~at
+           [ `R table_header; `S (Lwd_seq.lift table_body); `R table_footer ]);
+    ]
 
 (** Application part *)
 
@@ -214,9 +208,7 @@ let columns =
     |]
 
 let make ~reset_playlist ~servers ~fetch _ view =
-  let total =
-    Fut.map (Result.map (fun { Db.View.item_count; _ } -> item_count)) view
-  in
+  let total = Fut.map (Result.map Db.View.item_count) view in
   let fetch i =
     let open Fut.Result_syntax in
     let* view = view in
@@ -253,4 +245,5 @@ let make ~reset_playlist ~servers ~fetch _ view =
     ]
   in
   let placeholder _i = [] in
-  lazy_table ~columns ~total ~fetch ~render ~placeholder ()
+  let ui_table = { Table.table = { columns }; row_height = Em 4. } in
+  lazy_table ~ui_table ~total ~fetch ~render ~placeholder ()

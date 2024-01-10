@@ -30,5 +30,7 @@ type t = {
   item_count : int;
 }
 
+let item_count t = t.item_count - t.start_offset
+
 let req ?(sort = Sort.(Some (Date_added, Desc))) ?(filters = []) () =
   { sort; filters }

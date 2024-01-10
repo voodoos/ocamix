@@ -52,27 +52,32 @@ body {
 }
 
 
-
+.lazy-table-wrapper {
+    height: 500px;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
 .lazy-table {
     display: inline-grid;
     width: 100%;
-    height: 500px;
+    height: 100%;
     overflow: auto;
-    border-radius: 0.5rem;
     background-color: rgb(207, 207, 207);
-    grid-auto-rows: 70px;
     position: relative;
 }
 
+.lazy-table div {
+    box-sizing: border-box;
+}
 .lazy-table>div {
     display: grid;
     grid-template-columns: subgrid;
     grid-column: 1/-1;
-    height: 50px;
     padding: 0.5rem;
     font-size: 1.2rem;
     background-color: rgb(207, 207, 207);
     position: absolute;
+    overflow: hidden;
 }
 
 .lazy-table>div>div {
@@ -83,8 +88,7 @@ body {
 
 .lazy-table>div:first-child {
     position: sticky;
-    top: 0;
-    height: 2rem;
+    top: -1px; /* Without that slight offset there is some glitching happening in firefox */
     z-index: 10;
 }
 
