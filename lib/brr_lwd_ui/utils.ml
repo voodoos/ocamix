@@ -34,7 +34,6 @@ module Unit = struct
       let font_size =
         El.computed_style (Jstr.v "font-size") parent |> Jstr.to_string
       in
-      Console.log [ font_size ];
       match of_string font_size with Some (Px i) -> i | _ -> assert false
     in
     function

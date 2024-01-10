@@ -28,10 +28,6 @@ type fixed_row_height = { table : t; row_height : Utils.Unit.t }
 
 let style t =
   let style = Columns.style t.table.columns in
-  (* let auto_row =
-       Printf.sprintf "%s: %s;" "grid-auto-rows"
-       @@ Utils.Unit.to_string t.row_height
-     in *)
   String.concat ~sep:" " [ style ]
 
 let header t =

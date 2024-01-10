@@ -88,7 +88,6 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
           unload index
         done
     in
-    (* Console.log [ "add"; i ]; *)
     if Int_uniqueue.add i unload_queue then (
       load i;
       cleanup ())
