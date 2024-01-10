@@ -159,7 +159,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
             {
               (* todo make sort explicit (by date added date) *)
               user_id = source.auth_response.user.id;
-              fields = [ MediaSources ];
+              fields = [];
               include_item_types = [ Audio ];
               start_index = Some start_index;
               limit;
