@@ -66,7 +66,13 @@ let app _idb =
       [ El.h1 [ El.txt' "Welcome to OCAMIX" ] ]
   in
   let player_ui =
-    Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
+    Elwd.div
+      ~at:
+        [
+          `P (At.style (Jstr.v "grid-column:1/-1"));
+          `P (At.class' (Jstr.v "player-wrapper"));
+        ]
+      [ `R player ]
   in
   let main_list =
     Ui_playlist.make ~reset_playlist:P.reset_playlist ~servers ~fetch player
