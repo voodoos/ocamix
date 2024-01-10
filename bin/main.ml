@@ -28,7 +28,7 @@ let servers =
   let+ connexion = Result.map_err (fun e -> `Jv e) connexion in
   [ (connexion.auth_response.server_id, connexion) ]
 
-module Player = Player.Playback_controller (struct
+module P = Player.Playback_controller (struct
   let fetch = fetch
   let servers = servers
 end)
@@ -38,7 +38,7 @@ let app _idb =
   let+ servers = servers in
   let _ = Db_worker.query @@ Servers servers in
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
-  let ui_progress =
+  let _ui_progress =
     let open Lwd_infix in
     let$ { remaining } = Lwd.get sync_progress in
     let txt = Format.sprintf "Remaining sync queries: %i" remaining in
@@ -50,7 +50,7 @@ let app _idb =
     Lang.set Lang.En;
     Brr_lwd_ui.Button.Next
   in
-  let btn_mix, _, _ =
+  let _btn_mix, _, _ =
     Ui.Two_state_button.make ~on_click (fun _ ->
         [
           `R
@@ -59,28 +59,29 @@ let app _idb =
         ])
   in
   let main_view = Db_worker.query (Create_view Db.View.(req ())) in
-  let player = Player.make () in
+  let player = P.make () in
+  let status =
+    El.div
+      ~at:[ At.style (Jstr.v "grid-column:1/-1") ]
+      [ El.h1 [ El.txt' "Welcome to OCAMIX" ] ]
+  in
+  let player_ui =
+    Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
+  in
+  let main_list =
+    Ui_playlist.make ~reset_playlist:P.reset_playlist ~servers ~fetch player
+      main_view
+  in
+  let now_playing =
+    Lwd.bind (Lwd.get Player.playstate) ~f:(function
+      | None -> Elwd.div []
+      | Some { playlist; _ } ->
+          Ui_playlist.make ~reset_playlist:P.reset_playlist ~servers ~fetch
+            player (Fut.ok playlist))
+  in
   Elwd.div
-    [
-      `R ui_progress;
-      `P (El.br ());
-      `R (Lang._s "click" El.txt);
-      `P (El.br ());
-      `R btn_mix;
-      `R
-        (Elwd.p
-           [
-             `R
-               (Lwd.map (Lwd.get playlist) ~f:(fun v ->
-                    El.txt' (string_of_int v)));
-           ]);
-      `P (El.br ());
-      (* `R (Menu.make ()); *)
-      `R player;
-      `R
-        (Ui_playlist.make ~reset_playlist:Player.reset_playlist ~servers ~fetch
-           player main_view);
-    ]
+    ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
+    [ `P status; `R main_list; `R now_playing; `R player_ui ]
 
 let is_storage_persistent =
   Brr_io.Storage.(manager G.navigator |> Manager.persist)

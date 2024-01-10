@@ -131,26 +131,26 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
       let first_row = List.hd @@ List.tl children in
       let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
       let number_of_visible_rows = total_height /. row_height |> int_of_float in
-      let bleeding = number_of_visible_rows in
+      let bleeding = number_of_visible_rows / 2 in
       let scroll_y = scroll_y -. float_of_int header_height in
       let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
       let last_visible_row = first_visible_row + number_of_visible_rows in
       let first =
         let bleeding =
-          match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
+          match direction with `Up -> bleeding | _ -> bleeding / 2
         in
         first_visible_row - bleeding |> max 0
       in
       let last =
         let bleeding =
-          match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
+          match direction with `Down -> bleeding | _ -> bleeding / 2
         in
         last_visible_row + bleeding |> min num_rows
       in
       for i = first to last do
         (* todo: We do way too much work and rebuild the queue each
            time... it's very ineficient *)
-        add ~max_items:(10 * number_of_visible_rows) i
+        add ~max_items:(4 * number_of_visible_rows) i
       done
     in
     let last_update = ref 0. in
@@ -198,7 +198,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
 (** Application part *)
 
 (** Columns declaration *)
-let columns =
+let columns () =
   Table.Columns.
     [|
       v "Order" "5rem" @@ [ `P (El.txt' "#") ];
@@ -244,5 +244,7 @@ let make ~reset_playlist ~servers ~fetch _ view =
     ]
   in
   let placeholder _i = [] in
-  let ui_table = { Table.table = { columns }; row_height = Em 4. } in
+  let ui_table =
+    { Table.table = { columns = columns () }; row_height = Em 4. }
+  in
   lazy_table ~ui_table ~total ~fetch ~render ~placeholder ()
