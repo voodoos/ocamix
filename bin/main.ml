@@ -82,8 +82,12 @@ let app _idb =
            player main_view);
     ]
 
+let is_storage_persistent =
+  Brr_io.Storage.(manager G.navigator |> Manager.persist)
+
 let _ =
   let on_load _ =
+    Console.log [ "Persist ?"; is_storage_persistent ];
     Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
     let open Fut.Result_syntax in
     ignore

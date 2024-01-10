@@ -31,6 +31,22 @@ end
 module Brr_io = struct
   include Brr_io
   module Indexed_db = Indexed_db
+
+  module Storage = struct
+    include Storage
+
+    module Manager = struct
+      (* https://developer.mozilla.org/en-US/docs/Web/API/StorageManager *)
+      type t = Jv.t
+
+      include (Jv.Id : Jv.CONV with type t := t)
+
+      let persist t = Jv.call t "persist" [||] |> Fut.of_promise ~ok:Jv.to_bool
+    end
+
+    let manager (n : Brr.Navigator.t) =
+      Jv.get (Brr.Navigator.to_jv n) "storage" |> Manager.of_jv
+  end
 end
 
 module Brr_webworkers = Brr_webworkers
