@@ -103,9 +103,7 @@ let lazy_table (type data) ~columns ~total
   let render _ { content; index } =
     let at = Attrs.(classes [ "row" ] |> to_at) in
     let style =
-      `P
-        (At.style
-           (Jstr.v @@ Printf.sprintf "grid-row: %i/%i" (index + 2) (index + 3)))
+      `P (At.style (Jstr.v @@ Printf.sprintf "top: %ipx" ((index + 1) * 70)))
     in
     match content with
     | Some data ->
@@ -115,53 +113,60 @@ let lazy_table (type data) ~columns ~total
 
   let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
   let scroll_handler =
-    let last_event = ref 0. in
     let last_scroll_y = ref 0. in
-    fun div ->
-      let current_time = Performance.now_ms G.performance in
-      if current_time >. !last_event +. 25. then (
-        last_event := current_time;
-        (* todo: debounce *)
-        (* todo: adjust bleeding with speed *)
-        let height elt =
-          let jv = El.to_jv elt in
-          Jv.get jv "clientHeight" |> Jv.to_int
-        in
+    let update div =
+      let height elt =
+        let jv = El.to_jv elt in
+        Jv.get jv "clientHeight" |> Jv.to_int
+      in
 
-        let children = El.children div in
-        let scroll_y = El.scroll_y div in
-        let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
-        let () = last_scroll_y := scroll_y in
-        let total_height = height div in
-        let num_rows = Lwd.peek num_rows in
-        let _header_height = height @@ List.hd children in
-        let _row_height = height @@ List.hd @@ List.tl children in
-        let header_height = 70 in
-        let row_height = 70 in
-        let number_of_visible_rows = (total_height / row_height) + 1 in
-        let bleeding = number_of_visible_rows in
-        let scroll_y = scroll_y -. float_of_int header_height in
-        let first_visible_row =
-          int_of_float (scroll_y /. float_of_int row_height) + 1
+      let children = El.children div in
+      let scroll_y = El.scroll_y div in
+      let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
+      let () = last_scroll_y := scroll_y in
+      let total_height = height div in
+      let num_rows = Lwd.peek num_rows in
+      (* todo: fixed height should be specified elsewhere *)
+      let _header_height = height @@ List.hd children in
+      let _row_height = height @@ List.hd @@ List.tl children in
+      let header_height = 70 in
+      let row_height = 70 in
+      let number_of_visible_rows = (total_height / row_height) + 1 in
+      let bleeding = number_of_visible_rows in
+      let scroll_y = scroll_y -. float_of_int header_height in
+      let first_visible_row =
+        int_of_float (scroll_y /. float_of_int row_height) + 1
+      in
+      let last_visible_row = first_visible_row + number_of_visible_rows in
+      let first =
+        let bleeding =
+          match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
         in
-        let last_visible_row = first_visible_row + number_of_visible_rows in
-        let first =
-          let bleeding =
-            match direction with `Up -> 2 * bleeding | _ -> bleeding / 2
-          in
-          first_visible_row - bleeding |> max 0
+        first_visible_row - bleeding |> max 0
+      in
+      let last =
+        let bleeding =
+          match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
         in
-        let last =
-          let bleeding =
-            match direction with `Down -> 2 * bleeding | _ -> bleeding / 2
-          in
-          last_visible_row + bleeding |> min num_rows
-        in
-        for i = first to last do
-          (* todo: We do way too much work and rebuild the queue each
-             time... it's very ineficient *)
-          add ~max_items:(10 * number_of_visible_rows) i
-        done)
+        last_visible_row + bleeding |> min num_rows
+      in
+      for i = first to last do
+        (* todo: We do way too much work and rebuild the queue each
+           time... it's very ineficient *)
+        add ~max_items:(10 * number_of_visible_rows) i
+      done
+    in
+    let last_update = ref 0. in
+    let ticker = ref (-1) in
+    let reset_ticker div =
+      let now = Performance.now_ms G.performance in
+      if !ticker >= 0 then G.stop_timer !ticker;
+      ticker := G.set_timeout ~ms:25 (fun () -> update div);
+      if now -. !last_update >. 25. then (
+        last_update := now;
+        update div)
+    in
+    fun div -> reset_ticker div
   in
   let table_header = Table.Columns.to_header columns in
   let table_footer =
@@ -169,9 +174,7 @@ let lazy_table (type data) ~columns ~total
     |> Lwd.map ~f:(fun num_rows ->
            let style =
              At.style
-               (Jstr.v
-               @@ Printf.sprintf "grid-row: %i/%i" (num_rows + 2) (num_rows + 3)
-               )
+               (Jstr.v @@ Printf.sprintf "top: %ipx" ((num_rows + 1) * 70))
            in
            El.div ~at:[ style ] [ El.txt' "foot" ])
   in
@@ -221,7 +224,7 @@ let make ~reset_playlist ~servers ~fetch _ view =
   in
   let img_url server_id item_id =
     let server : DS.connexion = List.assq server_id servers in
-    Printf.sprintf "%s/Items/%s/Images/Primary" server.base_url item_id
+    Printf.sprintf "%s/Items/%s/Images/Primary?width=50" server.base_url item_id
   in
   let render start_index
       { Db.Stores.Items.item = { Api.Item.name; album_id; server_id; _ }; _ } =

@@ -61,6 +61,7 @@ body {
     border-radius: 0.5rem;
     background-color: rgb(207, 207, 207);
     grid-auto-rows: 70px;
+    position: relative;
 }
 
 .lazy-table>div {
@@ -71,6 +72,7 @@ body {
     padding: 0.5rem;
     font-size: 1.2rem;
     background-color: rgb(207, 207, 207);
+    position: absolute;
 }
 
 .lazy-table>div>div {
@@ -83,6 +85,7 @@ body {
     position: sticky;
     top: 0;
     height: 2rem;
+    z-index: 10;
 }
 
 .lazy-table>div:first-child>div {
