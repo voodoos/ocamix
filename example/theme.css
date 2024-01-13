@@ -1,3 +1,7 @@
+body {
+    background-color: #2c2f32;
+}
+
 .draggable-table {
     border-bottom: solid black 1px;
 }
@@ -18,4 +22,8 @@ body.dragging .draggable-table>div {
 .draggable-table>div>div {
     padding: 4px;
     border-right: solid black 1px;
+}
+
+.lazy-table, .lazy-table>div {
+    background-color: #3c4146;
 }
