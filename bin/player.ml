@@ -6,6 +6,7 @@ type playstate = { playlist : Db.View.t; current_index : int }
 type t = Elwd.t Lwd.t
 
 let playstate = Lwd.var None
+let now_playing = Lwd.var 0
 let source_url = Lwd.var None
 
 let audio_url (server : DS.connexion) item_id =
@@ -45,6 +46,16 @@ struct
       Lwd.get source_url
       |> Lwd.map ~f:(fun url -> At.src (Jstr.v (Option.value ~default:"" url)))
     in
+    let next _ =
+      Lwd.peek playstate
+      |> Option.iter (fun (ps : playstate) ->
+             let new_state = { ps with current_index = ps.current_index + 1 } in
+             ignore @@ set_play_url new_state;
+             Lwd.set playstate (Some new_state))
+    in
+
+    let on_ended = Elwd.handler Ev.ended next in
+    let ev = [ `P on_ended ] in
     Elwd.audio
       ~at:
         [
@@ -53,5 +64,5 @@ struct
           `P (At.v (Jstr.v "preload") (Jstr.v "auto"));
           `R src;
         ]
-      []
+      ~ev []
 end

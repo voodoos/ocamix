@@ -223,7 +223,8 @@ let make ~reset_playlist ~servers ~fetch _ view =
       ignore
         (let open Fut.Result_syntax in
          let+ view = view in
-         reset_playlist { view with start_offset = start_index })
+         reset_playlist
+           { view with start_offset = view.start_offset + start_index })
     in
     let play_on_click = Elwd.handler Ev.click play_from in
     [
