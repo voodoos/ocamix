@@ -45,3 +45,19 @@ let classes l = { empty with classes = Classes.of_list l }
 
 let union { classes; attrs } { classes = c; attrs = a } =
   { classes = Classes.union classes c; attrs = List.rev_append attrs a }
+
+module Builder = struct
+  type at = C of string | At of At.t
+
+  let ( + ) t = function
+    | C classname ->
+        let classes = Classes.add classname t.classes in
+        { t with classes }
+    | At at ->
+        let attrs = `P at :: t.attrs in
+        { t with attrs }
+
+  let with_id s t =
+    let attrs = `P (At.id @@ Jstr.v s) :: t.attrs in
+    to_at { t with attrs }
+end
