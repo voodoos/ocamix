@@ -32,7 +32,21 @@
 
 *)
 
+type status =
+  | Unknown
+  | In_sync
+  | Inconsistent
+  | New_items of {
+      first_missing_key : int;
+      first_unfetched_key : int;
+      last_source_item_key : int;
+    }
+  | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
+
 type progress = { remaining : int }
+type report = { status : status; sync_progress : progress option }
+
+val initial_report : report
 
 val check_and_sync :
   ?report:(progress -> unit) ->

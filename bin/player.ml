@@ -20,7 +20,7 @@ module Playback_controller (P : sig
   val fetch :
     Db.View.t -> int -> (Db.Stores.Items.t, Db.Worker_api.error) Fut.result
 
-  val servers : ((string * DS.connexion) list, Db.Worker_api.error) Fut.result
+  val servers : (Servers.t, Db.Worker_api.error) Fut.result
 end) =
 struct
   let set_play_url { playlist; current_index } =
@@ -30,16 +30,15 @@ struct
         P.fetch playlist current_index
       in
       let+ servers = P.servers in
-      let server : DS.connexion = List.assq server_id servers in
-      let () = Console.log [ "Now playing:"; name ] in
-      { item_id = id; url = audio_url server id }
+      let server : Servers.server = List.assq server_id servers in
+      let url = audio_url server.connexion id in
+      let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
+      { item_id = id; url }
     in
-    let () = Console.log [ "next"; item ] in
     Lwd.set now_playing (Some item)
 
   let reset_playlist playlist =
     let state = { playlist; current_index = 0 } in
-    let () = Console.log [ "new playlist"; playlist ] in
     ignore @@ set_play_url state;
     Lwd.set playstate (Some state)
 

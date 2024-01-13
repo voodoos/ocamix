@@ -61,6 +61,7 @@ let is_db_consistent ~source:_ ~last_source_item_key db_sync_infos =
     true
 
 type status =
+  | Unknown
   | In_sync
   | Inconsistent
   | New_items of {
@@ -70,7 +71,13 @@ type status =
     }
   | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
 
+type progress = { remaining : int }
+type report = { status : status; sync_progress : progress option }
+
+let initial_report = { status = Unknown; sync_progress = None }
+
 let log_status = function
+  | Unknown -> Console.info [ "Database status is unknown" ]
   | In_sync -> Console.info [ "Database is synchronized" ]
   | Inconsistent -> Console.warn [ "Database is out-of-sync" ]
   | New_items { first_missing_key; first_unfetched_key; last_source_item_key }
@@ -131,8 +138,6 @@ let check_status ~source idb =
         | None ->
             Partial_fetch { first_unfetched_key = 0; last_source_item_key })
     | _ -> Inconsistent
-
-type progress = { remaining : int }
 
 let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
@@ -217,5 +222,6 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
 let check_and_sync ?report ~source idb =
   let open Fut.Result_syntax in
   let* status = check_status ~source idb in
+  let _ = Option.iter (fun report -> report { remaining = 12 }) report in
   log_status status;
   sync ?report ~source idb status

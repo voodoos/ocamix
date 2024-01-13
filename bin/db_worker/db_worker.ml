@@ -10,8 +10,10 @@ module Worker () = struct
 
   let check_db idb =
     let open Fut.Result_syntax in
-    let* _, source = source in
-    let report status = dispatch_event Servers_status_update status in
+    let* server_id, source = source in
+    let report status =
+      dispatch_event Servers_status_update (server_id, status)
+    in
     Db.Sync.check_and_sync ~report ~source idb
 
   let idb =
@@ -34,7 +36,7 @@ module Worker () = struct
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
-    | Servers l ->
+    | Add_servers l ->
         set_source @@ Ok (List.hd l);
         Fut.ok ()
     | Get_all () ->

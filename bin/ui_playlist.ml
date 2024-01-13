@@ -214,8 +214,9 @@ let make ~reset_playlist ~servers ~fetch _ view =
     fetch view i
   in
   let img_url server_id item_id =
-    let server : DS.connexion = List.assq server_id servers in
-    Printf.sprintf "%s/Items/%s/Images/Primary?width=50" server.base_url item_id
+    let server : Servers.server = List.assq server_id servers in
+    Printf.sprintf "%s/Items/%s/Images/Primary?width=50"
+      server.connexion.base_url item_id
   in
   let render start_index
       { Db.Stores.Items.item = { Api.Item.name; album_id; server_id; _ }; _ } =

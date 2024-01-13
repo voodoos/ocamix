@@ -26,7 +26,8 @@ let servers =
   let+ connexion = connexion in
   let open Result.Infix in
   let+ connexion = Result.map_err (fun e -> `Jv e) connexion in
-  [ (connexion.auth_response.server_id, connexion) ]
+  let status = Lwd.var Db.Sync.initial_report in
+  [ (connexion.auth_response.server_id, { Servers.connexion; status }) ]
 
 module P = Player.Playback_controller (struct
   let fetch = fetch
@@ -36,7 +37,12 @@ end)
 let app _idb =
   let open Fut.Result_syntax in
   let+ servers = servers in
-  let _ = Db_worker.query @@ Servers servers in
+  let _ =
+    let servers =
+      List.map servers ~f:(fun (id, s) -> (id, s.Servers.connexion))
+    in
+    Db_worker.query @@ Add_servers servers
+  in
   let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
   let _ui_progress =
     let open Lwd_infix in
