@@ -11,7 +11,8 @@ module Worker () = struct
   let check_db idb =
     let open Fut.Result_syntax in
     let* _, source = source in
-    Db.Sync.check_and_sync ~source idb
+    let report status = dispatch_event Servers_status_update status in
+    Db.Sync.check_and_sync ~report ~source idb
 
   let idb =
     let idb, set_idb = Fut.create () in

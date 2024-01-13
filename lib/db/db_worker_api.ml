@@ -10,6 +10,8 @@ module Queries = struct
     | Get_all : unit -> Api.Item.t list query
     | Create_view : View.req -> View.t query
     | Get : View.t * int -> Stores.Items.t query
+
+  type 'a event = Servers_status_update : Sync.progress event
 end
 
 include Worker_api.Make (Queries)
