@@ -6,8 +6,10 @@ type playstate = { playlist : Db.View.t; current_index : int }
 type t = Elwd.t Lwd.t
 
 let playstate = Lwd.var None
-let now_playing = Lwd.var 0
-let source_url = Lwd.var None
+
+type now_playing = { item_id : string; url : string }
+
+let now_playing = Lwd.var None
 
 let audio_url (server : DS.connexion) item_id =
   Printf.sprintf
@@ -23,17 +25,17 @@ end) =
 struct
   let set_play_url { playlist; current_index } =
     let open Fut.Result_syntax in
-    let+ url =
+    let+ item =
       let* { Db.Stores.Items.item = { server_id; id; name; _ }; _ } =
         P.fetch playlist current_index
       in
       let+ servers = P.servers in
       let server : DS.connexion = List.assq server_id servers in
       let () = Console.log [ "Now playing:"; name ] in
-      audio_url server id
+      { item_id = id; url = audio_url server id }
     in
-    let () = Console.log [ "next"; url ] in
-    Lwd.set source_url (Some url)
+    let () = Console.log [ "next"; item ] in
+    Lwd.set now_playing (Some item)
 
   let reset_playlist playlist =
     let state = { playlist; current_index = 0 } in
@@ -43,8 +45,10 @@ struct
 
   let make () =
     let src =
-      Lwd.get source_url
-      |> Lwd.map ~f:(fun url -> At.src (Jstr.v (Option.value ~default:"" url)))
+      Lwd.get now_playing
+      |> Lwd.map ~f:(function
+           | None -> At.src (Jstr.v "")
+           | Some { url; _ } -> At.src (Jstr.v url))
     in
     let next _ =
       Lwd.peek playstate
