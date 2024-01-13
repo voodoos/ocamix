@@ -6,6 +6,10 @@ module Db_worker = Db.Worker_api.Start_client (struct
   let url = "./db_worker.bc.js"
 end)
 
+let _ =
+  Db_worker.listen Servers_status_update ~f:(fun v ->
+      Console.log [ "listened"; v ])
+
 let fetch view i = Db_worker.(query (Get (view, i)))
 
 let connexion =
