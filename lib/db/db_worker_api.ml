@@ -11,7 +11,7 @@ module Queries = struct
     | Create_view : View.req -> View.t query
     | Get : View.t * int -> Stores.Items.t query
 
-  type 'a event = Servers_status_update : (string * Sync.progress) event
+  type 'a event = Servers_status_update : (string * Sync.report) event
 end
 
 include Worker_api.Make (Queries)

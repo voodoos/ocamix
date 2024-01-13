@@ -43,13 +43,15 @@ type status =
     }
   | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
 
-type progress = { remaining : int }
+val log_status : status -> unit
+
+type progress = { total : int; remaining : int }
 type report = { status : status; sync_progress : progress option }
 
 val initial_report : report
 
 val check_and_sync :
-  ?report:(progress -> unit) ->
+  ?report:(report -> unit) ->
   source:Data_source.Jellyfin.connexion ->
   Brrer.Brr_io.Indexed_db.Database.t ->
   (unit, Jv.Error.t) Fut.result

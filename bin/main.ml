@@ -43,13 +43,6 @@ let app _idb =
     in
     Db_worker.query @@ Add_servers servers
   in
-  let sync_progress = Lwd.var { Db.Sync.remaining = 0 } in
-  let _ui_progress =
-    let open Lwd_infix in
-    let$ { remaining } = Lwd.get sync_progress in
-    let txt = Format.sprintf "Remaining sync queries: %i" remaining in
-    El.txt' txt
-  in
   let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);

@@ -71,7 +71,7 @@ type status =
     }
   | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
 
-type progress = { remaining : int }
+type progress = { total : int; remaining : int }
 type report = { status : status; sync_progress : progress option }
 
 let initial_report = { status = Unknown; sync_progress = None }
@@ -174,6 +174,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         Queue.add req fetch_queue;
         enqueue ~start_index:(start_index + limit) (todo - limit))
     in
+    let total_queries = Queue.length fetch_queue in
     enqueue ~start_index:first total;
     let rec run_queue ?(threads = 1) q =
       assert (threads > 0);
@@ -188,7 +189,11 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         let+ { Api.Items.start_index; items; _ } =
           query source (module Api.Items) req
         in
-        let () = report { remaining = Queue.length fetch_queue } in
+        let () =
+          report
+          @@ Some
+               { total = total_queries; remaining = Queue.length fetch_queue }
+        in
         let idb_put ~start_index items =
           let open Brr_io.Indexed_db in
           let transaction =
@@ -222,6 +227,15 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
 let check_and_sync ?report ~source idb =
   let open Fut.Result_syntax in
   let* status = check_status ~source idb in
-  let _ = Option.iter (fun report -> report { remaining = 12 }) report in
-  log_status status;
-  sync ?report ~source idb status
+  let initial = { initial_report with status } in
+  let report' =
+    Option.map
+      (fun report ->
+        let () = (* Send a first report *) report initial in
+        fun sync_progress -> report { initial with sync_progress })
+      report
+  in
+  let+ () = sync ?report:report' ~source idb status in
+  Option.iter
+    (fun report -> report { status = In_sync; sync_progress = None })
+    report
