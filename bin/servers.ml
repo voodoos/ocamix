@@ -22,6 +22,31 @@ let connect ~base_url ~username ~password =
     (fun servers -> Lwd_seq.(concat servers (element (server_id, server))))
     var
 
+module Connect_form = struct
+  open Brr_lwd_ui.Form
+
+  type t = {
+    url : string Field.validation;
+    username : string Field.validation;
+    password : string Field.validation;
+  }
+
+  let default = { url = Empty; username = Empty; password = Empty }
+
+  let fields =
+    let username_field =
+      Field.text_input ~id:"username" { placeholder = "again" } ()
+      |> Lwd.map ~f:(fun username_input ->
+             F (username_input, fun t v -> { t with username = v }))
+    in
+    (* TODO: this should be simpler *)
+    Lwd.return (Lwd_seq.element username_field)
+end
+
+let ui_form () =
+  let open Brr_lwd_ui.Form in
+  create (module Connect_form) (fun t -> Console.log [ "Form submitted:"; t ])
+
 let ui_status server =
   let status =
     Lwd.map (Lwd.get server.status) ~f:(fun { status; sync_progress } ->
@@ -38,4 +63,4 @@ let ui_status server =
 let ui () =
   let servers = Lwd.get var in
   let statuses = Lwd_seq.map (fun (_, server) -> ui_status server) servers in
-  Elwd.div [ `S (Lwd_seq.lift statuses) ]
+  Elwd.div [ `R (ui_form ()); `S (Lwd_seq.lift statuses) ]
