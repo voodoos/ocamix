@@ -19,17 +19,15 @@ let audio_url (server : DS.connexion) item_id =
 module Playback_controller (P : sig
   val fetch :
     Db.View.t -> int -> (Db.Stores.Items.t, Db.Worker_api.error) Fut.result
-
-  val servers : (Servers.t, Db.Worker_api.error) Fut.result
 end) =
 struct
   let set_play_url { playlist; current_index } =
     let open Fut.Result_syntax in
     let+ item =
-      let* { Db.Stores.Items.item = { server_id; id; name; _ }; _ } =
+      let+ { Db.Stores.Items.item = { server_id; id; name; _ }; _ } =
         P.fetch playlist current_index
       in
-      let+ servers = P.servers in
+      let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
       let server : Servers.server = List.assq server_id servers in
       let url = audio_url server.connexion id in
       let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in

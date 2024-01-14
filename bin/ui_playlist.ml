@@ -206,7 +206,7 @@ let columns () =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~reset_playlist ~servers ~fetch _ view =
+let make ~reset_playlist ~fetch _ view =
   let total = Fut.map (Result.map Db.View.item_count) view in
   let fetch i =
     let open Fut.Result_syntax in
@@ -214,6 +214,7 @@ let make ~reset_playlist ~servers ~fetch _ view =
     fetch view i
   in
   let img_url server_id item_id =
+    let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
     let server : Servers.server = List.assq server_id servers in
     Printf.sprintf "%s/Items/%s/Images/Primary?width=50"
       server.connexion.base_url item_id

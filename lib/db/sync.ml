@@ -174,8 +174,8 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         Queue.add req fetch_queue;
         enqueue ~start_index:(start_index + limit) (todo - limit))
     in
-    let total_queries = Queue.length fetch_queue in
     enqueue ~start_index:first total;
+    let total_queries = Queue.length fetch_queue in
     let rec run_queue ?(threads = 1) q =
       assert (threads > 0);
       let rec take_n acc n =
