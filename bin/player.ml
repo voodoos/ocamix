@@ -13,7 +13,7 @@ let now_playing = Lwd.var None
 
 let audio_url (server : DS.connexion) item_id =
   Printf.sprintf
-    "%s/Audio/%s/universal?api_key=%s&MaxStreamingBitrate=178723404&Container=opus,webm|opus,mp3,aac,m4a|aac,m4b|aac,flac,webma,webm|webma,wav,ogg&TranscodingContainer=ts&TranscodingProtocol=hls&AudioCodec=aac"
+    "%s/Audio/%s/universal?api_key=%s&audioCodec=aac&container=opus,mp3,aac,m4a,m4b,flac,wav,ogg&transcodingContainer=ts&transcodingProtocol=hls"
     server.base_url item_id server.auth_response.access_token
 
 module Playback_controller (P : sig
