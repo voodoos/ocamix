@@ -34,13 +34,34 @@ module Connect_form = struct
   let default = { url = Empty; username = Empty; password = Empty }
 
   let fields =
-    let username_field =
-      Field.text_input ~id:"username" { placeholder = "again" } ()
-      |> Lwd.map ~f:(fun username_input ->
-             F (username_input, fun t v -> { t with username = v }))
+    let url_field =
+      text_input
+        ~setter:(fun t v -> { t with url = v })
+        { placeholder = "https://" }
+        ()
     in
-    (* TODO: this should be simpler *)
-    Lwd.return (Lwd_seq.element username_field)
+    let username_field =
+      text_input
+        ~setter:(fun t v -> { t with username = v })
+        { placeholder = "username" }
+        ()
+    in
+    let password_field =
+      text_input
+        ~setter:(fun t v -> { t with password = v })
+        ~validate:(fun s ->
+          if String.is_empty s then Wrong "Password field is required" else Ok s)
+        { placeholder = "password" }
+        ()
+    in
+    Lwd.return
+      (Lwd_seq.of_list
+         [
+           url_field;
+           username_field;
+           password_field;
+           submit { text = "Connect" };
+         ])
 end
 
 let ui_form () =

@@ -6,9 +6,9 @@ module Field = struct
   type 'a validation = Ok of 'a | Wrong of string | Empty
 
   type 'a t = {
-    id : string;
+    id : string option;
     elt : Elwd.t;
-    value : unit -> 'a;
+    value : Elwd.t -> 'a;
     validate : 'a -> 'a validation;
   }
 
@@ -21,32 +21,52 @@ module Field = struct
   end
 
   let make ?d ?at ?ev (type value p)
-      (module Field : S with type parameters = p and type value = value) ~id
+      (module Field : S with type parameters = p and type value = value) ?id
       (p : p) ?(validate = fun (v : value) -> Ok v) () =
     let elt = Field.render ?d ?at ?ev p () in
     Lwd.map elt ~f:(fun elt ->
-        let value () = Field.get_value elt in
+        let value elt = Field.get_value elt in
         { id; elt; value; validate })
+end
 
-  module Text_input = struct
-    type value = string
-    type parameters = { placeholder : string }
+module Text_input = struct
+  type value = string
+  type parameters = { placeholder : string }
 
-    let render p ?d ?at:_ =
-      Elwd.input ?d ~at:[ `P (At.placeholder (Jstr.v p.placeholder)) ]
+  let render p ?d ?at:_ =
+    Elwd.input ?d ~at:[ `P (At.placeholder (Jstr.v p.placeholder)) ]
 
-    let get_value t =
-      let jv = El.to_jv t in
-      Jv.get jv "value" |> Jv.to_string
-  end
+  let get_value t =
+    let jv = El.to_jv t in
+    Jv.get jv "value" |> Jv.to_string
+end
 
-  let text_input = make (module Text_input)
+module Submit = struct
+  type value = unit
+  type parameters = { text : string }
+
+  let render p ?d ?at:_ =
+    Elwd.input ?d
+      ~at:[ `P (At.type' (Jstr.v "submit")); `P (At.value (Jstr.v p.text)) ]
+
+  let get_value _ = ()
 end
 
 type ('t, 'a) form_setter = 't -> 'a Field.validation -> 't
 
 type 'res form_field =
   | F : 'a Field.t * ('form, 'a) form_setter -> 'form form_field
+
+let make_field ?d ?at ?ev (type value p)
+    (module F : Field.S with type parameters = p and type value = value) ?id
+    ~(setter : 'f -> value Field.validation -> 'f) (p : p) ?validate () =
+  let field = Field.make ?d ?at ?ev (module F) ?id p ?validate () in
+  Lwd.map field ~f:(fun field -> F (field, setter))
+
+let text_input ~(setter : 'f -> string Field.validation -> 'f) =
+  make_field (module Text_input) ~setter
+
+let submit p = make_field (module Submit) ~setter:(fun t _ -> t) p ()
 
 module type Form = sig
   type t
@@ -62,9 +82,9 @@ let create ?d ?at ?ev (type t) (module Form : Form with type t = t) on_submit :
     |> Lwd_seq.fold_monoid
          (fun (F (field, mapper)) ->
            ( Lwd_seq.element field.elt,
-             let value () = field.value () |> field.validate in
+             let value () = field.value field.elt |> field.validate in
              fun t -> mapper t @@ value () ))
-         ( (Lwd_seq.empty, fun _ -> Form.default),
+         ( (Lwd_seq.empty, Fun.id),
            fun (elts, f) (elts', f') ->
              (Lwd_seq.concat elts elts', fun t -> f' (f t)) )
   in
