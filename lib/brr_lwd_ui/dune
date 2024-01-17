@@ -1,3 +1,5 @@
+(include_subdirs unqualified)
+
 (library
  (name brr_lwd_ui)
  (public_name ocamix.brr-lwd-ui)

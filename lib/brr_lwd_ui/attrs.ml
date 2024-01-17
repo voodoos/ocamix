@@ -61,3 +61,12 @@ module Builder = struct
     let attrs = `P (At.id @@ Jstr.v s) :: t.attrs in
     to_at { t with attrs }
 end
+
+let add at_name v at = `P (At.v at_name @@ Jstr.v v) :: at
+let add_bool at_ v at = match v with false -> at | true -> `P at_ :: at
+
+let add_str at_name v at =
+  match v with "" -> at | v -> `P (At.v at_name @@ Jstr.v v) :: at
+
+let add_opt at_name v at =
+  match v with None -> at | Some v -> `P (At.v at_name @@ Jstr.v v) :: at

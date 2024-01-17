@@ -24,6 +24,12 @@ module Brr = struct
   module At = struct
     include At
 
+    module Name = struct
+      include Name
+
+      let pattern = Jstr.v "pattern"
+    end
+
     let draggable s = v Name.draggable s
   end
 end
