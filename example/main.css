@@ -32,7 +32,7 @@ body {
 }
 
 /* Draggable table */
-/* todo: borders shoujld be in theme */
+/* todo: borders should be in theme */
 .draggable-table {
     display: inline-grid;
 }
