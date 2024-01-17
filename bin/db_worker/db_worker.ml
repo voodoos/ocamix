@@ -6,11 +6,8 @@ module IDB = Brr_io.Indexed_db
 let () = Random.self_init ()
 
 module Worker () = struct
-  let source, set_source = Fut.create ()
-
-  let check_db idb =
-    let open Fut.Result_syntax in
-    let* server_id, source = source in
+  let check_db idb source =
+    let server_id, source = source in
     let report status =
       dispatch_event Servers_status_update (server_id, status)
     in
@@ -19,11 +16,8 @@ module Worker () = struct
   let idb =
     let idb, set_idb = Fut.create () in
     let _ =
-      let open Fut.Result_syntax in
       Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
-      ignore
-        (let+ () = check_db idb in
-         set_idb @@ Ok idb)
+      ignore (set_idb @@ Ok idb)
     in
     idb
 
@@ -37,14 +31,12 @@ module Worker () = struct
     let open Fut.Result_syntax in
     match q with
     | Add_servers l ->
-        set_source @@ Ok (List.hd l);
-        Fut.ok ()
-    | Get_all () ->
         let* idb = idb in
-        let store =
-          IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
-          |> IDB.Transaction.object_store (module Db.I)
-        in
+        let open Fut.Syntax in
+        let+ res = check_db idb (List.hd l) in
+        Result.map_err (fun jv -> `Jv jv) res
+    | Get_all () ->
+        let* store = read_only_store () in
         let+ req = Db.I.get_all store |> IDB.Request.fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
     | Create_view request ->
