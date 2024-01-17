@@ -214,10 +214,16 @@ let make ~reset_playlist ~fetch _ view =
     fetch view i
   in
   let img_url server_id item_id =
-    let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
-    let server : Servers.server = List.assq server_id servers in
-    Printf.sprintf "%s/Items/%s/Images/Primary?width=50"
-      server.connexion.base_url item_id
+    Lwd.map (Lwd.get Servers.var) ~f:(fun servers ->
+        let servers = Lwd_seq.to_list servers in
+        let url =
+          try
+            let server : Servers.server = List.assq server_id servers in
+            Printf.sprintf "%s/Items/%s/Images/Primary?width=50"
+              server.connexion.base_url item_id
+          with Not_found -> "error-globe-64.png"
+        in
+        At.src (Jstr.v url))
   in
   let render start_index
       { Db.Stores.Items.item = { Api.Item.name; album_id; server_id; _ }; _ } =
@@ -235,12 +241,9 @@ let make ~reset_playlist ~fetch _ view =
         (Elwd.div
            ~ev:[ `P play_on_click ]
            [
-             `P
-               (El.img
-                  ~at:
-                    [
-                      At.src (Jstr.v @@ img_url server_id album_id); At.width 50;
-                    ]
+             `R
+               (Elwd.img
+                  ~at:[ `R (img_url server_id album_id); `P (At.width 50) ]
                   ());
            ]);
       `P (El.div [ El.span [ El.txt' name ] ]);
