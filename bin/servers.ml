@@ -4,20 +4,29 @@ open Brr
 type server = { connexion : DS.connexion; status : Db.Sync.report Lwd.var }
 type t = (string * server) Lwd_seq.t Lwd.var
 
-let var : t = Lwd.var Lwd_seq.empty
+let var : t = Brr_lwd_ui.Persistent.var ~key:"ui_servers" Lwd_seq.empty
 
-let connect ~base_url ~username ~password =
-  let open Fut.Result_syntax in
-  let+ connexion = DS.connect { base_url; username; password } in
-  let status = Lwd.var Db.Sync.initial_report in
-  let server = { connexion; status } in
-  let server_id = connexion.auth_response.server_id in
+let connect (server_id, { connexion; status }) =
   let _ =
     Worker_client.listen Servers_status_update ~f:(fun (id, report) ->
         (* TODO: subscribe to a specific server's updates *)
         if String.equal server_id id then Lwd.set status report)
   in
-  let _ = Worker_client.query @@ Add_servers [ (server_id, connexion) ] in
+  ignore (Worker_client.query @@ Add_servers [ (server_id, connexion) ])
+
+let () =
+  (* Connect to servers that are already known when loading the page *)
+  let servers = Lwd.peek var |> Lwd_seq.to_list in
+  List.iter servers ~f:connect
+
+let new_connexion ~base_url ~username ~password =
+  let open Fut.Result_syntax in
+  let+ connexion = DS.connect { base_url; username; password } in
+  let status = Lwd.var Db.Sync.initial_report in
+  let server = { connexion; status } in
+  let server_id = connexion.auth_response.server_id in
+  (* TODO CHECK SERVER ID *)
+  let () = connect (server_id, server) in
   Lwd.update
     (fun servers -> Lwd_seq.(concat servers (element (server_id, server))))
     var
@@ -35,38 +44,33 @@ module Connect_form = struct
 
   let fields =
     let url_field =
-      text_input
-        ~setter:(fun t v -> { t with url = v })
-        { placeholder = "https://" }
-        ()
+      field (Field.text_input ~required:true "") (fun t v -> { t with url = v })
     in
     let username_field =
-      text_input
-        ~setter:(fun t v -> { t with username = v })
-        { placeholder = "username" }
-        ()
+      field (Field.text_input ~required:true "") (fun t v ->
+          { t with username = v })
     in
     let password_field =
-      text_input
-        ~setter:(fun t v -> { t with password = v })
-        ~validate:(fun s ->
-          if String.is_empty s then Wrong "Password field is required" else Ok s)
-        { placeholder = "password" }
-        ()
+      field (Field.password_input ~required:true "") (fun t v ->
+          { t with password = v })
     in
+    let submit = field (Field.submit "Connect") (fun t _v -> t) in
     Lwd.return
-      (Lwd_seq.of_list
-         [
-           url_field;
-           username_field;
-           password_field;
-           submit { text = "Connect" };
-         ])
+      (Lwd_seq.of_list [ url_field; username_field; password_field; submit ])
 end
 
 let ui_form () =
   let open Brr_lwd_ui.Form in
-  create (module Connect_form) (fun t -> Console.log [ "Form submitted:"; t ])
+  create
+    (module Connect_form)
+    (fun t ->
+      Console.log [ "Form submitted:"; t ];
+      match t with
+      (* FIXME: validation already happened, it's redundant to have to match *)
+      | { url = Ok url; username = Ok username; password = Ok password } ->
+          Console.log [ "Form submitted:"; url; username; password ];
+          ignore @@ new_connexion ~base_url:url ~username ~password
+      | _ -> ())
 
 let ui_status server =
   let status =
@@ -84,4 +88,11 @@ let ui_status server =
 let ui () =
   let servers = Lwd.get var in
   let statuses = Lwd_seq.map (fun (_, server) -> ui_status server) servers in
-  Elwd.div [ `R (ui_form ()); `S (Lwd_seq.lift statuses) ]
+  let ui_form =
+    (* another day another bind *)
+    Lwd.map servers ~f:(fun s ->
+        match Lwd_seq.view s with
+        | Empty -> Lwd_seq.element @@ Elwd.div [ `R (ui_form ()) ]
+        | _ -> Lwd_seq.empty)
+  in
+  Elwd.div [ `S (Lwd_seq.lift ui_form); `S (Lwd_seq.lift statuses) ]
