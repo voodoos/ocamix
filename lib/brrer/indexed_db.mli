@@ -168,3 +168,55 @@ end
 val get_factory : ?global:Jv.t -> unit -> Factory.t
 (** Returns a [Database] factory. In some browsers it might be necessary to
     specify a global object (like [window]) with the [indexedDb] property. *)
+
+(** Note about key comparisons:
+
+https://www.w3.org/TR/IndexedDB/#compare-two-keys
+
+To compare two keys a and b, run these steps:
+
+  1. Let ta be the type of a.
+  2. Let tb be the type of b.
+  3. If ta does not equal tb, then run these steps:
+    1. If ta is array, then return 1.
+    2. If tb is array, then return -1.
+    3. If ta is binary, then return 1.
+    4. If tb is binary, then return -1.
+    5. If ta is string, then return 1.
+    6. If tb is string, then return -1.
+    7. If ta is date, then return 1.
+    8. Assert: tb is date.
+    9. Return -1.
+
+  4. Let va be the value of a.
+  5. Let vb be the value of b.
+  6.  Switch on ta:
+    - number
+    - date
+      1. If va is greater than vb, then return 1.
+      2. If va is less than vb, then return -1.
+      3. Return 0.
+    - string
+      1. If va is code unit less than vb, then return -1.
+      2. If vb is code unit less than va, then return 1.
+      3. Return 0.
+    - binary
+      1. If va is byte less than vb, then return -1.
+      2. If vb is byte less than va, then return 1.
+      3. Return 0.
+    - array
+      1. Let length be the lesser of va’s size and vb’s size.
+      2. Let i be 0.
+      3. While i is less than length, then:
+        1. Let c be the result of recursively comparing two keys with va[i] and vb[i].
+        2. If c is not 0, return c.
+        3. Increase i by 1.
+      4. If va’s size is greater than vb’s size, then return 1.
+      5. If va’s size is less than vb’s size, then return -1.
+      6. Return 0.
+
+The key a is greater than the key b if the result of comparing two keys with a and b is 1.
+
+The key a is less than the key b if the result of comparing two keys with a and b is -1.
+
+The key a is equal to the key b if the result of comparing two keys with a and b is 0.*)
