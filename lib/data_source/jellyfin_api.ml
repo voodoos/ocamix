@@ -174,7 +174,7 @@ module Item = struct
     name : string; [@key "Name"]
     sort_name : string option; [@yojson.option] [@key "SortName"]
     id : string; [@key "Id"]
-    path : string; [@key "Path"]
+    path : string option; [@yojson.option] [@key "Path"]
     album_id : string option; [@yojson.option] [@key "AlbumId"]
     parent_id : string option; [@yojson.option] [@key "ParentId"]
     server_id : string; [@key "ServerId"]
@@ -188,12 +188,16 @@ module Items = struct
   type path_params = unit
 
   type params = {
+    ids : string list; [@default []] [@yojson_drop_default ( = )] [@key "ids"]
+    parent_id : string option; [@yojson.option] [@key "parentId"]
     user_id : string; [@key "userId"]
     fields : Item.field list;
     include_item_types : Item.type_ list; [@key "includeItemTypes"]
     start_index : int option; [@yojson.option] [@key "startIndex"]
-    limit : int;
+    limit : int option; [@yojson.option]
     recursive : bool;
+    enable_user_data : bool; [@key "enableUserData"]
+    enable_images : bool; [@key "enableImages"]
   }
   [@@deriving yojson]
 

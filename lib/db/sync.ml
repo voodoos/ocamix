@@ -6,6 +6,7 @@ module Source = Data_source.Jellyfin
 module OI = Stores.Orderred_items_store
 module I = Stores.Items_store
 module VF = Stores.Virtual_folder_store
+open Source.Api
 
 (* Items Hierarchy
 
@@ -20,16 +21,19 @@ module VF = Stores.Virtual_folder_store
    Jellyfin considers that Folder ("media" "92fde71d0ec577b531e7b3427b223bed") == CollectionFolder ("MusicLib" "150848cd4f44b9ae32ec5a7934de39ce")
 
    This equality can be retrived by querying the "VirtualFolders" and look at
-   the locations' paths.
+   the locations' paths. Unfortunately this is not accessible to unpriviledged users...
+
+   To actually know which folders are part of a user view we need to query the
+   items that have this view's id as a [parentId]. The actual [parentId] of
+   these items will be different and are the ids actual folders that
+   constitute this view.
 
    For simplicity (?) we consider that an item is part of a view if its path is
    prefixed by one of the view's virtual folder locations.
 *)
 
 let chunk_size = 500
-
-let include_item_types =
-  [ Source.Api.Item.Folder; AggregateFolder; MusicArtist; MusicAlbum; Audio ]
+let include_item_types = [ Source.Api.Item.MusicArtist; MusicAlbum; Audio ]
 
 let fetch_total_item_count source =
   let open Fut.Result_syntax in
@@ -39,12 +43,16 @@ let fetch_total_item_count source =
       Source.Api.Items.
         {
           (* todo make sort explicit (by date added date)*)
+          ids = [];
+          parent_id = None;
           user_id = source.auth_response.user.id;
           fields = [];
           include_item_types;
           start_index = None;
-          limit = 0;
+          limit = Some 0;
           recursive = true;
+          enable_user_data = false;
+          enable_images = false;
         }
       ()
   in
@@ -177,28 +185,73 @@ let update_views source idb =
         Database.transaction [ (module OI); (module I) ] ~mode:Readwrite idb
       in
       let s_items = Transaction.object_store (module I) transaction in
-      I.put { sorts = { date_added = -1; views = [] }; item } s_items |> ignore)
+      I.put { sorts = { date_added = -1; views = [] }; item } s_items |> ignore);
+  views
 
-let update_virtual_folders source idb =
+let deduce_virtual_folders_from_views source (views : Views.response) =
   let open Fut.Result_syntax in
-  let+ vfolders =
-    Source.query source (module Source.Api.Virtual_folders) () ()
+  let parent_ids_of_view_children { Item.id; _ } =
+    let+ res =
+      Source.query source
+        (module Source.Api.Items)
+        Source.Api.Items.
+          {
+            ids = [];
+            parent_id = Some id;
+            user_id = source.auth_response.user.id;
+            fields = [ ParentId ];
+            include_item_types = [];
+            start_index = None;
+            limit = None;
+            recursive = false;
+            enable_user_data = false;
+            enable_images = false;
+          }
+        ()
+    in
+    List.fold_left ~init:String.Set.empty res.items
+      ~f:(fun set { Item.parent_id; _ } ->
+        match parent_id with None -> set | Some pid -> String.Set.add pid set)
   in
-  List.iter vfolders ~f:(fun vf ->
-      let open Brr_io.Indexed_db in
-      let transaction =
-        Database.transaction [ (module VF) ] ~mode:Readwrite idb
-      in
-      Transaction.object_store (module VF) transaction |> VF.put vf |> ignore);
-  vfolders
+  let paths_of_parents parents =
+    let+ res =
+      Source.query source
+        (module Source.Api.Items)
+        Source.Api.Items.
+          {
+            ids = String.Set.to_list parents;
+            parent_id = None;
+            user_id = source.auth_response.user.id;
+            fields = [ Path ];
+            include_item_types = [];
+            start_index = None;
+            limit = None;
+            recursive = false;
+            enable_user_data = false;
+            enable_images = false;
+          }
+        ()
+    in
+    List.filter_map res.items ~f:(fun { Item.id; path; _ } ->
+        Option.map (fun path -> (id, path)) path)
+  in
+  let open Fut.Syntax in
+  let+ result =
+    List.map views.items ~f:(fun ({ Item.id; _ } as view) ->
+        let open Fut.Result_syntax in
+        let* parents = parent_ids_of_view_children view in
+        let+ paths = paths_of_parents parents in
+        (id, paths))
+    |> Fut.of_list
+  in
+  Result.flatten_l result
 
-let views_of_path vfolders path =
+let views_of_path (vfolders : (string * (string * string) list) list) path =
   (* We look at the prefix of a path to determine which virtual_folder (and thus
      view) it's a part of. *)
-  List.filter_map vfolders
-    ~f:(fun { Source.Api.Virtual_folders.item_id; locations; _ } ->
-      if List.exists locations ~f:(fun pre -> String.prefix ~pre path) then
-        Some item_id
+  List.filter_map vfolders ~f:(fun (view_id, locations) ->
+      if List.exists locations ~f:(fun (_, pre) -> String.prefix ~pre path) then
+        Some view_id
       else None)
 
 let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
@@ -215,8 +268,8 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   in
   let fetch_missing_items first last =
     let open Source in
-    let* () = update_views source idb in
-    let* vfolders = update_virtual_folders source idb in
+    let* views = update_views source idb in
+    let* vfolders = deduce_virtual_folders_from_views source views in
     let () = Console.info [ "Fetching items"; first; "to"; last; ":" ] in
     let fetch_queue = Queue.create () in
     let total = last - first + 1 in
@@ -227,12 +280,16 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
           Api.Items.
             {
               (* todo make sort explicit (by date added date) *)
+              ids = [];
+              parent_id = None;
               user_id = source.auth_response.user.id;
               fields = [ ParentId; Path ];
               include_item_types;
               start_index = Some start_index;
-              limit;
+              limit = Some limit;
               recursive = true;
+              enable_user_data = false;
+              enable_images = true;
             }
         in
         Queue.add req fetch_queue;
@@ -267,6 +324,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
           let s_items = Transaction.object_store (module I) transaction in
           List.iteri items ~f:(fun index ({ Api.Item.id; path; _ } as item) ->
               let index = start_index + index in
+              let path = Option.value ~default:"" path in
               let views = views_of_path vfolders path in
               ignore (OI.put { id = index; item = Some id } s_list);
               ignore
