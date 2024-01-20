@@ -5,6 +5,7 @@ open Brrer
 open Brr
 module OI = Stores.Orderred_items_store
 module I = Stores.Items_store
+module VF = Stores.Virtual_folder_store
 module Worker_api = Db_worker_api
 
 let on_upgrade_needed e q =
@@ -24,10 +25,14 @@ let on_upgrade_needed e q =
   let items =
     Database.create_object_store (module I) ~auto_increment:false db
   in
+  let virtual_folders =
+    Database.create_object_store (module VF) ~auto_increment:false db
+  in
   let index_date_added =
     I.create_index (module Stores.ItemsByDateAdded) items
   in
-  Console.info [ "Stores created:"; list; items; index_date_added ]
+  Console.info
+    [ "Stores created:"; list; items; index_date_added; virtual_folders ]
 
 let with_idb ?version ~name f =
   let open Brr_io.Indexed_db in

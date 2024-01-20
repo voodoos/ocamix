@@ -30,7 +30,7 @@ end
 module Items = struct
   open Data_source.Jellyfin.Api
 
-  type sorts = { date_added : int } [@@deriving yojson]
+  type sorts = { date_added : int; views : string list } [@@deriving yojson]
   type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
 
   module Key = struct
@@ -49,14 +49,52 @@ module Items = struct
     let path = "sorts.date_added"
   end
 
+  module Key_view_name = struct
+    type t = { views : string list; sort_name : string }
+
+    let to_jv k = Jv.(of_jv_array [| Jv.of_list of_string k.views |])
+
+    let of_jv j =
+      match Jv.(to_jv_array j) with
+      | [| views; sort_name |] ->
+          {
+            views = Jv.(to_list to_string views);
+            sort_name = Jv.to_string sort_name;
+          }
+      | _ -> assert false
+
+    let path = "sorts.views,item.SortName"
+  end
+
   let name = "items"
   let to_jv t = t_to_jv yojson_of_t t
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
   let get_key t = t.item.Item.id
 end
 
+module Virtual_folder = struct
+  open Data_source.Jellyfin_api
+
+  (* todo: multiserver: we should add a server_id key *)
+  type t = Virtual_folders.virtual_folder [@@deriving yojson]
+
+  module Key = struct
+    type t = string
+
+    let to_jv k = Jv.of_string k
+    let of_jv j = Jv.to_string j
+    let path = "ItemId"
+  end
+
+  let name = "virtual_folders"
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+  let get_key t = t.Virtual_folders.item_id
+end
+
 module Orderred_items_store = Indexed_db.Make_object_store (Orderred_items)
 module Items_store = Indexed_db.Make_object_store (Items)
+module Virtual_folder_store = Indexed_db.Make_object_store (Virtual_folder)
 
 module ItemsByDateAdded =
   Indexed_db.Make_index
@@ -65,3 +103,11 @@ module ItemsByDateAdded =
     end)
     (Items)
     (Items.Key_date_added)
+
+module ItemsByViewAndName =
+  Indexed_db.Make_index
+    (struct
+      let name = "items_by_view_and_name"
+    end)
+    (Items)
+    (Items.Key_view_name)

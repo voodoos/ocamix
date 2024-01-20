@@ -14,14 +14,17 @@ type user = {
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 module type Query = sig
+  type path_params
   type params [@@deriving yojson]
   type response [@@deriving yojson]
 
   val method' : method'
-  val endpoint : string
+  val endpoint : path_params -> string
 end
 
 module Authenticate_by_name = struct
+  type path_params = unit
+
   type params = { username : string; [@key "Username"] pw : string [@key "Pw"] }
   [@@deriving yojson]
 
@@ -33,7 +36,7 @@ module Authenticate_by_name = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Post
-  let endpoint = "/Users/AuthenticateByName"
+  let endpoint _ = "/Users/AuthenticateByName"
 end
 
 module Item = struct
@@ -49,17 +52,6 @@ module Item = struct
 
   type image_blur_hashes = {
     primary : image_blur_hash option; [@yojson.option] [@key "Primary"]
-  }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
-
-  type t = {
-    name : string; [@key "Name"]
-    sort_name : string option; [@yojson.option] [@key "SortName"]
-    id : string; [@key "Id"]
-    album_id : string; [@key "AlbumId"]
-    parent_id : string option; [@yojson.option] [@key "ParentId"]
-    server_id : string; [@key "ServerId"]
-    image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
   }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -166,9 +158,35 @@ module Item = struct
     | ThemeVideoIds
     | Width
   [@@deriving yojson]
+
+  (* The [Type] field is actually a json string but we want to see it as a
+     variant (which is a list of one string) *)
+  type type_str = type_
+
+  let type_str_of_yojson j =
+    let s = Yojson.Safe.Util.to_string j in
+    type__of_yojson (`List [ `String s ])
+
+  let yojson_of_type_str ts =
+    match yojson_of_type_ ts with `List [ json ] -> json | _ -> assert false
+
+  type t = {
+    name : string; [@key "Name"]
+    sort_name : string option; [@yojson.option] [@key "SortName"]
+    id : string; [@key "Id"]
+    path : string; [@key "Path"]
+    album_id : string option; [@yojson.option] [@key "AlbumId"]
+    parent_id : string option; [@yojson.option] [@key "ParentId"]
+    server_id : string; [@key "ServerId"]
+    image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
+    type_ : type_str; [@key "Type"]
+  }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
 end
 
 module Items = struct
+  type path_params = unit
+
   type params = {
     user_id : string; [@key "userId"]
     fields : Item.field list;
@@ -187,11 +205,48 @@ module Items = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Get
-  let endpoint = "/Items"
+  let endpoint _ = "/Items"
+end
+
+module Views = struct
+  type path_params = { user_id : string }
+
+  type params = {
+    include_external_content : bool; [@key "includeExternalContent"]
+  }
+  [@@deriving yojson]
+
+  type response = {
+    items : Item.t list; [@key "Items"]
+    total_record_count : int; [@key "TotalRecordCount"]
+    start_index : int; [@key "StartIndex"]
+  }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let method' = Get
+  let endpoint pp = Printf.sprintf "/Users/%s/Views" pp.user_id
+end
+
+module Virtual_folders = struct
+  type path_params = unit
+  type params = unit [@@deriving yojson]
+
+  type virtual_folder = {
+    name : string; [@key "Name"]
+    locations : string list; [@key "Locations"]
+    item_id : string; [@key "ItemId"]
+  }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  type response = virtual_folder list [@@deriving yojson]
+
+  let method' = Get
+  let endpoint _ = Printf.sprintf "/Library/VirtualFolders"
 end
 
 module System = struct
   module Info = struct
+    type path_params = unit
     type params = unit [@@deriving yojson]
 
     type response = {
@@ -204,7 +259,7 @@ module System = struct
     [@@deriving yojson] [@@yojson.allow_extra_fields]
 
     let method' = Get
-    let endpoint = "/System/Info"
+    let endpoint _ = "/System/Info"
   end
 end
 
@@ -216,12 +271,15 @@ let authorization ?token () =
        Version=\"0.1\"%a"
       (pp_print_option pp_token) token)
 
-let request (type p r) ?base_url ?token ?headers
-    (module Q : Query with type params = p and type response = r) (params : p) :
-    r Fut.or_error =
+let request (type pp p r) ?base_url ?token ?headers
+    (module Q : Query
+      with type path_params = pp
+       and type params = p
+       and type response = r) (params : p) (path_params : pp) : r Fut.or_error =
   let open Brr_io.Fetch in
   let uri =
-    Jstr.(Uri.of_jstr ?base:(Option.map v base_url) (v Q.endpoint))
+    Jstr.(
+      Uri.of_jstr ?base:(Option.map v base_url) (v (Q.endpoint path_params)))
     |> Result.get_ok
   in
   let authorization = authorization ?token () in
@@ -253,10 +311,10 @@ let request (type p r) ?base_url ?token ?headers
   let open Fut.Result_syntax in
   let* res = request @@ Request.v ~init url in
   let+ json = Response.as_body res |> Body.text in
-  (*
-     https://discuss.ocaml.org/t/json-encode-decode-in-js-of-ocaml/8539/10
-     orbitz: One thing to note if you use yojson in the browser: it's decoder
-     for lists is a recursive call which jsoo is not able to transform into a
-     form that does not cause a stack overflow, so if you are using it to decode
-     large lists you'll have to define your of_yojson yourself.*)
-  Q.response_of_yojson (Yojson.Safe.from_string (Jstr.to_string json))
+  let yojson = Yojson.Safe.from_string (Jstr.to_string json) in
+  try Q.response_of_yojson yojson
+  with e ->
+    Console.log
+      [ "An error occured while decoding the following response: "; yojson ];
+    Console.log [ e ];
+    raise e
