@@ -60,6 +60,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
 
   val get : Key.t -> t -> Content.t option Request.t
   val get_all : t -> Content.t Array.t Request.t
+  val get_all_keys : t -> Key.t Array.t Request.t
   (* TODO: [get_all] optional parameters *)
 
   module Cursor : sig

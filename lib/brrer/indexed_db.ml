@@ -98,6 +98,10 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     let f jv = Jv.to_array (fun c -> Content.of_jv c) jv in
     Jv.call t "getAll" [||] |> Request.of_jv ~f
 
+  let get_all_keys t =
+    let f jv = Jv.to_array (fun c -> Key.of_jv c) jv in
+    Jv.call t "getAllKeys" [||] |> Request.of_jv ~f
+
   module Cursor = struct
     type t = Jv.t
 
