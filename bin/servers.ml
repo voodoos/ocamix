@@ -44,7 +44,11 @@ module Connect_form = struct
 
   let fields =
     let url_field =
-      field (Field.text_input ~required:true "") (fun t v -> { t with url = v })
+      field
+        (Field.text_input
+           ~at:[ `P (At.value (Jstr.v "http://localhost:8096")) ]
+           ~required:true "")
+        (fun t v -> { t with url = v })
     in
     let username_field =
       field (Field.text_input ~required:true "") (fun t v ->

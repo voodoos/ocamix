@@ -235,17 +235,17 @@ let make ~reset_playlist ~fetch _ view =
            { view with start_offset = view.start_offset + start_index })
     in
     let play_on_click = Elwd.handler Ev.click play_from in
+    let img_url =
+      match album_id with
+      | None -> Lwd.return (At.src (Jstr.v "music-50.png"))
+      | Some id -> img_url server_id id
+    in
     [
       `P (El.div [ El.txt' (string_of_int (start_index + 1)) ]);
       `R
         (Elwd.div
            ~ev:[ `P play_on_click ]
-           [
-             `R
-               (Elwd.img
-                  ~at:[ `R (img_url server_id album_id); `P (At.width 50) ]
-                  ());
-           ]);
+           [ `R (Elwd.img ~at:[ `R img_url; `P (At.width 50) ] ()) ]);
       `P (El.div [ El.span [ El.txt' name ] ]);
     ]
   in
