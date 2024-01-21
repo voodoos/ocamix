@@ -42,6 +42,22 @@ module Worker () = struct
     | Create_view request ->
         let uuid = new_uuid_v4 () in
         let* store = read_only_store () in
+        let _ =
+          let f = Brr.Performance.now_ms Brr.G.performance in
+          let+ arr = Db.I.get_all_keys store |> IDB.Request.fut in
+          let _ = Array.filter ~f:(fun k -> String.prefix ~pre:"0" k) arr in
+          Brr.Console.log
+            [ "allkeys took"; Brr.Performance.now_ms Brr.G.performance -. f ];
+          let f = Brr.Performance.now_ms Brr.G.performance in
+          let+ _ =
+            Db.I.fold_keys ~init:[] ~f:(fun acc key _ -> key :: acc)
+            @@ Db.I.open_key_cursor store
+          in
+          Brr.Console.log
+            [
+              "allkeys_fold took"; Brr.Performance.now_ms Brr.G.performance -. f;
+            ]
+        in
         let+ item_count = Db.I.count () store |> IDB.Request.fut in
         let order = Db.View.Order.of_sort ~size:item_count request.sort in
         { Db.View.uuid; request; order; start_offset = 0; item_count }
