@@ -1,5 +1,13 @@
 open Brr
 
+module Key_path = struct
+  type t = Id of string | S of t array
+
+  let rec to_jv = function
+    | Id p -> Jv.of_string p
+    | S keys -> Jv.of_array to_jv keys
+end
+
 module Events = struct
   module Version_change = struct
     type t = Jv.t
@@ -47,7 +55,7 @@ end
 module type Key = sig
   type t
 
-  val path : string (* todo key_path should be optional *)
+  val path : Key_path.t
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
 end
@@ -230,12 +238,11 @@ module Make_object_store (C : Store_content_intf) = struct
     Jv.call t "add" args |> Request.of_jv ~f:Content.Key.of_jv
 
   let create_index (type t') (module I : Index with type t = t') t : t' =
-    Jv.call t "createIndex" [| Jv.of_string I.name; Jv.of_string I.Key.path |]
-    |> I.of_jv
+    let key_path = Key_path.to_jv I.Key.path in
+    Jv.call t "createIndex" [| Jv.of_string I.name; key_path |] |> I.of_jv
 
   let index (type t') (module I : Index with type t = t') t : t' =
-    Jv.call t "index" [| Jv.of_string I.name; Jv.of_string I.Key.path |]
-    |> I.of_jv
+    Jv.call t "index" [| Jv.of_string I.name |] |> I.of_jv
 
   let put v ?(key : Content.Key.t option) t : Content.Key.t Request.t =
     let args =
@@ -277,8 +284,10 @@ module Database = struct
       ?(auto_increment = false) (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
     (* TODO: move autoincrement to store_content *)
-    let opts = ("keyPath", Jv.of_string S.Content.Key.path) :: opts in
+    let key_path = Key_path.to_jv S.Content.Key.path in
+    let opts = ("keyPath", key_path) :: opts in
     let options = Jv.obj @@ Array.of_list opts in
+    Console.info [ "new object store with options:"; options ];
     (* TODO: keypath should be optionnal *)
     Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
     |> S.of_jv

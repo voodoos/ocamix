@@ -1,5 +1,11 @@
 open Brr
 
+module Key_path : sig
+  type t = Id of string | S of t array
+
+  val to_jv : t -> Jv.t
+end
+
 module Events : sig
   module Version_change : sig
     type t
@@ -34,7 +40,7 @@ end
 module type Key = sig
   type t
 
-  val path : string (* todo key_path should be optional *)
+  val path : Key_path.t
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
 end
