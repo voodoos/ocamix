@@ -55,14 +55,6 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
 
   external of_jv : Jv.t -> t = "%identity"
 
-  val count : unit -> t -> int Request.t
-  (** TODO: count has optional parameters *)
-
-  val get : Key.t -> t -> Content.t option Request.t
-  val get_all : t -> Content.t Array.t Request.t
-  val get_all_keys : t -> Key.t Array.t Request.t
-  (* TODO: [get_all] optional parameters *)
-
   module Cursor : sig
     type t
 
@@ -84,11 +76,42 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
     val update : Content.t -> t -> Content.Key.t Request.t
   end
 
+  val count : unit -> t -> int Request.t
+  (** TODO: count has optional parameters *)
+
+  val get : Key.t -> t -> Content.t option Request.t
+
+  val get_all : t -> Content.t Array.t Request.t
+  (** [get_all] retrieves all objects that are inside the index. There is a
+    performance cost associated with looking at the value property of a cursor,
+    because the object is created lazily and [get_all] force the cration of all
+    objects in the store.
+
+    TODO: optional parameters *)
+
+  val get_all_keys : t -> Content.Key.t Array.t Request.t
+  (**  [get_all_keys] retrieves the list of all primary keys.
+
+    TODO optional parameters *)
+
+  val fold_keys :
+    init:'a ->
+    f:('a -> Key.t -> Content.Key.t -> 'a) ->
+    Cursor.t option Request.t ->
+    'a Fut.or_error
+  (** [fold_keys c] enable convenient iteration other the keys of an index. It
+      is slower than [get_all_keys] but is not restricted to the primary key.
+      This utility function is specific to the bindings and implemented by
+      iterating other the key_cursor opened with by given request. *)
+
   val open_cursor :
     ?query:Jv.t ->
     ?direction:Direction.t ->
     t ->
     Cursor_with_value.t option Request.t
+
+  val open_key_cursor :
+    ?query:Jv.t -> ?direction:Direction.t -> t -> Cursor.t option Request.t
 end
 
 module type Store = sig

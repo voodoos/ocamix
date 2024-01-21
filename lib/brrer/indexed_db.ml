@@ -99,7 +99,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     Jv.call t "getAll" [||] |> Request.of_jv ~f
 
   let get_all_keys t =
-    let f jv = Jv.to_array (fun c -> Key.of_jv c) jv in
+    let f jv = Jv.to_array (fun c -> Content.Key.of_jv c) jv in
     Jv.call t "getAllKeys" [||] |> Request.of_jv ~f
 
   module Cursor = struct
@@ -148,6 +148,43 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     in
     let f jv = Jv.to_option Cursor_with_value.of_jv jv in
     Jv.call t "openCursor" args |> Request.of_jv ~f
+
+  let open_key_cursor ?query ?direction t : Cursor_with_value.t option Request.t
+      =
+    let direction = Option.map Direction.to_jv direction in
+    let args =
+      (* todo: query !*)
+      match (query, direction) with
+      | Some q, Some d -> [| q; d |]
+      | None, Some d -> [| Jv.null; d |]
+      | Some q, None -> [| q |]
+      | None, None -> [||]
+    in
+    let f jv = Jv.to_option Cursor.of_jv jv in
+    Jv.call t "openKeyCursor" args |> Request.of_jv ~f
+
+  (* [fold_key] will fold over all keys returned by the given cursor.
+     Note that it is less efficient than [get_all_keys] to build an array
+     of every keys. It's most probably due to a caching-based optimization
+     of the [get_all_keys] results (at least in Firefox). *)
+  let fold_keys ~init ~f cursor_req =
+    let result, set_result = Fut.create () in
+    let acc = ref init in
+    let _ =
+      Request.on_success cursor_req ~f:(fun _ev r ->
+          match Request.result r with
+          | None -> set_result (Ok !acc)
+          | Some cursor ->
+              (* The cursor should not be out of range at that point so the keys
+                 should have a value. *)
+              let key = Cursor.key cursor |> Option.get in
+              let primary_key = Cursor.primary_key cursor |> Option.get in
+              acc := f !acc key primary_key;
+              Cursor.continue cursor)
+      |> Request.on_error ~f:(fun _ev req ->
+             set_result (Error (Request.error req)))
+    in
+    result
 end
 
 module type Store = sig
