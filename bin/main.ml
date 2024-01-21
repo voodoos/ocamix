@@ -1,10 +1,6 @@
 open Import
 open Brr
 
-let _ =
-  Worker_client.listen Servers_status_update ~f:(fun v ->
-      Console.log [ "listened"; v ])
-
 let fetch view i = Worker_client.(query (Get (view, i)))
 
 module P = Player.Playback_controller (struct
