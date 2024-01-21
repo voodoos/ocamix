@@ -180,6 +180,8 @@ module Item = struct
     server_id : string; [@key "ServerId"]
     image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
     type_ : type_str; [@key "Type"]
+    collection_type : string option;
+        [@default None] [@yojson_drop_default ( = )] [@key "CollectionType"]
   }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 end

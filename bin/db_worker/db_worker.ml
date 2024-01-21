@@ -2,6 +2,7 @@ open! Std
 open Db.Worker_api
 open Brrer
 module IDB = Brr_io.Indexed_db
+module IS = Db.Item_store
 
 let () = Random.self_init ()
 
@@ -39,12 +40,25 @@ module Worker () = struct
         let* store = read_only_store () in
         let+ req = Db.I.get_all store |> IDB.Request.fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
+    | Get_libraries () ->
+        let* store = read_only_store () in
+        let index = IS.(index (module IS.Index.Type_Name) store) in
+        let lower = Jv.of_array Jv.of_string [| "music" |] in
+        let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
+        let query =
+          IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
+            ()
+        in
+        let* keys =
+          IS.Index.Type_Name.get_all_keys ~query index |> IDB.Request.fut
+        in
+        Fut.ok keys
     | Create_view request ->
         let uuid = new_uuid_v4 () in
         let* store = read_only_store () in
         let _ =
           let f = Brr.Performance.now_ms Brr.G.performance in
-          let+ arr = Db.I.get_all_keys store |> IDB.Request.fut in
+          let+ arr = IS.get_all_keys store |> IDB.Request.fut in
           Brr.Console.log
             [ "allkeys took"; Brr.Performance.now_ms Brr.G.performance -. f ];
           let f = Brr.Performance.now_ms Brr.G.performance in

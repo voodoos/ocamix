@@ -89,6 +89,9 @@ let ui_status server =
   in
   status
 
+let get_views () = Worker_client.query (Get_libraries ())
+let _ = get_views ()
+
 let ui () =
   let servers = Lwd.get var in
   let statuses = Lwd_seq.map (fun (_, server) -> ui_status server) servers in

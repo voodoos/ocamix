@@ -1,6 +1,7 @@
 open! Std
 open Brrer
 open Brr_io
+module Api = Data_source.Jellyfin_api
 
 (* Proposition:
    - Use primary key to provide filtering
@@ -79,20 +80,45 @@ module Items = struct
   end
 
   module Key_view_name = struct
-    type t = { views : string list; sort_name : string }
+    type t = {
+      views : string list;
+      collection_type : string;
+      sort_name : string;
+    }
 
-    let to_jv k = Jv.(of_jv_array [| Jv.of_list of_string k.views |])
+    let to_jv _k = assert false
 
     let of_jv j =
       match Jv.(to_jv_array j) with
-      | [| views; sort_name |] ->
+      | [| views; collection_type; sort_name |] ->
           {
             views = Jv.(to_list to_string views);
+            collection_type = Jv.to_string collection_type;
             sort_name = Jv.to_string sort_name;
           }
       | _ -> assert false
 
-    let path = Indexed_db.Key_path.S [| Id "sorts.views"; Id "item.SortName" |]
+    let path =
+      Indexed_db.Key_path.S
+        [| Id "sorts.views"; Id "item.CollectionType"; Id "item.SortName" |]
+  end
+
+  module Key_type_name = struct
+    type t = { collection_type : string; sort_name : string }
+
+    let to_jv _t = assert false
+
+    let of_jv j =
+      match Jv.(to_jv_array j) with
+      | [| collection_type; sort_name |] ->
+          {
+            collection_type = Jv.to_string collection_type;
+            sort_name = Jv.to_string sort_name;
+          }
+      | _ -> assert false
+
+    let path =
+      Indexed_db.Key_path.S [| Id "item.CollectionType"; Id "sorts.sort_name" |]
   end
 
   let name = "items"
@@ -140,3 +166,11 @@ module ItemsByViewAndName =
     end)
     (Items)
     (Items.Key_view_name)
+
+module ItemsByTypeAndName =
+  Indexed_db.Make_index
+    (struct
+      let name = "items_by_type_and_name"
+    end)
+    (Items)
+    (Items.Key_type_name)

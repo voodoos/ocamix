@@ -8,6 +8,14 @@ module I = Stores.Items_store
 module VF = Stores.Virtual_folder_store
 module Worker_api = Db_worker_api
 
+module Item_store = struct
+  include Stores.Items_store
+
+  module Index = struct
+    module Type_Name = Stores.ItemsByTypeAndName
+  end
+end
+
 let on_upgrade_needed e q =
   let open Brr_io.Indexed_db in
   let old_version, new_version =
@@ -31,6 +39,7 @@ let on_upgrade_needed e q =
   let index_date_added =
     I.create_index (module Stores.ItemsByDateAdded) items
   in
+  let _ = I.create_index (module Stores.ItemsByTypeAndName) items in
   Console.info
     [ "Stores created:"; list; items; index_date_added; virtual_folders ]
 
