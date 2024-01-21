@@ -8,6 +8,17 @@ module Key_path = struct
     | S keys -> Jv.of_array to_jv keys
 end
 
+module Key_range = struct
+  type t = Jv.t
+
+  external of_jv : Jv.t -> 'a = "%identity"
+
+  let bound ~lower ~upper ?(lower_open = false) ?(upper_open = false) () =
+    let c = Jv.get Jv.global "IDBKeyRange" in
+    Jv.call c "bound"
+      [| lower; upper; Jv.of_bool lower_open; Jv.of_bool upper_open |]
+end
+
 module Events = struct
   module Version_change = struct
     type t = Jv.t
@@ -106,9 +117,10 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     let f jv = Jv.to_array (fun c -> Content.of_jv c) jv in
     Jv.call t "getAll" [||] |> Request.of_jv ~f
 
-  let get_all_keys t =
+  let get_all_keys ?query t =
+    let args = match query with None -> [||] | Some query -> [| query |] in
     let f jv = Jv.to_array (fun c -> Content.Key.of_jv c) jv in
-    Jv.call t "getAllKeys" [||] |> Request.of_jv ~f
+    Jv.call t "getAllKeys" args |> Request.of_jv ~f
 
   module Cursor = struct
     type t = Jv.t

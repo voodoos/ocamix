@@ -6,6 +6,20 @@ module Key_path : sig
   val to_jv : t -> Jv.t
 end
 
+module Key_range : sig
+  type t
+
+  val of_jv : Jv.t -> t
+
+  val bound :
+    lower:Jv.t ->
+    upper:Jv.t ->
+    ?lower_open:bool ->
+    ?upper_open:bool ->
+    unit ->
+    t
+end
+
 module Events : sig
   module Version_change : sig
     type t
@@ -95,10 +109,11 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
 
     TODO: optional parameters *)
 
-  val get_all_keys : t -> Content.Key.t Array.t Request.t
+  val get_all_keys : ?query:Key_range.t -> t -> Content.Key.t Array.t Request.t
   (**  [get_all_keys] retrieves the list of all primary keys.
 
-    TODO optional parameters *)
+    TODO stronger query type
+    TODO optional count parameter *)
 
   val fold_keys :
     init:'a ->
