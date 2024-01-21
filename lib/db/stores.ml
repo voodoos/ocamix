@@ -2,6 +2,15 @@ open! Std
 open Brrer
 open Brr_io
 
+(* Proposition:
+   - Use primary key to provide filtering
+   - Use index keys to provide sorts
+
+   Big primary keys drive the cost of [get_all_keys] up.
+   We could delegate some filtering to the index keys if necessary.
+
+    We could also tried to pre-process or compress the keys *)
+
 let t_to_jv encoder t =
   encoder t |> Yojson.Safe.to_string |> Jstr.of_string |> Brr.Json.decode
   |> Result.get_exn
@@ -18,7 +27,7 @@ module Orderred_items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = "id"
+    let path = Indexed_db.Key_path.Id "id"
   end
 
   let name = "items_by_date_added"
@@ -30,15 +39,35 @@ end
 module Items = struct
   open Data_source.Jellyfin.Api
 
-  type sorts = { date_added : int; views : string list } [@@deriving yojson]
+  type sorts = { date_added : int; views : string list; sort_name : string }
+  [@@deriving yojson]
+
   type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
 
   module Key = struct
-    type t = string
+    type t = string * string * string list
 
-    let to_jv k = Jv.of_string k
-    let of_jv j = Jv.to_string j
-    let path = "item.Id"
+    let to_jv (id, sort_name, views) =
+      let id = Jv.of_string id in
+      let sort_name = Jv.of_string sort_name in
+      let views = Jv.of_list Jv.of_string views in
+      Jv.of_jv_array [| id; sort_name; views |]
+
+    let of_jv j =
+      match Jv.to_jv_array j with
+      | [| id; sort_name; views |] ->
+          let id = Jv.to_string id in
+          let sort_name = Jv.to_string sort_name in
+          let views = Jv.to_list Jv.to_string views in
+          (id, sort_name, views)
+      | _ -> assert false
+
+    let path =
+      Indexed_db.Key_path.(
+        S [| Id "item.Id"; Id "item.Name"; Id "sorts.views" |])
+    (* "item.Id,item.sorts.sort_name" *)
+    (* pc 110ms "let path = "item.Id"*)
+       (* pc 214ms "let path = "item.Id, item.Name"*)
   end
 
   module Key_date_added = struct
@@ -46,7 +75,7 @@ module Items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = "sorts.date_added"
+    let path = Indexed_db.Key_path.Id "sorts.date_added"
   end
 
   module Key_view_name = struct
@@ -63,13 +92,13 @@ module Items = struct
           }
       | _ -> assert false
 
-    let path = "sorts.views,item.SortName"
+    let path = Indexed_db.Key_path.S [| Id "sorts.views"; Id "item.SortName" |]
   end
 
   let name = "items"
   let to_jv t = t_to_jv yojson_of_t t
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-  let get_key t = t.item.Item.id
+  let get_key t = (t.sorts.sort_name, t.item.Item.id, t.sorts.views)
 end
 
 module Virtual_folder = struct
@@ -83,7 +112,7 @@ module Virtual_folder = struct
 
     let to_jv k = Jv.of_string k
     let of_jv j = Jv.to_string j
-    let path = "ItemId"
+    let path = Indexed_db.Key_path.Id "ItemId"
   end
 
   let name = "virtual_folders"

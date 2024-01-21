@@ -179,13 +179,15 @@ let update_views source idb =
       { include_external_content = false }
       { user_id = source.auth_response.user.id }
   in
-  List.iter views.items ~f:(fun item ->
+  List.iter views.items ~f:(fun (item : Item.t) ->
       let open Brr_io.Indexed_db in
       let transaction =
         Database.transaction [ (module OI); (module I) ] ~mode:Readwrite idb
       in
       let s_items = Transaction.object_store (module I) transaction in
-      I.put { sorts = { date_added = -1; views = [] }; item } s_items |> ignore);
+      let sort_name = Option.value item.sort_name ~default:item.name in
+      I.put { sorts = { date_added = -1; views = []; sort_name }; item } s_items
+      |> ignore);
   views
 
 let deduce_virtual_folders_from_views source (views : Views.response) =
@@ -326,9 +328,12 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               let index = start_index + index in
               let path = Option.value ~default:"" path in
               let views = views_of_path vfolders path in
+              let sort_name = Option.value item.sort_name ~default:item.name in
               ignore (OI.put { id = index; item = Some id } s_list);
               ignore
-                (I.put { sorts = { date_added = index; views }; item } s_items))
+                (I.put
+                   { sorts = { date_added = index; views; sort_name }; item }
+                   s_items))
         in
         idb_put ~start_index items
       in

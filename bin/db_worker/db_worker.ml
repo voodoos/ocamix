@@ -45,9 +45,26 @@ module Worker () = struct
         let _ =
           let f = Brr.Performance.now_ms Brr.G.performance in
           let+ arr = Db.I.get_all_keys store |> IDB.Request.fut in
-          let _ = Array.filter ~f:(fun k -> String.prefix ~pre:"0" k) arr in
           Brr.Console.log
             [ "allkeys took"; Brr.Performance.now_ms Brr.G.performance -. f ];
+          let f = Brr.Performance.now_ms Brr.G.performance in
+          let () =
+            Array.fast_sort arr ~cmp:(fun (_, k1, _) (_, k2, _) ->
+                String.compare k1 k2)
+          in
+          Brr.Console.log
+            [ "sorting took"; Brr.Performance.now_ms Brr.G.performance -. f ];
+          let f = Brr.Performance.now_ms Brr.G.performance in
+
+          let arr =
+            Array.filter ~f:(fun (_, k, _) -> String.prefix ~pre:"0" k) arr
+          in
+          Brr.Console.log
+            [
+              "filtering took";
+              Brr.Performance.now_ms Brr.G.performance -. f;
+              arr;
+            ];
           let f = Brr.Performance.now_ms Brr.G.performance in
           let+ _ =
             Db.I.fold_keys ~init:[] ~f:(fun acc key _ -> key :: acc)
