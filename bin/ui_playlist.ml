@@ -54,6 +54,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
   ignore placeholder;
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let top i =
+    (* TODO FIXME: chrome doesn't like absolutely positionnned subgrids*)
     Printf.sprintf "top: calc(%s * %i); height: %s !important;" row_size i
       row_size
   in

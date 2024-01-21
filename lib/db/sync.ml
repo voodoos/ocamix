@@ -299,7 +299,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
     in
     enqueue ~start_index:first total;
     let total_queries = Queue.length fetch_queue in
-    let rec run_queue ?(threads = 1) q =
+    let rec run_queue ?(threads = 2) q =
       assert (threads > 0);
       let rec take_n acc n =
         if n = 0 then List.rev acc
