@@ -106,6 +106,8 @@ module Worker () = struct
         let order = Db.View.Order.of_sort ~size:item_count request.sort in
         { Db.View.uuid; request; order; start_offset = 0; item_count }
     | Get (view, index) -> (
+        (* This request is critical to virtual lists performances and should
+           be as fast as possible. *)
         let index = index + view.start_offset in
         let index = Db.View.Order.apply view.order index in
         let* store = read_only_store () in

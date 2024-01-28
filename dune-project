@@ -18,6 +18,7 @@
  (description "A _really_ long description")
  (depends
   containers
+  containers-data
   js_of_ocaml
   js_of_ocaml-ppx
   brr

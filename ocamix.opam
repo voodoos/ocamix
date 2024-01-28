@@ -10,6 +10,7 @@ bug-reports: "https://github.com/voodoos/ocamix/issues"
 depends: [
   "dune" {>= "3.11"}
   "containers"
+  "containers-data"
   "js_of_ocaml"
   "js_of_ocaml-ppx"
   "brr"
