@@ -2,6 +2,12 @@ include Std
 module DS = Data_source.Jellyfin
 module Elwd = Brr_lwd.Elwd
 
+module String = struct
+  include String
+  module MMap = CCMultiMap.Make (String)
+  module Items_MultiMap = MMap (Db.Stores.Items)
+end
+
 module Utils = struct
   let with_timing ?(name = "") f =
     let t = Brr.Performance.now_ms Brr.G.performance in

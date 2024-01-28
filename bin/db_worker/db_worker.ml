@@ -52,7 +52,18 @@ module Worker () = struct
         let* keys =
           IS.Index.Type_Name.get_all_keys ~query index |> IDB.Request.fut
         in
-        Fut.ok keys
+        let open Fut.Syntax in
+        let+ items =
+          List.map (Array.to_list keys) ~f:(fun k ->
+              IS.get k store |> IDB.Request.fut)
+          |> Fut.of_list
+        in
+        let items =
+          Result.flatten_l items
+          |> Result.map (fun l ->
+                 List.map l ~f:(Option.get_exn_or "Item should exists."))
+        in
+        items
     | Create_view request ->
         let uuid = new_uuid_v4 () in
         let* store = read_only_store () in

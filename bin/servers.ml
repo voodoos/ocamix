@@ -89,14 +89,16 @@ let ui_status server =
   in
   status
 
-let get_views () = Worker_client.query (Get_libraries ())
-let _ = get_views ()
+let servers_libraries () =
+  let open Fut.Result_syntax in
+  let+ views = Worker_client.query (Get_libraries ()) in
+  List.fold_left ~init:String.Items_MultiMap.empty views ~f:(fun acc v ->
+      String.Items_MultiMap.add acc v.Db.Stores.Items.item.server_id v)
 
 let ui () =
   let servers = Lwd.get var in
   let statuses = Lwd_seq.map (fun (_, server) -> ui_status server) servers in
   let ui_form =
-    (* another day another bind *)
     Lwd.map servers ~f:(fun s ->
         match Lwd_seq.view s with
         | Empty -> Lwd_seq.element @@ Elwd.div [ `R (ui_form ()) ]
