@@ -227,7 +227,11 @@ let make ~reset_playlist ~fetch _ view =
         At.src (Jstr.v url))
   in
   let render start_index
-      { Db.Stores.Items.item = { Api.Item.name; album_id; server_id; _ }; _ } =
+      {
+        Db.Stores.Items.item =
+          { Api.Item.id; name; album_id; server_id; image_blur_hashes; _ };
+        _;
+      } =
     let play_from _ =
       ignore
         (let open Fut.Result_syntax in
@@ -237,12 +241,18 @@ let make ~reset_playlist ~fetch _ view =
     in
     let play_on_click = Elwd.handler Ev.click play_from in
     let img_url =
-      match album_id with
-      | None -> Lwd.return (At.src (Jstr.v "music-50.png"))
-      | Some id -> img_url server_id id
+      match (image_blur_hashes, album_id) with
+      | { primary = None }, _ | _, None ->
+          Lwd.return (At.src (Jstr.v "music-50.png"))
+      | _, Some id -> img_url server_id id
+    in
+    let status =
+      Lwd.map (Lwd.get Player.now_playing) ~f:(function
+        | Some { item_id; _ } when String.equal item_id id -> El.txt' "|>"
+        | Some _ | None -> El.txt' (string_of_int (start_index + 1)))
     in
     [
-      `P (El.div [ El.txt' (string_of_int (start_index + 1)) ]);
+      `R (Elwd.div [ `R status ]);
       `R
         (Elwd.div
            ~ev:[ `P play_on_click ]
