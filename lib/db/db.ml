@@ -12,7 +12,9 @@ module Item_store = struct
   include Stores.Items_store
 
   module Index = struct
+    module Id = Stores.ItemsById
     module Type_Name = Stores.ItemsByTypeAndName
+    module Kind_View = Stores.ItemsByViewAndKind
   end
 end
 
@@ -40,6 +42,8 @@ let on_upgrade_needed e q =
     I.create_index (module Stores.ItemsByDateAdded) items
   in
   let _ = I.create_index (module Stores.ItemsByTypeAndName) items in
+  let _ = I.create_index (module Stores.ItemsByViewAndKind) items in
+  let _ = I.create_index (module Stores.ItemsById) items in
   Console.info
     [ "Stores created:"; list; items; index_date_added; virtual_folders ]
 

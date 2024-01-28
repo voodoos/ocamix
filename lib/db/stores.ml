@@ -45,6 +45,8 @@ module Items = struct
 
   type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
 
+  let compare t t' = String.compare t.sorts.sort_name t'.sorts.sort_name
+
   module Key = struct
     type t = string * string * string list
 
@@ -79,28 +81,27 @@ module Items = struct
     let path = Indexed_db.Key_path.Id "sorts.date_added"
   end
 
-  module Key_view_name = struct
-    type t = {
-      views : string list;
-      collection_type : string;
-      sort_name : string;
-    }
+  module Key_id = struct
+    type t = string
+
+    let to_jv k = Jv.of_string k
+    let of_jv j = Jv.to_string j
+    let path = Indexed_db.Key_path.Id "item.Id"
+  end
+
+  module Key_view_kind = struct
+    (* todo: use a enum for kinds *)
+    type t = { type' : string; views : string list }
 
     let to_jv _k = assert false
 
     let of_jv j =
       match Jv.(to_jv_array j) with
-      | [| views; collection_type; sort_name |] ->
-          {
-            views = Jv.(to_list to_string views);
-            collection_type = Jv.to_string collection_type;
-            sort_name = Jv.to_string sort_name;
-          }
+      | [| type'; views |] ->
+          { type' = Jv.to_string type'; views = Jv.(to_list to_string views) }
       | _ -> assert false
 
-    let path =
-      Indexed_db.Key_path.S
-        [| Id "sorts.views"; Id "item.CollectionType"; Id "item.SortName" |]
+    let path = Indexed_db.Key_path.S [| Id "item.Type"; Id "sorts.views" |]
   end
 
   module Key_type_name = struct
@@ -159,13 +160,21 @@ module ItemsByDateAdded =
     (Items)
     (Items.Key_date_added)
 
-module ItemsByViewAndName =
+module ItemsByViewAndKind =
   Indexed_db.Make_index
     (struct
-      let name = "items_by_view_and_name"
+      let name = "items_by_view_and_kind"
     end)
     (Items)
-    (Items.Key_view_name)
+    (Items.Key_view_kind)
+
+module ItemsById =
+  Indexed_db.Make_index
+    (struct
+      let name = "items_by_id"
+    end)
+    (Items)
+    (Items.Key_id)
 
 module ItemsByTypeAndName =
   Indexed_db.Make_index
