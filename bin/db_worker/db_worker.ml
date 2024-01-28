@@ -1,6 +1,7 @@
 open! Std
 open Db.Worker_api
 open Brrer
+open! Brr
 module IDB = Brr_io.Indexed_db
 module IS = Db.Item_store
 
@@ -27,6 +28,39 @@ module Worker () = struct
     let+ idb = idb in
     IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
     |> IDB.Transaction.object_store (module Db.I)
+
+  let get_view_keys =
+    let view_memo : (string Db.View.selection, IS.Content.Key.t array) Hashtbl.t
+        =
+      Hashtbl.create 64
+    in
+    fun store { Db.View.kind = _; src_views; sort = _; _ } ->
+      (* todo: staged memoization + specialized queries using indexes *)
+      let open Fut.Result_syntax in
+      try Fut.ok @@ Hashtbl.find view_memo src_views
+      with Not_found ->
+        let f = Performance.now_ms G.performance in
+        let idx = IS.index (module IS.Index.Kind_View) store in
+        let+ all_keys =
+          let lower = Jv.of_array Jv.of_string [| "Audio" |] in
+          let upper = Jv.of_array Jv.of_string [| "Audio\u{0}" |] in
+          let query =
+            IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
+              ()
+          in
+          IS.Index.Kind_View.get_all_keys ~query idx |> IDB.Request.fut
+        in
+        let keys =
+          match src_views with
+          | All -> all_keys
+          | Only src_views ->
+              Array.filter all_keys ~f:(fun (_, _sn, views) ->
+                  List.exists views ~f:(fun v -> List.memq v ~set:src_views))
+        in
+        let f' = Performance.now_ms G.performance in
+        Console.log [ "Uncached view creation took:"; f' -. f; "ms" ];
+        Hashtbl.add view_memo src_views keys;
+        keys
 
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
@@ -67,50 +101,17 @@ module Worker () = struct
     | Create_view request ->
         let uuid = new_uuid_v4 () in
         let* store = read_only_store () in
-        let _ =
-          let f = Brr.Performance.now_ms Brr.G.performance in
-          let+ arr = IS.get_all_keys store |> IDB.Request.fut in
-          Brr.Console.log
-            [ "allkeys took"; Brr.Performance.now_ms Brr.G.performance -. f ];
-          let f = Brr.Performance.now_ms Brr.G.performance in
-          let () =
-            Array.fast_sort arr ~cmp:(fun (_, k1, _) (_, k2, _) ->
-                String.compare k1 k2)
-          in
-          Brr.Console.log
-            [ "sorting took"; Brr.Performance.now_ms Brr.G.performance -. f ];
-          let f = Brr.Performance.now_ms Brr.G.performance in
-
-          let arr =
-            Array.filter ~f:(fun (_, k, _) -> String.prefix ~pre:"0" k) arr
-          in
-          Brr.Console.log
-            [
-              "filtering took";
-              Brr.Performance.now_ms Brr.G.performance -. f;
-              arr;
-            ];
-          let f = Brr.Performance.now_ms Brr.G.performance in
-          let+ _ =
-            Db.I.fold_keys ~init:[] ~f:(fun acc key _ -> key :: acc)
-            @@ Db.I.open_key_cursor store
-          in
-          Brr.Console.log
-            [
-              "allkeys_fold took"; Brr.Performance.now_ms Brr.G.performance -. f;
-            ]
-        in
-        let+ item_count = Db.I.count () store |> IDB.Request.fut in
+        let+ keys = get_view_keys store request in
+        let item_count = Array.length keys in
         let order = Db.View.Order.of_sort ~size:item_count request.sort in
         { Db.View.uuid; request; order; start_offset = 0; item_count }
     | Get (view, index) -> (
         let index = index + view.start_offset in
         let index = Db.View.Order.apply view.order index in
         let* store = read_only_store () in
-        let idx = Db.I.index (module Db.Stores.ItemsByDateAdded) store in
-        let* res =
-          Db.Stores.ItemsByDateAdded.get index idx |> IDB.Request.fut
-        in
+        let* keys = get_view_keys store view.request in
+        let key = keys.(index) in
+        let* res = IS.get key store |> IDB.Request.fut in
         match res with
         | Some res -> Fut.ok res
         | None -> Fut.return (Error (`Msg "Item not found")))

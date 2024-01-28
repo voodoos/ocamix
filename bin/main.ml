@@ -22,7 +22,6 @@ let app _idb =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let main_view = Worker_client.query (Create_view Db.View.(req ())) in
   let player = P.make () in
   let status =
     Elwd.div
@@ -38,10 +37,45 @@ let app _idb =
         ]
       [ `R player ]
   in
+  let libraries =
+    let var = Lwd.var [] in
+    let _ =
+      let open Fut.Result_syntax in
+      let+ libraries = Servers.servers_libraries () in
+      let list =
+        String.Items_MultiMap.fold libraries [] (fun acc _ { item; _ } ->
+            item :: acc)
+      in
+      Lwd.set var list
+    in
+    var
+  in
+  let filters, f_value =
+    let f_libraries =
+      let open Brr_lwd_ui.Field_checkboxes in
+      let choices =
+        Lwd.map (Lwd.get libraries) ~f:(fun l ->
+            Console.log [ "Libraries:"; l ];
+            Lwd_seq.transform_list l (fun l ->
+                Lwd_seq.element @@ Check (l.id, [ `P (El.txt' l.name) ], true)))
+      in
+      make { name = "pouet"; desc = choices }
+    in
+    (f_libraries.field, f_libraries.value)
+  in
+  let main_view =
+    Lwd.map f_value ~f:(fun l ->
+        Worker_client.query
+          (Create_view Db.View.(req Audio ~src_views:(Only l) ~sort:Random ())))
+  in
+
   let main_list =
-    Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player main_view
+    Lwd.map main_view ~f:(fun main_view ->
+        Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player
+          main_view)
   in
   let now_playing =
+    (*todo: do we need that join ?*)
     Lwd.bind (Lwd.get Player.playstate) ~f:(function
       | None -> Elwd.div []
       | Some { playlist; _ } ->
@@ -50,7 +84,19 @@ let app _idb =
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
-    [ `R status; `R main_list; `R now_playing; `R player_ui ]
+    [
+      `R status;
+      `R
+        (Elwd.div
+           ~at:[ `P (At.class' (Jstr.v "item-list")) ]
+           [
+             `R filters;
+             `R ((*todo: do we need that join ?*) Lwd.join main_list);
+           ]);
+      `R now_playing;
+      `R player_ui;
+      `P (El.div [ El.txt' "icons by icons8" ]);
+    ]
 
 let is_storage_persistent =
   Brr_io.Storage.(manager G.navigator |> Manager.persist)

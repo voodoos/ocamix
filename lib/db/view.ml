@@ -20,7 +20,15 @@ module Order = struct
     match t with Initial -> i | Custom a -> (* todo check bounds *) a.(i)
 end
 
-type req = { sort : Sort.t; filters : unit list }
+type 'a selection = All | Only of 'a list
+type kind = Audio
+
+type req = {
+  kind : kind;
+  src_views : string selection;
+  sort : Sort.t;
+  filters : unit list;
+}
 
 type t = {
   uuid : Uuidm.t;
@@ -32,5 +40,6 @@ type t = {
 
 let item_count t = t.item_count - t.start_offset
 
-let req ?(sort = Sort.(Some (Date_added, Desc))) ?(filters = []) () =
-  { sort; filters }
+let req kind ?(src_views = All) ?(sort = Sort.(Some (Date_added, Desc)))
+    ?(filters = []) () =
+  { kind; src_views; sort; filters }
