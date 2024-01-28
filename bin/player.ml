@@ -11,6 +11,17 @@ type now_playing = { item_id : string; url : string }
 
 let now_playing = Lwd.var None
 
+(* see https://github.com/jellyfin/jellyfin/blob/4786901bb796c3e912f13b686571fde8d16f49c5/tests/Jellyfin.Model.Tests/Test%20Data/DeviceProfile-Firefox.json *)
+
+(** Playback issue with alac files (and probably all codecs non-natively
+      supported by the browser)
+    - Some clients (sonixd) give up, mpv based players work.
+    - The official client manage to play the file but gives a blob to the audio
+      player instead of a hls url as it does for other files.
+    - Jellyfin should use the device id and associated capabilities to
+      automatically transcode, shouldn't it ?
+
+*)
 let audio_url (server : DS.connexion) item_id =
   Printf.sprintf
     "%s/Audio/%s/universal?api_key=%s&audioCodec=aac&container=opus,mp3,aac,m4a,m4b,flac,wav,ogg&transcodingContainer=ts&transcodingProtocol=hls"
@@ -56,7 +67,19 @@ struct
     in
 
     let on_ended = Elwd.handler Ev.ended next in
-    let ev = [ `P on_ended ] in
+    let on_error =
+      Elwd.handler Ev.error (fun ev ->
+          Ev.stop_immediate_propagation ev;
+          Ev.prevent_default ev;
+          Console.log
+            [
+              "A playback error happened. This is probably due to a codec \
+               unsupported by the browser.";
+              ev;
+            ];
+          next ev)
+    in
+    let ev = [ `P on_ended; `P on_error ] in
     Elwd.audio
       ~at:
         [
