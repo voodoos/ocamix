@@ -47,10 +47,15 @@ module Int_uniqueue = Uniqueue (Int)
 
 type 'a row_data = { index : int; content : 'a option }
 
-let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
-    ~(fetch : int -> (data, _) Fut.result)
+type ('data, 'error) data_source = {
+  total_items : (int, 'error) Fut.result;
+  fetch : int -> ('data, 'error) Fut.result;
+  render : int -> 'data -> Elwd.t Elwd.col;
+}
+
+let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
-    ~(render : int -> data -> Elwd.t Elwd.col) () =
+    (data_source : (data, _) data_source) =
   ignore placeholder;
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let top i =
@@ -77,7 +82,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
       (let* row = Hashtbl.get row_index i in
        let+ row_data = Lwd_table.get row in
        let open Fut.Result_syntax in
-       let+ data = fetch row_data.index in
+       let+ data = data_source.fetch row_data.index in
        Lwd_table.set row { row_data with content = Some data })
       |> ignore
     in
@@ -96,7 +101,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
   let num_rows = Lwd.var 0 in
   let _ =
     let open Fut.Result_syntax in
-    let+ total = total in
+    let+ total = data_source.total_items in
     if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
     for i = 0 to total - 1 do
       let _uuid = new_uuid_v4 () |> Uuidm.to_string in
@@ -110,7 +115,8 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height) ~total
     let style = `P (At.style (Jstr.v @@ top (index + 1))) in
     match content with
     | Some data ->
-        Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data)
+        Lwd_seq.element
+        @@ Elwd.div ~at:(style :: at) (data_source.render index data)
     | None -> Lwd_seq.empty
   in
 
@@ -208,12 +214,6 @@ let columns () =
     |]
 
 let make ~reset_playlist ~fetch _ view =
-  let total = Fut.map (Result.map Db.View.item_count) view in
-  let fetch i =
-    let open Fut.Result_syntax in
-    let* view = view in
-    fetch view i
-  in
   let img_url server_id item_id =
     Lwd.map (Lwd.get Servers.var) ~f:(fun servers ->
         let servers = Lwd_seq.to_list servers in
@@ -231,7 +231,7 @@ let make ~reset_playlist ~fetch _ view =
     let play_from _ =
       ignore
         (let open Fut.Result_syntax in
-         let+ view = view in
+         let+ (view : Db.View.t) = view in
          reset_playlist
            { view with start_offset = view.start_offset + start_index })
     in
@@ -254,4 +254,11 @@ let make ~reset_playlist ~fetch _ view =
   let ui_table =
     { Table.table = { columns = columns () }; row_height = Em 4. }
   in
-  lazy_table ~ui_table ~total ~fetch ~render ~placeholder ()
+  let total_items = Fut.map (Result.map Db.View.item_count) view in
+  let fetch i =
+    let open Fut.Result_syntax in
+    let* view = view in
+    fetch view i
+  in
+  let data_source = { total_items; fetch; render } in
+  lazy_table ~ui_table ~placeholder data_source
