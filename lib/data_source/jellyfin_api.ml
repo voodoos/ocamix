@@ -270,12 +270,13 @@ module System = struct
 end
 
 let authorization ?token () =
-  Format.(
-    let pp_token fmt = fprintf fmt ", Token=%S" in
-    asprintf
-      "MediaBrowser Client=\"Ocamix\", Device=\"Firefox\", DeviceId=\"0\", \
-       Version=\"0.1\"%a"
-      (pp_print_option pp_token) token)
+  let token =
+    match token with None -> "" | Some t -> Printf.sprintf ", Token=%S" t
+  in
+  Printf.sprintf
+    "MediaBrowser Client=\"Ocamix\", Device=\"Firefox\", DeviceId=\"%s\", \
+     Version=\"0.1\"%s"
+    "abcdef" token
 
 let request (type pp p r) ?base_url ?token ?headers
     (module Q : Query

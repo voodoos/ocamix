@@ -7,7 +7,7 @@ let keys = Hashtbl.create 64
 
 let check_key key =
   if Hashtbl.mem keys key then
-    failwith @@ Format.sprintf "Multiple persitent var are using the key %s" key
+    failwith @@ Printf.sprintf "Multiple persitent var are using the key %s" key
   else Hashtbl.add keys key ()
 
 let local_storage = Storage.local G.window
