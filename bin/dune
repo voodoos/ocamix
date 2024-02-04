@@ -6,7 +6,7 @@
    (:standard --no-inline)))
  (promote
   (only *.bc.js)
-  (into ../example)
+  (into ../web)
   (until-clean))
  (flags :standard -open Brrer)
  (libraries

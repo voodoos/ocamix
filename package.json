@@ -2,13 +2,13 @@
   "name": "ocamix",
   "version": "1.0.0",
   "description": "A web-based playlist creator",
-  "main": "example/index.html",
+  "main": "web/index.html",
   "repository": "git@github.com:voodoos/ocamix.git",
   "author": "Ulysse Gérard <thevoodoos@gmail.com>",
   "license": "AGPL-3.0",
   "dependencies": {},
   "scripts": {
-    "dev": "esbuild --servedir=example --watch=forever"
+    "dev": "esbuild --servedir=web --watch=forever"
   },
   "devDependencies": {
     "esbuild": "^0.19.5"
