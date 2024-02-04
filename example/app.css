@@ -29,6 +29,7 @@ body {
 }
 
 #main-layout .player-wrapper {
+    display: flex;
     width: 100%;
 }
 

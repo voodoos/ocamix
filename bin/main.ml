@@ -29,13 +29,7 @@ let app _idb =
       [ `P (El.h1 [ El.txt' "Welcome to OCAMIX" ]); `R (Servers.ui ()) ]
   in
   let player_ui =
-    Elwd.div
-      ~at:
-        [
-          `P (At.style (Jstr.v "grid-column:1/-1"));
-          `P (At.class' (Jstr.v "player-wrapper"));
-        ]
-      [ `R player ]
+    Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
   let libraries =
     let var = Lwd.var [] in

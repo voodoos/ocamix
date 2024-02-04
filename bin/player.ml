@@ -80,13 +80,20 @@ struct
           next ev)
     in
     let ev = [ `P on_ended; `P on_error ] in
-    Elwd.audio
-      ~at:
-        [
-          `P (At.v (Jstr.v "controls") (Jstr.v "true"));
-          `P (At.v (Jstr.v "autoplay") (Jstr.v "true"));
-          `P (At.v (Jstr.v "preload") (Jstr.v "auto"));
-          `R src;
-        ]
-      ~ev []
+    let audio =
+      Elwd.audio
+        ~at:
+          [
+            `P (At.v (Jstr.v "controls") (Jstr.v "true"));
+            `P (At.v (Jstr.v "autoplay") (Jstr.v "true"));
+            `P (At.v (Jstr.v "preload") (Jstr.v "auto"));
+            `R src;
+          ]
+        ~ev []
+    in
+    let btn_next =
+      Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
+    in
+    let at = [ `P (At.class' (Jstr.v "player-wrapper")) ] in
+    Elwd.div ~at [ `R audio; `R btn_next ]
 end
