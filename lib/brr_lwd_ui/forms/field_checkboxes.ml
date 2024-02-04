@@ -24,8 +24,9 @@ let make t =
     let lbl = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] label in
     let at =
       let open Attrs in
-      add At.Name.id id [] |> add At.Name.name name
-      |> add At.Name.type' "checkbox"
+      add At.Name.id (`P id) []
+      |> add At.Name.name (`P name)
+      |> add At.Name.type' (`P "checkbox")
     in
     let checked =
       Lwd.map (Lwd.get var) ~f:(function

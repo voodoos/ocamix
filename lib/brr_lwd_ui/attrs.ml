@@ -62,7 +62,15 @@ module Builder = struct
     to_at { t with attrs }
 end
 
-let add at_name v at = `P (At.v at_name @@ Jstr.v v) :: at
+let add at_name v at =
+  let a =
+    match v with
+    | `P v -> `P (At.v at_name @@ Jstr.v v)
+    | `R v -> `R (Lwd.map v ~f:(fun v -> At.v at_name @@ Jstr.v v))
+    | `S _ -> failwith "TODO not implemented"
+  in
+  a :: at
+
 let add_bool at_ v at = match v with false -> at | true -> `P at_ :: at
 
 let add_str at_name v at =

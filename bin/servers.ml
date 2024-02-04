@@ -58,7 +58,7 @@ module Connect_form = struct
       field (Field.password_input ~required:true "") (fun t v ->
           { t with password = v })
     in
-    let submit = field (Field.submit "Connect") (fun t _v -> t) in
+    let submit = field (Field.submit (`P "Connect")) (fun t _v -> t) in
     Lwd.return
       (Lwd_seq.of_list [ url_field; username_field; password_field; submit ])
 end
