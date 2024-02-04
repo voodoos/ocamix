@@ -2,6 +2,13 @@ open! Std
 open Brr
 open Brr_lwd
 
+val v :
+  ?d:El.document ->
+  ?at:[ `P of At.t | `R of At.t Lwd.t | `S of At.t Lwd_seq.t Lwd.t ] list ->
+  ?ev:Elwd.handler Elwd.col ->
+  string Utils.maybe_reactive ->
+  El.t Lwd.t
+
 type 'a update = None | Next | Set of 'a
 type 'state handler_with_state
 

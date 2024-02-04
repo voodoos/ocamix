@@ -1,6 +1,9 @@
 open Std
 open Brr
 
+type 'a one_maybe_reactive = [ `P of 'a | `R of 'a Lwd.t ]
+type 'a maybe_reactive = [ 'a one_maybe_reactive | `S of 'a Lwd_seq.t Lwd.t ]
+
 let is_pure_element = function
   | `P _ -> true
   | `R x -> Option.is_some (Lwd.is_pure x)

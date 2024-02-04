@@ -2,6 +2,12 @@ open! Std
 open Brr
 open Brr_lwd
 
+let v ?d ?(at = []) ?ev value =
+  let at =
+    Attrs.add At.Name.type' (`P "button") at |> Attrs.add At.Name.value value
+  in
+  Elwd.input ?d ~at ?ev ()
+
 type 'a update = None | Next | Set of 'a
 
 type 'state handler_with_state =
