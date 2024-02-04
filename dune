@@ -1,0 +1,13 @@
+(alias
+ (name default)
+ (deps main.bc.js db_worker.bc.js index.html))
+
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (files ../bin/main.bc.js))
+
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (files ../bin/db_worker/db_worker.bc.js))
