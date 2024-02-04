@@ -4,10 +4,6 @@
  (js_of_ocaml
   (flags
    (:standard --no-inline)))
- (promote
-  (only *.bc.js)
-  (into ../web)
-  (until-clean))
  (flags :standard -open Brrer)
  (libraries
   js_of_ocaml
