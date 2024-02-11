@@ -50,6 +50,8 @@ let fetch_total_item_count source =
           include_item_types;
           start_index = None;
           limit = Some 0;
+          sort_order = Some Ascending;
+          sort_by = [ DateCreated ];
           recursive = true;
           enable_user_data = false;
           enable_images = false;
@@ -205,6 +207,8 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
             include_item_types = [];
             start_index = None;
             limit = None;
+            sort_order = None;
+            sort_by = [];
             recursive = false;
             enable_user_data = false;
             enable_images = false;
@@ -228,6 +232,8 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
             include_item_types = [];
             start_index = None;
             limit = None;
+            sort_order = None;
+            sort_by = [];
             recursive = false;
             enable_user_data = false;
             enable_images = false;
@@ -289,6 +295,8 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               include_item_types;
               start_index = Some start_index;
               limit = Some limit;
+              sort_order = Some Ascending;
+              sort_by = [ DateCreated ];
               recursive = true;
               enable_user_data = false;
               enable_images = true;

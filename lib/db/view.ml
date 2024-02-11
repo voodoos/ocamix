@@ -6,6 +6,7 @@ module Sort = struct
   type t = Some of criteria * direction | Random
 end
 
+(** Some sorts require a custom ordering which is done using a table of indexes. For example, to get a random sort we simple shuffle an array which size is the one of the result. *)
 module Order = struct
   type t = Initial | Custom of int array
 

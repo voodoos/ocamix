@@ -5,6 +5,28 @@ type method' = Get | Post
 
 let jstr_of_method = function Get -> Jstr.v "GET" | Post -> Jstr.v "POST"
 
+module Types = struct
+  type order = Ascending | Descending [@@deriving yojson]
+
+  type sort =
+    | Album
+    | AlbumArtist
+    | Artist
+    | Budget
+    | CommunityRating
+    | CriticRating
+    | DateCreated
+    | DatePlayed
+    | PlayCount
+    | PremiereDate
+    | ProductionYear
+    | SortName
+    | Random
+    | Revenue
+    | Runtime
+  [@@deriving yojson]
+end
+
 type user = {
   name : string; [@key "Name"]
   server_id : string; [@key "ServerId"]
@@ -197,6 +219,8 @@ module Items = struct
     include_item_types : Item.type_ list; [@key "includeItemTypes"]
     start_index : int option; [@yojson.option] [@key "startIndex"]
     limit : int option; [@yojson.option]
+    sort_order : Types.order option; [@yojson.option] [@key "sortOrder"]
+    sort_by : Types.sort list; [@key "sortBy"]
     recursive : bool;
     enable_user_data : bool; [@key "enableUserData"]
     enable_images : bool; [@key "enableImages"]
