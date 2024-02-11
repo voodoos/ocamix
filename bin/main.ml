@@ -64,9 +64,7 @@ let app _idb =
   in
 
   let main_list =
-    Lwd.map main_view ~f:(fun main_view ->
-        Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player
-          main_view)
+    Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player main_view
   in
   let now_playing =
     (*todo: do we need that join ?*)
@@ -74,7 +72,8 @@ let app _idb =
       | None -> Elwd.div []
       | Some { playlist; _ } ->
           Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player
-            (Fut.ok playlist))
+            (Lwd.pure (Fut.ok playlist))
+          (* FIXME that's awful use of lwd*))
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
@@ -83,10 +82,7 @@ let app _idb =
       `R
         (Elwd.div
            ~at:[ `P (At.class' (Jstr.v "item-list")) ]
-           [
-             `R filters;
-             `R ((*todo: do we need that join ?*) Lwd.join main_list);
-           ]);
+           [ `R filters; `R (*todo: do we need that join ?*) main_list ]);
       `R now_playing;
       `R player_ui;
       `P (El.div [ El.txt' "icons by icons8" ]);
