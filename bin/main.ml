@@ -67,13 +67,17 @@ let app _idb =
     Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player main_view
   in
   let now_playing =
+    let playlist =
+      (* let playlist = Lwd.map (Lwd.get playstate.playlist) ~f:(Option.value ~default: ) *)
+      Lwd.map (Lwd.get Player.playstate.playlist) ~f:(function
+        | None -> Elwd.span [ `P (El.txt' "Nothing playing") ]
+        | Some playlist ->
+            Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player
+              (Lwd.pure (Fut.ok playlist))
+            (* FIXME that's awful use of lwd*))
+    in
     (*todo: do we need that join ?*)
-    Lwd.bind (Lwd.get Player.playstate) ~f:(function
-      | None -> Elwd.div []
-      | Some { playlist; _ } ->
-          Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch player
-            (Lwd.pure (Fut.ok playlist))
-          (* FIXME that's awful use of lwd*))
+    Elwd.div [ `R (Lwd.join playlist) ]
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])

@@ -2,10 +2,14 @@ open! Import
 open Brr
 open Brr_lwd
 
-type playstate = { playlist : Db.View.t; current_index : int }
+type playstate = {
+  playlist : Db.View.t option Lwd.var;
+  current_index : int Lwd.var;
+}
+
 type t = Elwd.t Lwd.t
 
-let playstate = Lwd.var None
+let playstate = { playlist = Lwd.var None; current_index = Lwd.var 0 }
 
 type now_playing = { item_id : string; url : string }
 
@@ -32,24 +36,27 @@ module Playback_controller (P : sig
     Db.View.t -> int -> (Db.Stores.Items.t, Db.Worker_api.error) Fut.result
 end) =
 struct
-  let set_play_url { playlist; current_index } =
-    let open Fut.Result_syntax in
-    let+ item =
-      let+ { Db.Stores.Items.item = { server_id; id; name; _ }; _ } =
-        P.fetch playlist current_index
-      in
-      let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
-      let server : Servers.server = List.assq server_id servers in
-      let url = audio_url server.connexion id in
-      let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
-      { item_id = id; url }
-    in
-    Lwd.set now_playing (Some item)
+  let set_play_url playlist current_index =
+    match playlist with
+    | None -> Fut.ok ()
+    | Some playlist ->
+        let open Fut.Result_syntax in
+        let+ item =
+          let+ { Db.Stores.Items.item = { server_id; id; name; _ }; _ } =
+            P.fetch playlist current_index
+          in
+          let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
+          let server : Servers.server = List.assq server_id servers in
+          let url = audio_url server.connexion id in
+          let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
+          { item_id = id; url }
+        in
+        Lwd.set now_playing (Some item)
 
   let reset_playlist playlist =
-    let state = { playlist; current_index = 0 } in
-    ignore @@ set_play_url state;
-    Lwd.set playstate (Some state)
+    ignore @@ set_play_url (Some playlist) 0;
+    Lwd.set playstate.playlist (Some playlist);
+    Lwd.set playstate.current_index 0
 
   let make () =
     let src =
@@ -59,11 +66,11 @@ struct
            | Some { url; _ } -> At.src (Jstr.v url))
     in
     let next _ =
-      Lwd.peek playstate
-      |> Option.iter (fun (ps : playstate) ->
-             let new_state = { ps with current_index = ps.current_index + 1 } in
-             ignore @@ set_play_url new_state;
-             Lwd.set playstate (Some new_state))
+      let playlist = Lwd.peek playstate.playlist in
+      let current_index = Lwd.peek playstate.current_index in
+      let next_index = current_index + 1 in
+      ignore @@ set_play_url playlist next_index;
+      Lwd.set playstate.current_index next_index
     in
 
     let on_ended = Elwd.handler Ev.ended next in
