@@ -34,8 +34,8 @@ module Make (Q : Queries) = struct
     let query (type a) (query : a query) : (a, error) Fut.result =
       let uuid = new_uuid_v4 () |> Uuidm.to_string in
       let fut, set = Fut.create () in
-      let set jv = set @@ Encodings.unmarshal_jv jv in
-      let query = { uuid; data = query } |> Encodings.marshal_to_jstr in
+      let set jv = set @@ Encodings.of_jv jv in
+      let query = { uuid; data = query } |> Encodings.to_jstr in
       Brr_webworkers.Worker.post worker (Jv.of_jstr query);
       Hashtbl.add futures uuid set;
       fut
@@ -52,7 +52,7 @@ module Make (Q : Queries) = struct
       ignore (* TODO: handler errors *)
       @@
       let+ message =
-        Brr_io.Message.Ev.data message |> Jv.to_jstr |> Encodings.unmarshal_jstr
+        Brr_io.Message.Ev.data message |> Jv.to_jstr |> Encodings.of_jstr
       in
       match message with
       | Event (e, v) ->
@@ -73,8 +73,7 @@ module Make (Q : Queries) = struct
 
   let dispatch_event (type a) (e : a event) (v : a) =
     (* let data = Encodings.marshal_to_jstr |> Jv.of_jstr in *)
-    Brr_webworkers.Worker.G.post
-      (Encodings.marshal_to_jstr (Event (e, v)) |> Jv.of_jstr)
+    Brr_webworkers.Worker.G.post (Encodings.to_jstr (Event (e, v)) |> Jv.of_jstr)
 
   (** Execute W's body and configure messaging *)
   module Make_worker (W : Worker_impl) = struct
@@ -87,13 +86,13 @@ module Make (Q : Queries) = struct
       ignore (* TODO: handler errors *)
       @@
       let+ ({ uuid; data } : 'a query with_uuid) =
-        Brr_io.Message.Ev.data message |> Jv.to_jstr |> Encodings.unmarshal_jstr
+        Brr_io.Message.Ev.data message |> Jv.to_jstr |> Encodings.of_jstr
       in
       let open Fut.Result_syntax in
       let+ result = W.on_query data in
-      let data = Encodings.marshal_to_jstr result |> Jv.of_jstr in
+      let data = Encodings.to_jstr result |> Jv.of_jstr in
       Brr_webworkers.Worker.G.post
-        (Encodings.marshal_to_jstr (Answer { uuid; data }) |> Jv.of_jstr)
+        (Encodings.to_jstr (Answer { uuid; data }) |> Jv.of_jstr)
 
     let _ = Ev.listen Brr_io.Message.Ev.message on_message G.target
   end

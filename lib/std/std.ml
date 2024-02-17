@@ -10,14 +10,17 @@ module Yojson = struct
 end
 
 module Encodings = struct
-  let marshal_to_jstr t = Marshal.to_string t [] |> Jstr.binary_of_octets
-  let marshal_to_jv t = marshal_to_jstr t |> Jv.of_jstr
+  let to_jstr t = Jv.repr t |> Brr.Json.encode
+  let to_jv t = to_jstr t |> Jv.of_jstr
 
-  let unmarshal_jstr jstr =
-    try Ok (Marshal.from_string (Jstr.binary_to_octets jstr) 0)
-    with _ -> Error (`Msg "Failed to unmarshal data")
+  let of_jstr jstr =
+    match Brr.Json.decode jstr with
+    | Ok v -> Ok (Obj.magic v)
+    | Error err ->
+        Brr.Console.error [ err ];
+        Error (`Msg "Failed to unmarshal data")
 
-  let unmarshal_jv jv = Jv.to_jstr jv |> unmarshal_jstr
+  let of_jv jv = Jv.to_jstr jv |> of_jstr
 end
 
 let random_state = Random.get_state ()

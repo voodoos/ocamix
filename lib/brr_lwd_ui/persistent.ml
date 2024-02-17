@@ -13,7 +13,7 @@ let check_key key =
 let local_storage = Storage.local G.window
 
 let store ~key value =
-  Encodings.marshal_to_jstr value |> Storage.set_item local_storage key
+  Encodings.to_jstr value |> Storage.set_item local_storage key
 
 let fetch ~key =
   let open Result.Infix in
@@ -22,7 +22,7 @@ let fetch ~key =
     | None -> Error `Not_found
     | Some v -> Ok v
   in
-  Encodings.unmarshal_jstr encoded_value
+  Encodings.of_jstr encoded_value
 
 let initial_value ~key f =
   match fetch ~key with
