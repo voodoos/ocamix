@@ -59,7 +59,7 @@ module Request = struct
   let fut t =
     let result_fut, set = Fut.create () in
     let _ = on_success ~f:(fun _ t -> set (Ok (result t))) t in
-    let _ = on_error ~f:(fun _ t -> set (Error (`Jv (error t)))) t in
+    let _ = on_error ~f:(fun _ t -> set (Error (error t))) t in
     result_fut
 end
 

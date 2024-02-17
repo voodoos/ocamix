@@ -48,7 +48,7 @@ module Request : sig
   val result : 'a t -> 'a
   val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
   val on_error : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
-  val fut : 'a t -> ('a, [> `Jv of Jv.Error.t ]) Fut.result
+  val fut : 'a t -> 'a Fut.or_error
 end
 
 module type Key = sig
