@@ -10,7 +10,7 @@ module Queries = struct
     | Get_all : unit -> Api.Item.t list query
     | Get_libraries : unit -> Stores.Items.t list query
     | Create_view : View.req -> View.t query
-    | Get : View.t * int -> Stores.Items.t query
+    | Get : View.t * int array -> Stores.Items.t option array query
 
   type 'a event = Servers_status_update : (string * Sync.report) event
 end

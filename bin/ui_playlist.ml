@@ -41,6 +41,11 @@ module Uniqueue (O : Set.OrderedType) = struct
     i
 
   let length t = Queue.length t.queue
+
+  let clear t =
+    let new_queue = create () in
+    t.queue <- new_queue.queue;
+    t.uniq <- new_queue.uniq
 end
 
 module Int_uniqueue = Uniqueue (Int)
@@ -53,7 +58,7 @@ type 'a row_data = {
 
 type ('data, 'error) data_source = {
   total_items : (int, 'error) Fut.result;
-  fetch : int -> ('data, 'error) Fut.result;
+  fetch : int array -> ('data option array, 'error) Fut.result;
   render : int -> 'data -> Elwd.t Elwd.col;
 }
 
@@ -73,7 +78,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
   let row_index = Hashtbl.create 2048 in
   let unload_queue = Int_uniqueue.create () in
 
-  let add ~fetch ?(max_items = 200) i =
+  let add ~fetch ?(max_items = 200) indexes =
     let unload i =
       let open Option.Infix in
       (let* row = Hashtbl.get row_index i in
@@ -81,13 +86,18 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
        Lwd_table.set row { row_data with content = None })
       |> ignore
     in
-    let load i =
-      let open Option.Infix in
-      (let* row = Hashtbl.get row_index i in
-       let+ row_data = Lwd_table.get row in
-       let open Fut.Result_syntax in
-       let+ data = fetch row_data.index in
-       Lwd_table.set row { row_data with content = Some data })
+    let load indexes =
+      (let open Fut.Result_syntax in
+       let+ (data : data option array) = fetch indexes in
+       Array.iter2 indexes data ~f:(fun i data ->
+           (let open Option.Infix in
+            let* row = Hashtbl.get row_index i in
+            let+ row_data = Lwd_table.get row in
+            let data =
+              match data with Some data -> data | _ -> raise Not_found
+            in
+            Lwd_table.set row { row_data with content = Some data })
+           |> ignore))
       |> ignore
     in
     let cleanup () =
@@ -98,9 +108,11 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
           unload index
         done
     in
-    if Int_uniqueue.add i unload_queue then (
-      load i;
-      cleanup ())
+    let to_load =
+      List.filter indexes ~f:(fun i -> Int_uniqueue.add i unload_queue)
+    in
+    load (Array.of_list to_load);
+    cleanup ()
   in
   let num_rows = Lwd.var 0 in
 
@@ -128,7 +140,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
             let number_of_visible_rows =
               total_height /. row_height |> int_of_float
             in
-            let bleeding = number_of_visible_rows / 2 in
+            let bleeding = number_of_visible_rows in
             let scroll_y = scroll_y -. float_of_int header_height in
             let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
             let last_visible_row = first_visible_row + number_of_visible_rows in
@@ -144,11 +156,10 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
               in
               last_visible_row + bleeding |> min num_rows
             in
-            for i = first to last do
-              (* todo: We do way too much work and rebuild the queue each
-                 time... it's very ineficient *)
-              add ~max_items:(4 * number_of_visible_rows) i
-            done
+            (* todo: We do way too much work and rebuild the queue each
+               time... it's very ineficient *)
+            let indexes = List.init (last - first) ~f:(fun i -> first + i) in
+            add ~max_items:(4 * number_of_visible_rows) indexes
           in
           let last_update = ref 0. in
           let timeout = ref (-1) in
@@ -169,15 +180,18 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
         in
         let _ =
           let open Fut.Result_syntax in
+          let () = Int_uniqueue.clear unload_queue in
           let+ total = total_items in
           if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
+          Lwd_table.clear table;
           for i = 0 to total - 1 do
-            let _uuid = new_uuid_v4 () |> Uuidm.to_string in
             let set = { index = i; content = None; render } in
-            Hashtbl.add row_index i @@ Lwd_table.append ~set table;
-            if i < 20 then add i (* preload the first items *)
-          done
+            Hashtbl.add row_index i @@ Lwd_table.append ~set table
+          done;
+          (* preload the first items *)
+          add (List.init 100 ~f:Fun.id)
         in
+
         Elwd.handler Ev.scroll (fun ev ->
             let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
             scroll_handler div))
