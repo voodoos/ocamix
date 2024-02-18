@@ -52,6 +52,27 @@ struct
               let server : Servers.server = List.assq server_id servers in
               let url = audio_url server.connexion id in
               let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
+              let () =
+                let open Brr_io.Media.Session in
+                let session = of_navigator G.navigator in
+                let img_src =
+                  Printf.sprintf "%s/Items/%s/Images/Primary?width=500"
+                    server.connexion.base_url id
+                in
+                let title = name in
+                let album = "" in
+                let artist = "" in
+                let artwork =
+                  [
+                    {
+                      Media_metadata.src = img_src;
+                      sizes = "500x500";
+                      type' = "";
+                    };
+                  ]
+                in
+                set_metadata session { title; artist; album; artwork }
+              in
               { item_id = id; url }
           | _ -> raise Not_found
         in
