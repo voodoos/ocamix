@@ -69,14 +69,19 @@ struct
            | None -> At.src (Jstr.v "")
            | Some { url; _ } -> At.src (Jstr.v url))
     in
-    let next _ =
+    let next () =
       let playlist = Lwd.peek playstate.playlist in
       let current_index = Lwd.peek playstate.current_index in
       let next_index = current_index + 1 in
       ignore @@ set_play_url playlist next_index;
       Lwd.set playstate.current_index next_index
     in
-
+    let () =
+      let open Brr_io.Media.Session in
+      let session = of_navigator G.navigator in
+      set_action_handler session Action.next_track next
+    in
+    let next _ = next () in
     let on_ended = Elwd.handler Ev.ended next in
     let on_error =
       Elwd.handler Ev.error (fun ev ->
