@@ -1,4 +1,4 @@
-opam exec -- dune build @default --watch --terminal-persistence=preserve &
+opam exec -- dune build @default --profile=release --watch --terminal-persistence=preserve &
 DUNE_PID=$!
 yarn run dev &
 SERVER_PID=$!
