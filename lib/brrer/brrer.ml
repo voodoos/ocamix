@@ -38,6 +38,11 @@ module Brr_io = struct
   include Brr_io
   module Indexed_db = Indexed_db
 
+  module Media = struct
+    include Media
+    module Session = Media_session
+  end
+
   module Storage = struct
     include Storage
 
