@@ -1,0 +1,1 @@
+Sounds like a use-case for Beacon API
