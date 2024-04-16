@@ -31,29 +31,23 @@ let app _idb =
   let player_ui =
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
-  let libraries =
-    let var = Lwd.var [] in
-    let _ =
-      let open Fut.Result_syntax in
-      let+ libraries = Servers.servers_libraries () in
-      let list =
-        String.Items_MultiMap.fold libraries [] (fun acc _ { item; _ } ->
-            item :: acc)
-      in
-      Lwd.set var list
-    in
-    var
-  in
+
   let filters, f_value =
     let f_libraries =
       let open Brr_lwd_ui.Field_checkboxes in
       let choices =
-        Lwd.map (Lwd.get libraries) ~f:(fun l ->
+        Lwd_seq.fold_monoid
+          (fun (_, l) ->
             Console.log [ "Libraries:"; l ];
-            Lwd_seq.transform_list l (fun l ->
-                Lwd_seq.element @@ Check (l.id, [ `P (El.txt' l.name) ], true)))
+            let l : Db.Stores.Items.t list Lwd.t = l in
+            Lwd.map l ~f:(fun l ->
+                Lwd_seq.transform_list l (fun l ->
+                    Lwd_seq.element
+                    @@ Check (l.item.id, [ `P (El.txt' l.item.name) ], true))))
+          (Lwd.return Lwd_seq.empty, Lwd.map2 ~f:Lwd_seq.concat)
+          Servers.servers_libraries
       in
-      make { name = "pouet"; desc = choices }
+      make { name = "pouet"; desc = Lwd.join choices }
     in
     (f_libraries.field, f_libraries.value)
   in

@@ -89,11 +89,25 @@ let ui_status server =
   in
   status
 
-let servers_libraries () =
-  let open Fut.Result_syntax in
-  let+ views = Worker_client.query (Get_libraries ()) in
-  List.fold_left ~init:String.Items_MultiMap.empty views ~f:(fun acc v ->
-      String.Items_MultiMap.add acc v.Db.Stores.Items.item.server_id v)
+let fut_to_lwd ~init f =
+  let v = Lwd.var init in
+  let () = Fut.await f (Lwd.set v) in
+  Lwd.get v
+
+let servers_libraries =
+  let statuses =
+    Lwd_seq.map
+      (fun (server_id, { status; _ }) ->
+        let views =
+          Lwd.bind (Lwd.get status) ~f:(fun _ ->
+              Worker_client.query (Get_server_libraries server_id)
+              |> Fut.map (Result.get_or ~default:[])
+              |> fut_to_lwd ~init:[])
+        in
+        (server_id, views))
+      (Lwd.get var)
+  in
+  statuses
 
 let ui () =
   let servers = Lwd.get var in

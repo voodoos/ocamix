@@ -9,6 +9,7 @@ module Queries = struct
     | Add_servers : server list -> unit query
     | Get_all : unit -> Api.Item.t list query
     | Get_libraries : unit -> Stores.Items.t list query
+    | Get_server_libraries : string -> Stores.Items.t list query
     | Create_view : View.req -> View.t query
     | Get : View.t * int array -> Stores.Items.t option array query
 

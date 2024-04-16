@@ -90,6 +90,31 @@ module Worker () = struct
         let* store = read_only_store () in
         let+ req = Db.I.get_all store |> as_fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
+    | Get_server_libraries server_id' ->
+        let* store = read_only_store () in
+        let index = IS.(index (module IS.Index.Type_Name) store) in
+        let lower = Jv.of_array Jv.of_string [| "music" |] in
+        let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
+        let query =
+          IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
+            ()
+        in
+        let* keys = IS.Index.Type_Name.get_all_keys ~query index |> as_fut in
+        let open Fut.Syntax in
+        let+ items =
+          List.map (Array.to_list keys) ~f:(fun k -> IS.get k store |> as_fut)
+          |> Fut.of_list
+        in
+        let items =
+          Result.flatten_l items
+          |> Result.map
+               (List.filter_map ~f:(function
+                 | Some ({ Db.Stores.Items.item = { server_id; _ }; _ } as item)
+                   when String.equal server_id server_id' ->
+                     Some item
+                 | Some _ | None -> None))
+        in
+        items
     | Get_libraries () ->
         let* store = read_only_store () in
         let index = IS.(index (module IS.Index.Type_Name) store) in
