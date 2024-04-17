@@ -80,9 +80,11 @@ body {
     grid-column: 1/-1;
     padding: 0.5rem;
     font-size: 1.2rem;
-    background-color: rgb(207, 207, 207);
-    position: absolute;
+    background-color: #3c4146;
     overflow: hidden;
+}
+.lazy-table>.row_spacer {
+    padding: 0;
 }
 
 .lazy-table>div>div {
@@ -95,6 +97,7 @@ body {
     position: sticky;
     top: -1px;
     /* Without that slight offset there is some glitching happening in firefox */
+    background-color: #3c4146;
     z-index: 10;
 }
 

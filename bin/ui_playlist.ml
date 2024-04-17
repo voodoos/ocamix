@@ -67,11 +67,8 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
     (data_source : (data, _) data_source Lwd.t) =
   ignore placeholder;
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
-  let top i =
-    (* TODO FIXME: chrome doesn't like absolutely positionnned subgrids*)
-    Printf.sprintf "top: calc(%s * %i); height: %s !important;" row_size i
-      row_size
-  in
+  let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
+  let height = Printf.sprintf "height: %s !important;" row_size in
   let table : data row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
      observer's callback *)
@@ -196,25 +193,55 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
             let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
             scroll_handler div))
   in
+  let make_spacer n =
+    let at = [ At.class' (Jstr.v "row_spacer") ] in
+    let style = At.style (Jstr.v @@ height_n n) in
+    El.div ~at:(style :: at) []
+  in
   let render _ { content; index; render } =
-    let at = Attrs.(classes [ "row" ] |> to_at) in
-    let style = `P (At.style (Jstr.v @@ top (index + 1))) in
+    let at = Attrs.add At.Name.class' (`P "row") [] in
+    let style = `P (At.style (Jstr.v height)) in
     match content with
     | Some data ->
-        Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data)
-    | None -> Lwd_seq.empty
+        (0, Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data), 0)
+    | None -> (1, Lwd_seq.empty, 0)
   in
-  let table_body = Lwd_table.map_reduce render Lwd_seq.monoid table in
+  let table_body =
+    let rows =
+      Lwd_table.map_reduce render
+        ( (0, Lwd_seq.empty, 0),
+          fun (n, s, m) (p, s', q) ->
+            match (Lwd_seq.view s, Lwd_seq.view s') with
+            | Empty, Empty -> (n + m + p + q, s, 0)
+            | Empty, _ -> (n + m + p, s', q)
+            | _, Empty -> (n, s, m + p + q)
+            | _, _ ->
+                let s =
+                  if m + p > 0 then
+                    let spacer = Lwd.pure @@ make_spacer (m + p) in
+                    Lwd_seq.(concat s @@ concat (element spacer) s')
+                  else Lwd_seq.concat s s'
+                in
+                (n, s, q) )
+        table
+    in
+    Lwd.map rows ~f:(fun (n, s, m) ->
+        let result =
+          if n > 0 then
+            let first_spacer = Lwd.pure @@ make_spacer n in
+            Lwd_seq.(concat (element first_spacer) s)
+          else s
+        in
+        if m > 0 then
+          let last_spacer = Lwd.pure @@ make_spacer m in
+          Lwd_seq.(concat result (element last_spacer))
+        else result)
+  in
   let table_header = Table.header ui_table in
-  let table_footer =
-    Lwd.get num_rows
-    |> Lwd.map ~f:(fun num_rows ->
-           let style = At.style (Jstr.v @@ top (num_rows + 1)) in
-           El.div ~at:[ style ] [ El.txt' "foot" ])
-  in
   let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
   let grid_style = Table.style ui_table in
-  let at = `P (At.style (Jstr.v grid_style)) :: at in
+  let s = At.style (Jstr.v @@ grid_style) in
+  let at = `P s :: at in
   Elwd.div
     ~at:Attrs.(to_at @@ classes [ "lazy-table-wrapper" ])
     [
@@ -222,7 +249,7 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
         (Elwd.div
            ~ev:[ `R scroll_handler ]
            ~at
-           [ `R table_header; `S (Lwd_seq.lift table_body); `R table_footer ]);
+           [ `R table_header; `S (Lwd_seq.lift table_body) ]);
     ]
 
 (** Application part *)
@@ -299,3 +326,29 @@ let make ~reset_playlist ~fetch _ (view : (Db.View.t, 'a) Fut.result Lwd.t) =
         { total_items; fetch; render })
   in
   lazy_table ~ui_table ~placeholder data_source
+
+(*
+###########**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
+###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
+###########*#####***#%##======---==+#==---======*#=###++++++++++++++++++++++++++
+########################====----==-=#=--========*#=*##%#+++++%%%++++++++++++++++
+######################%#====-====--=#===========*#=*##%#++=+#**%%+++++++++++++++
+#######################*=----------=#===========+#=+##+%#%*+%+%%%+++++++++++++++
+###################+=--------==-----#====-==----+#=+##*+%#%%+##%%+++++++++++++++
+#################+=-------------------------==-=+#=+###+++#*%+#+++++++++++++++++
+################=---------=####=#=--#=++====--===#=+###*+++%%++%%+++++++++++++++
+##############*======--==**######+=====+=++++++*##=+###*++++++++++++++++++++++++
+##############=-----==+*+###*######=#==----=====+#=+###****++++++++IS+++++++++++
+##############==-=-=*#+=#+%+#===#===#==--========#=+###***++++++++++++THIS++++++
+##############=-#*#+*##=####*+#=++==#===========+#=+###*******+++A++++++++++++++
+##############==###=############+#*+#============#++###*********++++++++++++++++
+###############=*+#*###############=#============#++###************MONOID+?+++++
+################==##########====##*=#=======#**==#++###*****************++++++++
+#################==+##############==#=====###====#++###**********************+++
+##################==###+#########+###*+==###=====#++##+++**********************+
+##############+%%%%########+####*==+#==+##############*++***********************
+##############+++++=+%#%#*###*#%%%%+#=+##########*###+#=##*#********************
+##############*#==+====##===###%%%%%%%#############=#+######****++*==+**********
+#####+=+###########=+==+====###*+#%%%%###########*++########==*+======++********
+####################*=======#####+#%%*########*==#++######*================*****
+############+#####+####===+=#######+########=====#++###+===================+**** *)
