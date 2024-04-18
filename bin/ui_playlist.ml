@@ -212,7 +212,10 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
         ( (0, Lwd_seq.empty, 0),
           fun (n, s, m) (p, s', q) ->
             match (Lwd_seq.view s, Lwd_seq.view s') with
-            | Empty, Empty -> (n + m + p + q, s, 0)
+            | Empty, Empty ->
+                (* Since s is empty it does not matter on which
+                   "side" of it the spaces are accumulated. *)
+                (n + m + p + q, s, 0)
             | Empty, _ -> (n + m + p, s', q)
             | _, Empty -> (n, s, m + p + q)
             | _, _ ->
