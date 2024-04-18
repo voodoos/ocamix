@@ -26,6 +26,8 @@ body {
 #main-layout .item-list {
     display: flex;
     flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 #main-layout .player-wrapper {
