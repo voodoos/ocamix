@@ -198,7 +198,10 @@ module Item = struct
     id : string; [@key "Id"]
     path : string option; [@yojson.option] [@key "Path"]
     album_id : string option; [@yojson.option] [@key "AlbumId"]
-    parent_id : string option; [@yojson.option] [@key "ParentId"]
+    parent_id : string option option;
+        (* [ParentId] might absent, [null], or a string *)
+        [@yojson.option]
+        [@key "ParentId"]
     server_id : string; [@key "ServerId"]
     image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
     type_ : type_str; [@key "Type"]
@@ -345,7 +348,6 @@ let request (type pp p r) ?base_url ?token ?headers
   let yojson = Yojson.Safe.from_string (Jstr.to_string json) in
   try Q.response_of_yojson yojson
   with e ->
-    Console.log
-      [ "An error occured while decoding the following response: "; yojson ];
+    Console.log [ "An error occured while decoding response: "; json ];
     Console.log [ e ];
     raise e

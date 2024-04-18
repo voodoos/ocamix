@@ -217,7 +217,9 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
     in
     List.fold_left ~init:String.Set.empty res.items
       ~f:(fun set { Item.parent_id; _ } ->
-        match parent_id with None -> set | Some pid -> String.Set.add pid set)
+        match parent_id with
+        | None | Some None -> set
+        | Some (Some pid) -> String.Set.add pid set)
   in
   let paths_of_parents parents =
     let+ res =
