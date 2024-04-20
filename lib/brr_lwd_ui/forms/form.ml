@@ -24,7 +24,11 @@ let create ?d ?at ?ev (type t) (module Form : Form with type t = t) on_submit :
     |> Lwd_seq.fold_monoid
          (fun (F (field, mapper)) ->
            ( Lwd_seq.element field.elt,
-             let value () = field.value () |> field.validate in
+             let value () =
+               match Lwd.peek field.value with
+               | None -> Field.Empty
+               | Some v -> field.validate v
+             in
              fun t -> mapper t @@ value () ))
          ( (Lwd_seq.empty, Fun.id),
            fun (elts, f) (elts', f') ->
@@ -41,4 +45,4 @@ let create ?d ?at ?ev (type t) (module Form : Form with type t = t) on_submit :
   let on_submit = `R handler in
   let elts = Lwd.map fields ~f:(fun (elts, _) -> elts) in
   let ev = Option.map_or ~default:[ on_submit ] (List.cons on_submit) ev in
-  Elwd.form ?d ?at ~ev [ `S elts ]
+  Elwd.form ?d ?at ~ev [ `S (Lwd_seq.lift elts) ]

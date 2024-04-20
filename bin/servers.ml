@@ -45,20 +45,23 @@ module Connect_form = struct
   let fields =
     let url_field =
       field
-        (Field.text_input
-           ~at:[ `P (At.value (Jstr.v "http://localhost:8096")) ]
-           ~required:true "")
+        (Lwd.pure
+        @@ Field.text_input ~required:true (Some "http://localhost:8096"))
         (fun t v -> { t with url = v })
     in
     let username_field =
-      field (Field.text_input ~required:true "") (fun t v ->
-          { t with username = v })
+      field
+        (Lwd.pure @@ Field.text_input ~required:true None)
+        (fun t v -> { t with username = v })
     in
     let password_field =
-      field (Field.password_input ~required:true "") (fun t v ->
-          { t with password = v })
+      field
+        (Lwd.pure @@ Field.password_input ~required:true None)
+        (fun t v -> { t with password = v })
     in
-    let submit = field (Field.submit (`P "Connect")) (fun t _v -> t) in
+    let submit =
+      field (Lwd.pure @@ Field.submit (`P "Connect")) (fun t _v -> t)
+    in
     Lwd.return
       (Lwd_seq.of_list [ url_field; username_field; password_field; submit ])
 end

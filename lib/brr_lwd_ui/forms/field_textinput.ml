@@ -3,7 +3,6 @@ open! Brrer
 open! Brr
 open! Brr_lwd
 
-type checked = bool
 type label = Elwd.t Elwd.col
 type desc = { placeholder : string option Lwd.t; label : label }
 type t = { name : string; default : string option; desc : desc }

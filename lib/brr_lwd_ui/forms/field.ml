@@ -19,40 +19,62 @@ module Make (Params : S) = struct end
    - An html input element with potential validation via attributes
    - A validation function that replace or complete the standard validation
    - A function that retieves the value of the element *)
-type 'a t = { elt : Elwd.t; value : unit -> 'a; validate : 'a -> 'a validation }
+type 'a t = {
+  elt : Elwd.t Lwd.t;
+  value : 'a option Lwd.var;
+  validate : 'a -> 'a validation;
+}
 
 let get_value t =
   let jv = El.to_jv t in
   Jv.get jv "value"
 
-let make ~(value : Elwd.t -> 'a) ?validate elt =
-  Lwd.map elt ~f:(fun elt ->
-      let validate = Option.value validate ~default:(fun v -> Ok v) in
-      let value () = value elt in
-      { elt; value; validate })
+let make_handler ~(value : Jv.t -> 'a) ~(value_change_event : _ Ev.type')
+    default_value =
+  let var = Lwd.var default_value in
+  let on_change =
+    Elwd.handler value_change_event (fun ev ->
+        let t = Ev.target ev |> Ev.target_to_jv in
+        let v = Jv.get t "value" in
+        Lwd.set var (Some (value v)))
+  in
+  (on_change, var)
 
-let make_input ~(value : Elwd.t -> 'a) ?validate ?d ?(at = []) ?ev
-    ?(required = false) ?pattern type' =
+let make_input ~(value : Jv.t -> 'a) ?validate ?d ?(at = []) ?ev
+    ?(required = false) ~value_change_event ?pattern ~type' default_value =
   let type' = At.type' (Jstr.v type') in
   let at = `P type' :: at in
   let at =
     at |> A.add_bool At.required required |> A.add_opt At.Name.pattern pattern
   in
-  let elt = Elwd.input ?d ~at ?ev () in
-  make ~value ?validate elt
+  let validate = Option.value validate ~default:(fun v -> Ok v) in
+  let on_change, value =
+    make_handler ~value ~value_change_event default_value
+  in
+  let ev = `P on_change :: Option.to_list ev in
+  let elt = Elwd.input ?d ~at ~ev () in
+  { elt; value; validate }
 
 let text_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
-    _value =
-  let at = at |> A.add_opt At.Name.placeholder placeholder in
-  let value elt = get_value elt |> Jv.to_string in
-  make_input ~value ?validate ?d ~at ?ev ?required ?pattern "text"
+    default_value =
+  let at =
+    at
+    |> A.add_opt At.Name.placeholder placeholder
+    |> A.add_opt At.Name.value default_value
+  in
+  let value = Jv.to_string in
+  make_input ~value ?validate ?d ~at ?ev ?required ?pattern
+    ~value_change_event:Ev.keyup ~type':"text" default_value
 
 let password_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
     _value =
   let at = at |> A.add_opt At.Name.placeholder placeholder in
-  let value elt = get_value elt |> Jv.to_string in
-  make_input ~value ?validate ?d ~at ?ev ?required ?pattern "password"
+  let value = Jv.to_string in
+  make_input ~value ~value_change_event:Ev.keyup ?validate ?d ~at ?ev ?required
+    ?pattern ~type':"password" None
 
 let submit ?d ?(at = []) ?ev text =
   let at = A.add At.Name.value text at in
-  make_input ~value:ignore ?d ~at ?ev "submit"
+  (* TODO this should be more precise. Submit inputs are different. *)
+  make_input ~value:ignore ~value_change_event:Ev.change ?d ~at ?ev
+    ~type':"submit" None
