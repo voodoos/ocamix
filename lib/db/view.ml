@@ -23,12 +23,13 @@ end
 
 type 'a selection = All | Only of 'a list
 type kind = Audio
+type filter = Search of string
 
 type req = {
   kind : kind;
   src_views : string selection;
   sort : Sort.t;
-  filters : unit list;
+  filters : filter list;
 }
 
 type t = {
@@ -44,3 +45,5 @@ let item_count t = t.item_count - t.start_offset
 let req kind ?(src_views = All) ?(sort = Sort.(Some (Date_added, Desc)))
     ?(filters = []) () =
   { kind; src_views; sort; filters }
+
+let hash req = Hashtbl.hash (req.src_views, req.filters)

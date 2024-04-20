@@ -49,33 +49,47 @@ module Worker () = struct
         =
       Hashtbl.create 64
     in
-    fun store { Db.View.kind = _; src_views; sort = _; _ } ->
+    let last_view : (int * IS.Content.Key.t array) ref = ref (-1, [||]) in
+    fun store { Db.View.kind = _; src_views; sort = _; filters } ->
       (* todo: staged memoization + specialized queries using indexes *)
       let open Fut.Result_syntax in
-      try Fut.ok @@ Hashtbl.find view_memo src_views
-      with Not_found ->
-        Console.debug [ "View not found" ];
-        let f = Performance.now_ms G.performance in
+      let hash = Hashtbl.hash (src_views, filters) in
+      if Int.equal (fst !last_view) hash then Fut.ok (snd !last_view)
+      else
         let idx = IS.index (module IS.Index.Kind_View) store in
-        let+ all_keys =
-          let lower = Jv.of_array Jv.of_string [| "Audio" |] in
-          let upper = Jv.of_array Jv.of_string [| "Audio\u{0}" |] in
-          let query =
-            IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
-              ()
-          in
-          IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
+        let+ keys =
+          try Fut.ok @@ Hashtbl.find view_memo src_views
+          with Not_found ->
+            let+ all_keys =
+              let lower = Jv.of_array Jv.of_string [| "Audio" |] in
+              let upper = Jv.of_array Jv.of_string [| "Audio\u{0}" |] in
+              let query =
+                IDB.Key_range.bound ~lower ~upper ~lower_open:true
+                  ~upper_open:false ()
+              in
+              IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
+            in
+            let keys =
+              match src_views with
+              | All -> all_keys
+              | Only src_views ->
+                  Array.filter all_keys ~f:(fun (_, _sn, views) ->
+                      List.exists views ~f:(fun v -> List.memq v ~set:src_views))
+            in
+            Hashtbl.add view_memo src_views keys;
+            keys
         in
         let keys =
-          match src_views with
-          | All -> all_keys
-          | Only src_views ->
-              Array.filter all_keys ~f:(fun (_, _sn, views) ->
-                  List.exists views ~f:(fun v -> List.memq v ~set:src_views))
+          match filters with
+          | [ Search sub ] when not (String.is_empty sub) ->
+              let sub = String.lowercase_ascii sub in
+              Array.filter keys ~f:(fun (_, sort_name, _) ->
+                  let sort_name = String.lowercase_ascii sort_name in
+                  let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
+                  String.Find.find ~pattern sort_name >= 0)
+          | _ -> keys
         in
-        let f' = Performance.now_ms G.performance in
-        Console.log [ "Uncached view creation took:"; f' -. f; "ms" ];
-        Hashtbl.add view_memo src_views keys;
+        last_view := (hash, keys);
         keys
 
   let on_query (type a) (q : a query) : (a, error) Fut.result =

@@ -31,6 +31,15 @@ let app _idb =
   let player_ui =
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
+  let f_search =
+    let open Brr_lwd_ui.Field_textinput in
+    make
+      {
+        name = "pouet";
+        default = None;
+        desc = { placeholder = Lwd.pure None; label = [] };
+      }
+  in
 
   let filters, f_value =
     let f_libraries =
@@ -38,7 +47,6 @@ let app _idb =
       let choices =
         Lwd_seq.fold_monoid
           (fun (_, l) ->
-            Console.log [ "Libraries:"; l ];
             let l : Db.Stores.Items.t list Lwd.t = l in
             Lwd.map l ~f:(fun l ->
                 Lwd_seq.transform_list l (fun l ->
@@ -49,12 +57,16 @@ let app _idb =
       in
       make { name = "pouet"; desc = Lwd.join choices }
     in
-    (f_libraries.field, f_libraries.value)
+    let filters = Elwd.div [ `R f_search.field; `R f_libraries.field ] in
+    (filters, f_libraries.value)
   in
   let main_view =
-    Lwd.map f_value ~f:(fun l ->
+    Lwd.map2 f_value f_search.value ~f:(fun l t ->
+        let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
+        let open Fut.Result_syntax in
         Worker_client.query
-          (Create_view Db.View.(req Audio ~src_views:(Only l) ~sort:Random ())))
+          (Create_view
+             Db.View.(req Audio ~src_views:(Only l) ~sort:Random ?filters ())))
   in
 
   let main_list =
