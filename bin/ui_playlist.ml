@@ -72,7 +72,9 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
   let table : data row_data Lwd_table.t = Lwd_table.make () in
   (* The [rows] table is used to relate divs to the table's rows in the
      observer's callback *)
-  let row_index = Hashtbl.create 2048 in
+  let row_index : (int, data row_data Lwd_table.row) Hashtbl.t =
+    Hashtbl.create 2048
+  in
   let unload_queue = Int_uniqueue.create () in
 
   let add ~fetch ?(max_items = 200) indexes =
@@ -181,6 +183,8 @@ let lazy_table (type data) ~(ui_table : Table.fixed_row_height)
           let+ total = total_items in
           if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
           Lwd_table.clear table;
+          Hashtbl.clear row_index;
+          Int_uniqueue.clear unload_queue;
           for i = 0 to total - 1 do
             let set = { index = i; content = None; render } in
             Hashtbl.add row_index i @@ Lwd_table.append ~set table
