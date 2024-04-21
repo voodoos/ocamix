@@ -176,12 +176,14 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           in
           let _ =
             let open Fut.Result_syntax in
-            let () = Int_uniqueue.clear unload_queue in
+            let () =
+              (* Cleanup *)
+              Lwd_table.clear table;
+              Hashtbl.clear row_index;
+              Int_uniqueue.clear unload_queue
+            in
             let+ total = total_items in
             if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
-            Lwd_table.clear table;
-            Hashtbl.clear row_index;
-            Int_uniqueue.clear unload_queue;
             for i = 0 to total - 1 do
               let set = { index = i; content = None; render } in
               Hashtbl.add row_index i @@ Lwd_table.append ~set table
