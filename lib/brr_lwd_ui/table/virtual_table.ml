@@ -145,6 +145,19 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     in
     List.init (last - first) ~f:(fun i -> first + i)
   in
+  let prepare ~total_items:total ~render =
+    let () =
+      (* Cleanup *)
+      Lwd_table.clear table;
+      Hashtbl.clear row_index;
+      Int_uniqueue.clear unload_queue
+    in
+    if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
+    for i = 0 to total - 1 do
+      let set = { index = i; content = None; render } in
+      Hashtbl.add row_index i @@ Lwd_table.append ~set table
+    done
+  in
   let scroll_handler =
     let on_scroll =
       Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
@@ -176,18 +189,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           in
           let _ =
             let open Fut.Result_syntax in
-            let () =
-              (* Cleanup *)
-              Lwd_table.clear table;
-              Hashtbl.clear row_index;
-              Int_uniqueue.clear unload_queue
-            in
-            let+ total = total_items in
-            if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
-            for i = 0 to total - 1 do
-              let set = { index = i; content = None; render } in
-              Hashtbl.add row_index i @@ Lwd_table.append ~set table
-            done;
+            let+ total_items = total_items in
+            prepare ~total_items ~render;
             (* preload the first items *)
             add (List.init 100 ~f:Fun.id)
           in
