@@ -112,58 +112,51 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let num_rows = Lwd.var 0 in
   let table_height = Lwd.var None in
+  let compute_visible_rows ~last_scroll_y div =
+    let height elt =
+      let jv = El.to_jv elt in
+      Jv.get jv "offsetHeight" |> Jv.to_int
+    in
+    let children = El.children div in
+    let scroll_y = El.scroll_y div in
+    let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
+    let () = last_scroll_y := scroll_y in
+    let total_height = height div |> float_of_int in
+    let num_rows = Lwd.peek num_rows in
+    let header_height = height @@ List.hd children in
+    let first_row = List.hd @@ List.tl children in
+    let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
+    let number_of_visible_rows = total_height /. row_height |> int_of_float in
+    let bleeding = number_of_visible_rows in
+    let scroll_y = scroll_y -. float_of_int header_height in
+    let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
+    let last_visible_row = first_visible_row + number_of_visible_rows in
+    let first =
+      let bleeding =
+        match direction with `Up -> bleeding | _ -> bleeding / 2
+      in
+      first_visible_row - bleeding |> max 0
+    in
+    let last =
+      let bleeding =
+        match direction with `Down -> bleeding | _ -> bleeding / 2
+      in
+      last_visible_row + bleeding |> min num_rows
+    in
+    List.init (last - first) ~f:(fun i -> first + i)
+  in
   let scroll_handler =
     let on_scroll =
       Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
           let add = add ~fetch in
+          let last_scroll_y = ref 0. in
+          let update div =
+            let visible_rows = compute_visible_rows ~last_scroll_y div in
+            (* todo: We do way too much work and rebuild the queue each
+               time... it's very ineficient *)
+            add ~max_items:(4 * List.length visible_rows) visible_rows
+          in
           let scroll_handler =
-            let last_scroll_y = ref 0. in
-            let update div =
-              let height elt =
-                let jv = El.to_jv elt in
-                Jv.get jv "offsetHeight" |> Jv.to_int
-              in
-              let children = El.children div in
-              let scroll_y = El.scroll_y div in
-              let direction =
-                if scroll_y >. !last_scroll_y then `Down else `Up
-              in
-              let () = last_scroll_y := scroll_y in
-              let total_height = height div |> float_of_int in
-              let num_rows = Lwd.peek num_rows in
-              let header_height = height @@ List.hd children in
-              let first_row = List.hd @@ List.tl children in
-              let row_height =
-                Utils.Unit.to_px ~parent:first_row ui_table.row_height
-              in
-              let number_of_visible_rows =
-                total_height /. row_height |> int_of_float
-              in
-              let bleeding = number_of_visible_rows in
-              let scroll_y = scroll_y -. float_of_int header_height in
-              let first_visible_row =
-                int_of_float (scroll_y /. row_height) + 1
-              in
-              let last_visible_row =
-                first_visible_row + number_of_visible_rows
-              in
-              let first =
-                let bleeding =
-                  match direction with `Up -> bleeding | _ -> bleeding / 2
-                in
-                first_visible_row - bleeding |> max 0
-              in
-              let last =
-                let bleeding =
-                  match direction with `Down -> bleeding | _ -> bleeding / 2
-                in
-                last_visible_row + bleeding |> min num_rows
-              in
-              (* todo: We do way too much work and rebuild the queue each
-                 time... it's very ineficient *)
-              let indexes = List.init (last - first) ~f:(fun i -> first + i) in
-              add ~max_items:(4 * number_of_visible_rows) indexes
-            in
             let last_update = ref 0. in
             let timeout = ref (-1) in
             let reset_ticker div =
