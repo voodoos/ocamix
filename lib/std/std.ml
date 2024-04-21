@@ -25,3 +25,8 @@ end
 
 let random_state = Random.get_state ()
 let new_uuid_v4 () = Uuidm.v4_gen random_state ()
+
+(** [tee f x] applies [f] to [x] and returns [x] *)
+let tee f x =
+  let () = f x in
+  x
