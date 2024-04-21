@@ -72,7 +72,7 @@ let ui_form () =
       match t with
       (* FIXME: validation already happened, it's redundant to have to match *)
       | { url = Ok url; username = Ok username; password = Ok password } ->
-          Console.log [ "Form submitted:"; url; username; password ];
+          Console.log [ "Form submitted:"; url; username ];
           ignore @@ new_connexion ~base_url:url ~username ~password
       | _ -> ())
 
