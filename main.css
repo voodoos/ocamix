@@ -69,6 +69,7 @@ body {
     overflow-y: auto;
     background-color: rgb(207, 207, 207);
     position: relative;
+    font-size: 1.2rem;
 }
 
 .lazy-table div {
@@ -80,7 +81,6 @@ body {
     grid-template-columns: subgrid;
     grid-column: 1/-1;
     padding: 0.5rem;
-    font-size: 1.2rem;
     background-color: #3c4146;
     overflow: hidden;
 }
