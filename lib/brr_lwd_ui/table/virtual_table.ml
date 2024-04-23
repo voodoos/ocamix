@@ -115,42 +115,36 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     load (Array.of_list to_load);
     cleanup ()
   in
-  let num_rows = Lwd.var 0 in
   let table_height = Lwd.var None in
   let compute_visible_rows ~last_scroll_y div =
     let height elt =
       let jv = El.to_jv elt in
       Jv.get jv "offsetHeight" |> Jv.to_int
     in
-    let children = El.children div in
     let scroll_y = El.scroll_y div in
     let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
     let () = last_scroll_y := scroll_y in
-    let total_height = height div |> float_of_int in
-    let num_rows = Lwd.peek num_rows in
-    if List.length children >= 2 then
-      let header_height = height @@ List.hd children in
-      let first_row = List.hd @@ List.tl children in
-      let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
-      let number_of_visible_rows = total_height /. row_height |> int_of_float in
-      let bleeding = number_of_visible_rows in
-      let scroll_y = scroll_y -. float_of_int header_height in
-      let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
-      let last_visible_row = first_visible_row + number_of_visible_rows in
-      let first =
-        let bleeding =
-          match direction with `Up -> bleeding | _ -> bleeding / 2
-        in
-        first_visible_row - bleeding |> max 0
+    let visible_height = height div |> float_of_int in
+    let row_height = Utils.Unit.to_px ~parent:div ui_table.row_height in
+    let header_height = row_height in
+    let number_of_visible_rows = visible_height /. row_height |> int_of_float in
+    let bleeding = number_of_visible_rows in
+    let scroll_y = scroll_y -. header_height in
+    let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
+    let last_visible_row = first_visible_row + number_of_visible_rows in
+    let first =
+      let bleeding =
+        match direction with `Up -> bleeding | _ -> bleeding / 2
       in
-      let last =
-        let bleeding =
-          match direction with `Down -> bleeding | _ -> bleeding / 2
-        in
-        last_visible_row + bleeding |> min num_rows
+      first_visible_row - bleeding |> max 0
+    in
+    let last =
+      let bleeding =
+        match direction with `Down -> bleeding | _ -> bleeding / 2
       in
-      List.init (last - first) ~f:(fun i -> first + i)
-    else []
+      last_visible_row + bleeding
+    in
+    List.init (last - first) ~f:(fun i -> first + i)
   in
   let prepare ~total_items:total ~render =
     let () =
@@ -159,7 +153,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       Hashtbl.clear row_index;
       Int_uniqueue.clear unload_queue
     in
-    if not (Lwd.peek num_rows = total) then Lwd.set num_rows total;
     for i = 0 to total - 1 do
       let set = { index = i; content = None; render } in
       Hashtbl.add row_index i @@ Lwd_table.append ~set table
@@ -179,7 +172,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         let+ total_items = total_items in
         match total_items with
         | Ok total_items ->
-            Console.log [ "prepare"; total_items ];
             prepare ~total_items ~render;
             update
         | _ -> ignore)
@@ -219,10 +211,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let root = Lwd.observe repopulate_deps in
     Lwd.set_on_invalidate root (fun _ ->
         match Lwd.quick_sample root with
-        | update, Some (_h, div) ->
-            Fut.await update (fun update ->
-                Console.log [ "populating"; _h; div ];
-                update div)
+        | update, Some (_h, div) -> Fut.await update (fun update -> update div)
         | _ -> ());
     Lwd.quick_sample root |> ignore
   in
@@ -277,7 +266,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
-        Console.log [ entries ];
         let entry = List.hd entries in
         let div = Resize_observer.Entry.target entry in
         let rect = Resize_observer.Entry.content_rect entry in
