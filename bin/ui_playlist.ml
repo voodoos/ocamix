@@ -18,16 +18,18 @@ let columns () =
 
 let make ~reset_playlist ~fetch _ (view : (Db.View.t, 'a) Fut.result Lwd.t) =
   let img_url server_id item_id =
-    Lwd.map (Lwd.get Servers.var) ~f:(fun servers ->
-        let servers = Lwd_seq.to_list servers in
-        let url =
-          try
-            let server : Servers.server = List.assq server_id servers in
-            Printf.sprintf "%s/Items/%s/Images/Primary?width=50"
-              server.connexion.base_url item_id
-          with Not_found -> "error-globe-64.png"
-        in
-        At.src (Jstr.v url))
+    let servers =
+      (* should this be reactive ? *)
+      Lwd.peek Servers.connexions |> Lwd_seq.to_list
+    in
+    let url =
+      try
+        let connexion : DS.connexion = List.assq server_id servers in
+        Printf.sprintf "%s/Items/%s/Images/Primary?width=50" connexion.base_url
+          item_id
+      with Not_found -> "error-globe-64.png"
+    in
+    At.src (Jstr.v url)
   in
   let render view start_index
       {
@@ -47,7 +49,7 @@ let make ~reset_playlist ~fetch _ (view : (Db.View.t, 'a) Fut.result Lwd.t) =
       match (image_blur_hashes, album_id) with
       | { primary = None }, _ | _, None ->
           Lwd.return (At.src (Jstr.v "music-50.png"))
-      | _, Some id -> img_url server_id id
+      | _, Some id -> Lwd.return (img_url server_id id)
     in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function

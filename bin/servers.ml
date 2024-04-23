@@ -1,35 +1,49 @@
 open Import
 open Brr
 
-type server = { connexion : DS.connexion; status : Db.Sync.report Lwd.var }
-type t = (string * server) Lwd_seq.t Lwd.var
+type server = {
+  connexion : DS.connexion;
+  status : Db.Sync.report Lwd.var;
+  refresh : unit Lwd.var;
+}
 
-let var : t = Brr_lwd_ui.Persistent.var ~key:"ui_servers" Lwd_seq.empty
+let connexions : (string * DS.connexion) Lwd_seq.t Lwd.var =
+  Brr_lwd_ui.Persistent.var ~key:"ui_servers" Lwd_seq.empty
 
-let connect (server_id, { connexion; status }) =
+let connect (server_id, { connexion; status; refresh }) =
   let _ =
     Worker_client.listen Servers_status_update ~f:(fun (id, report) ->
         (* TODO: subscribe to a specific server's updates *)
-        if String.equal server_id id then Lwd.set status report)
+        let previous_status = Lwd.peek status in
+        if String.equal server_id id then (
+          Lwd.set status report;
+          match (previous_status.sync_progress, report.sync_progress) with
+          | Some { remaining; _ }, Some { remaining = remaining'; _ }
+            when remaining <> remaining' ->
+              Lwd.set refresh ()
+          | Some { remaining; _ }, None -> Lwd.set refresh ()
+          | _ -> ()))
   in
   ignore (Worker_client.query @@ Add_servers [ (server_id, connexion) ])
 
-let () =
-  (* Connect to servers that are already known when loading the page *)
-  let servers = Lwd.peek var |> Lwd_seq.to_list in
-  List.iter servers ~f:connect
+let servers_with_status =
+  Lwd_seq.map
+    (fun (id, connexion) ->
+      let status = Lwd.var Db.Sync.initial_report in
+      let refresh = Lwd.var () in
+      let server = (id, { connexion; status; refresh }) in
+      connect server;
+      server)
+    (Lwd.get connexions)
 
 let new_connexion ~base_url ~username ~password =
   let open Fut.Result_syntax in
   let+ connexion = DS.connect { base_url; username; password } in
-  let status = Lwd.var Db.Sync.initial_report in
-  let server = { connexion; status } in
   let server_id = connexion.auth_response.server_id in
   (* TODO CHECK SERVER ID *)
-  let () = connect (server_id, server) in
   Lwd.update
-    (fun servers -> Lwd_seq.(concat servers (element (server_id, server))))
-    var
+    (fun servers -> Lwd_seq.(concat servers (element (server_id, connexion))))
+    connexions
 
 module Connect_form = struct
   open Brr_lwd_ui.Form
@@ -98,25 +112,23 @@ let fut_to_lwd ~init f =
   Lwd.get v
 
 let servers_libraries =
-  let statuses =
-    Lwd_seq.map
-      (fun (server_id, { status; _ }) ->
-        let views =
-          Lwd.bind (Lwd.get status) ~f:(fun _ ->
-              Worker_client.query (Get_server_libraries server_id)
-              |> Fut.map (Result.get_or ~default:[])
-              |> fut_to_lwd ~init:[])
-        in
-        (server_id, views))
-      (Lwd.get var)
-  in
-  statuses
+  Lwd_seq.map
+    (fun (server_id, { refresh; _ }) ->
+      let views =
+        Lwd.bind (Lwd.get refresh) ~f:(fun () ->
+            Worker_client.query (Get_server_libraries server_id)
+            |> Fut.map (Result.get_or ~default:[])
+            |> fut_to_lwd ~init:[])
+      in
+      (server_id, views))
+    servers_with_status
 
 let ui () =
-  let servers = Lwd.get var in
-  let statuses = Lwd_seq.map (fun (_, server) -> ui_status server) servers in
+  let statuses =
+    Lwd_seq.map (fun (_, server) -> ui_status server) servers_with_status
+  in
   let ui_form =
-    Lwd.map servers ~f:(fun s ->
+    Lwd.map servers_with_status ~f:(fun s ->
         match Lwd_seq.view s with
         | Empty -> Lwd_seq.element @@ Elwd.div [ `R (ui_form ()) ]
         | _ -> Lwd_seq.empty)

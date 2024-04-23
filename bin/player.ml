@@ -48,16 +48,16 @@ struct
           match result with
           | [| Some { Db.Stores.Items.item = { server_id; id; name; _ }; _ } |]
             ->
-              let servers = Lwd_seq.to_list (Lwd.peek Servers.var) in
-              let server : Servers.server = List.assq server_id servers in
-              let url = audio_url server.connexion id in
+              let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+              let connexion : DS.connexion = List.assq server_id servers in
+              let url = audio_url connexion id in
               let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
               let () =
                 let open Brr_io.Media.Session in
                 let session = of_navigator G.navigator in
                 let img_src =
                   Printf.sprintf "%s/Items/%s/Images/Primary?width=500"
-                    server.connexion.base_url id
+                    connexion.base_url id
                 in
                 let title = name in
                 let album = "" in
