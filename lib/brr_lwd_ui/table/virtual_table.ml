@@ -59,6 +59,12 @@ type ('data, 'error) data_source = {
   render : int -> 'data -> Elwd.t Elwd.col;
 }
 
+(* The virtual table is a complex reactive component. Primarily, it reacts to
+   changes of the [data_source] so that content in the table is properly
+   refreshed when it does. Additionnaly it needs to react to multiple dom
+   events, notably vertical resize of the container and scroll events, to ensure
+   that the visible part of the talbe is always populated with rows. *)
+
 let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     (data_source : (data, _) data_source Lwd.t) =
@@ -100,8 +106,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       let q_length = Int_uniqueue.length unload_queue in
       if q_length > max_items then
         for _ = max_items to q_length do
-          let index = Int_uniqueue.take unload_queue in
-          unload index
+          try unload (Int_uniqueue.take unload_queue) with Queue.Empty -> ()
         done
     in
     let to_load =
@@ -123,27 +128,29 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let () = last_scroll_y := scroll_y in
     let total_height = height div |> float_of_int in
     let num_rows = Lwd.peek num_rows in
-    let header_height = height @@ List.hd children in
-    let first_row = List.hd @@ List.tl children in
-    let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
-    let number_of_visible_rows = total_height /. row_height |> int_of_float in
-    let bleeding = number_of_visible_rows in
-    let scroll_y = scroll_y -. float_of_int header_height in
-    let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
-    let last_visible_row = first_visible_row + number_of_visible_rows in
-    let first =
-      let bleeding =
-        match direction with `Up -> bleeding | _ -> bleeding / 2
+    if List.length children >= 2 then
+      let header_height = height @@ List.hd children in
+      let first_row = List.hd @@ List.tl children in
+      let row_height = Utils.Unit.to_px ~parent:first_row ui_table.row_height in
+      let number_of_visible_rows = total_height /. row_height |> int_of_float in
+      let bleeding = number_of_visible_rows in
+      let scroll_y = scroll_y -. float_of_int header_height in
+      let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
+      let last_visible_row = first_visible_row + number_of_visible_rows in
+      let first =
+        let bleeding =
+          match direction with `Up -> bleeding | _ -> bleeding / 2
+        in
+        first_visible_row - bleeding |> max 0
       in
-      first_visible_row - bleeding |> max 0
-    in
-    let last =
-      let bleeding =
-        match direction with `Down -> bleeding | _ -> bleeding / 2
+      let last =
+        let bleeding =
+          match direction with `Down -> bleeding | _ -> bleeding / 2
+        in
+        last_visible_row + bleeding |> min num_rows
       in
-      last_visible_row + bleeding |> min num_rows
-    in
-    List.init (last - first) ~f:(fun i -> first + i)
+      List.init (last - first) ~f:(fun i -> first + i)
+    else []
   in
   let prepare ~total_items:total ~render =
     let () =
@@ -158,48 +165,66 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       Hashtbl.add row_index i @@ Lwd_table.append ~set table
     done
   in
-  let scroll_handler =
-    let on_scroll =
-      Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
-          let add = add ~fetch in
-          let last_scroll_y = ref 0. in
-          let update div =
-            let visible_rows = compute_visible_rows ~last_scroll_y div in
-            (* todo: We do way too much work and rebuild the queue each
-               time... it's very ineficient *)
-            add ~max_items:(4 * List.length visible_rows) visible_rows
-          in
-          let scroll_handler =
-            let last_update = ref 0. in
-            let timeout = ref (-1) in
-            let reset_ticker div =
-              let debouncing_interval = 25 in
-              (* We use [last_update] to have regular debounced updates and the
-                 [timeout] to ensure that the last scroll event is always taken into
-                 account even it it happens during the debouncing interval. *)
-              let now = Performance.now_ms G.performance in
-              if !timeout >= 0 then G.stop_timer !timeout;
-              timeout :=
-                G.set_timeout ~ms:debouncing_interval (fun () -> update div);
-              if now -. !last_update >. float_of_int debouncing_interval then (
-                last_update := now;
-                update div)
-            in
-            fun div -> reset_ticker div
-          in
-          let _ =
-            let open Fut.Result_syntax in
-            let+ total_items = total_items in
+  let populate_on_scroll =
+    Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
+        let add = add ~fetch in
+        let last_scroll_y = ref 0. in
+        let update div =
+          let visible_rows = compute_visible_rows ~last_scroll_y div in
+          (* todo: We do way too much work and rebuild the queue each
+             time... it's very ineficient *)
+          add ~max_items:(4 * List.length visible_rows) visible_rows
+        in
+        let open Fut.Syntax in
+        let+ total_items = total_items in
+        match total_items with
+        | Ok total_items ->
+            Console.log [ "prepare"; total_items ];
             prepare ~total_items ~render;
-            (* preload the first items *)
-            add (List.init 100 ~f:Fun.id)
-          in
-          scroll_handler)
-    in
-    Lwd.map on_scroll ~f:(fun on_scroll ->
+            update
+        | _ -> ignore)
+  in
+  let scroll_handler =
+    Lwd.map populate_on_scroll ~f:(fun update ->
         Elwd.handler Ev.scroll (fun ev ->
+            let open Fut.Syntax in
+            ignore
+            @@
+            let+ update = update in
+            let scroll_handler =
+              let last_update = ref 0. in
+              let timeout = ref (-1) in
+              let reset_ticker div =
+                let debouncing_interval = 25 in
+                (* We use [last_update] to have regular debounced updates and the
+                   [timeout] to ensure that the last scroll event is always taken into
+                   account even it it happens during the debouncing interval. *)
+                let now = Performance.now_ms G.performance in
+                if !timeout >= 0 then G.stop_timer !timeout;
+                timeout :=
+                  G.set_timeout ~ms:debouncing_interval (fun () -> update div);
+                if now -. !last_update >. float_of_int debouncing_interval then (
+                  last_update := now;
+                  update div)
+              in
+              fun div -> reset_ticker div
+            in
             let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
-            on_scroll div))
+            scroll_handler div))
+  in
+  let () =
+    let repopulate_deps =
+      Lwd.map2 populate_on_scroll (Lwd.get table_height) ~f:(fun a b -> (a, b))
+    in
+    let root = Lwd.observe repopulate_deps in
+    Lwd.set_on_invalidate root (fun _ ->
+        match Lwd.quick_sample root with
+        | update, Some (_h, div) ->
+            Fut.await update (fun update ->
+                Console.log [ "populating"; _h; div ];
+                update div)
+        | _ -> ());
+    Lwd.quick_sample root |> ignore
   in
   let make_spacer n =
     let at = [ At.class' (Jstr.v "row_spacer") ] in
@@ -249,21 +274,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         else result)
   in
   let table_header = Schema.header ui_table in
-  let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
-  let grid_style = Schema.style ui_table in
-  let s = At.style (Jstr.v @@ grid_style) in
-  let at = `P s :: at in
-  let el =
-    Elwd.div
-      ~at:Attrs.(to_at @@ classes [ "lazy-table-wrapper" ])
-      [
-        `R
-          (Elwd.div
-             ~ev:[ `R scroll_handler ]
-             ~at
-             [ `R table_header; `S (Lwd_seq.lift table_body) ]);
-      ]
-  in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
@@ -278,7 +288,23 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         | None -> Lwd.set table_height (Some (height, div))
         | _ -> ())
   in
-  Lwd.map el ~f:(tee (Resize_observer.observe observer))
+  let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
+  let grid_style = Schema.style ui_table in
+  let s = At.style (Jstr.v @@ grid_style) in
+  let at = `P s :: at in
+  let el =
+    let container =
+      Elwd.div
+        ~ev:[ `R scroll_handler ]
+        ~at
+        [ `R table_header; `S (Lwd_seq.lift table_body) ]
+      |> Lwd.map ~f:(tee (Resize_observer.observe observer))
+    in
+    Elwd.div
+      ~at:Attrs.(to_at @@ classes [ "lazy-table-wrapper" ])
+      [ `R container ]
+  in
+  el
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
 ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
