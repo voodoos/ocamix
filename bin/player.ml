@@ -11,7 +11,7 @@ type t = Elwd.t Lwd.t
 
 let playstate = { playlist = Lwd.var None; current_index = Lwd.var 0 }
 
-type now_playing = { item_id : string; url : string }
+type now_playing = { item : DS.Api.Item.t; url : string }
 
 let now_playing = Lwd.var None
 
@@ -46,8 +46,8 @@ struct
         let+ item =
           let+ result = P.fetch playlist [| current_index |] in
           match result with
-          | [| Some { Db.Stores.Items.item = { server_id; id; name; _ }; _ } |]
-            ->
+          | [| Some { Db.Stores.Items.item; _ } |] ->
+              let { DS.Api.Item.server_id; id; name; _ } = item in
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
               let url = audio_url connexion id in
@@ -73,7 +73,7 @@ struct
                 in
                 set_metadata session { title; artist; album; artwork }
               in
-              { item_id = id; url }
+              { item; url }
           | _ -> raise Not_found
         in
         Lwd.set now_playing (Some item)
@@ -103,7 +103,7 @@ struct
       let root = Lwd.observe (Lwd.get now_playing) in
       Lwd.set_on_invalidate root (fun _ ->
           match Lwd.quick_sample root with
-          | Some { url } -> set_src url
+          | Some { url; _ } -> set_src url
           | None -> ());
       Lwd.quick_sample root |> ignore
     in
@@ -114,11 +114,31 @@ struct
       ignore @@ set_play_url playlist next_index;
       Lwd.set playstate.current_index next_index
     in
-    let () =
+    let prev () =
+      let playlist = Lwd.peek playstate.playlist in
+      let current_index = Lwd.peek playstate.current_index in
+      let next_index = max 0 (current_index - 1) in
+      ignore @@ set_play_url playlist next_index;
+      Lwd.set playstate.current_index next_index
+    in
+    let set_position_state =
       (* Enable control from OS *)
       let open Brr_io.Media.Session in
       let session = of_navigator G.navigator in
-      set_action_handler session Action.next_track next
+      let set_position_state () =
+        let duration = El.prop (El.Prop.float (Jstr.v "duration")) audio_elt in
+        if not (Float.is_nan duration) then
+          let playback_rate =
+            El.prop (El.Prop.float (Jstr.v "playbackRate")) audio_elt
+          in
+          let position =
+            El.prop (El.Prop.float (Jstr.v "currentTime")) audio_elt
+          in
+          set_position_state ~duration ~playback_rate ~position session
+      in
+      set_action_handler session Action.next_track next;
+      set_action_handler session Action.previous_track prev;
+      set_position_state
     in
     let on_error ev =
       Ev.stop_immediate_propagation ev;
@@ -135,7 +155,8 @@ struct
     let () =
       let target = El.as_target audio_elt in
       ignore @@ Ev.listen Ev.ended next target;
-      ignore @@ Ev.listen Ev.error on_error target
+      ignore @@ Ev.listen Ev.error on_error target;
+      ignore @@ Ev.listen Ev.play (fun _ -> set_position_state ()) target
     in
     let btn_next =
       Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
