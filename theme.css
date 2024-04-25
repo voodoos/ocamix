@@ -24,6 +24,6 @@ body.dragging .draggable-table>div {
     border-right: solid black 1px;
 }
 
-.lazy-table, .lazy-table>div {
+.lwdui-lazy-table, .lwdui-lazy-table>div {
     background-color: #3c4146;
 }
