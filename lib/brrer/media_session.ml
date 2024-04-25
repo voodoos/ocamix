@@ -68,8 +68,23 @@ module Action = struct
   type t = Jstr.t
 
   let next_track = Jstr.v "nexttrack"
+  let previous_track = Jstr.v "previoustrack"
 end
 
 let set_action_handler t action f =
   let callback = Jv.callback ~arity:1 f in
   Jv.call t "setActionHandler" [| Jv.of_jstr action; callback |] |> ignore
+
+let set_position_state ?duration ?playback_rate ?position t =
+  let maybe_float name v = Option.map (fun v -> (name, Jv.of_float v)) v in
+  let duration = maybe_float "duration" duration in
+  let playback_rate = maybe_float "playbackRate" playback_rate in
+  let position = maybe_float "position" position in
+  let args =
+    let state_dict =
+      List.filter_map Fun.id [ duration; playback_rate; position ]
+    in
+    match state_dict with [] -> [||] | sd -> [| Jv.obj (Array.of_list sd) |]
+  in
+  Console.log [ args ];
+  Jv.call t "setPositionState" args |> ignore
