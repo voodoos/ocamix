@@ -63,6 +63,12 @@ let app _idb =
   let main_view =
     Lwd.map2 f_value f_search.value ~f:(fun l t ->
         let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
+        Console.log
+          [
+            "Updating main view:";
+            Jv.of_option ~none:(Jv.of_string "\"\"") Jv.of_string t;
+            Jv.of_list Jv.of_string l;
+          ];
         let open Fut.Result_syntax in
         Worker_client.query
           (Create_view
@@ -90,8 +96,9 @@ let app _idb =
       `R
         (Elwd.div
            ~at:[ `P (At.class' (Jstr.v "item-list")) ]
-           [ `R filters; `R (*todo: do we need that join ?*) main_list ]);
-      `R now_playing;
+           [ `R filters; `R main_list ]);
+      `R
+        (Elwd.div ~at:[ `P (At.class' (Jstr.v "playlist")) ] [ `R now_playing ]);
       `R player_ui;
       `P (El.div [ El.txt' "icons by icons8" ]);
     ]

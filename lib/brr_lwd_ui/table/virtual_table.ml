@@ -276,7 +276,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         | None -> Lwd.set table_height (Some (height, div))
         | _ -> ())
   in
-  let at = Attrs.to_at ~id:"lazy_tbl" @@ Attrs.classes [ "lazy-table" ] in
+  let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
   let grid_style = Schema.style ui_table in
   let s = At.style (Jstr.v @@ grid_style) in
   let at = `P s :: at in
@@ -289,7 +289,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       |> Lwd.map ~f:(tee (Resize_observer.observe observer))
     in
     Elwd.div
-      ~at:Attrs.(to_at @@ classes [ "lazy-table-wrapper" ])
+      ~at:Attrs.(to_at @@ classes [ "lwdui-lazy-table-wrapper" ])
       [ `R container ]
   in
   el

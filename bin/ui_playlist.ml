@@ -53,11 +53,12 @@ let make ~reset_playlist ~fetch _ (view : (Db.View.t, 'a) Fut.result Lwd.t) =
     in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
-        | Some { item_id; _ } when String.equal item_id id -> El.txt' "|>"
-        | Some _ | None -> El.txt' (string_of_int (start_index + 1)))
+        | Some { item = { id = item_id; _ }; _ } when String.equal item_id id ->
+            El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "|>" ]
+        | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
     in
     [
-      `R (Elwd.div [ `R status ]);
+      `R status;
       `R
         (Elwd.div
            ~ev:[ `P play_on_click ]

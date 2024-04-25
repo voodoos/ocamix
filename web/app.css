@@ -21,13 +21,17 @@ body {
 
     width: 100%;
     height: 100%;
-}
 
-#main-layout .item-list {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
+    & .item-list, & .playlist {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    & .playlist div.row:has(div.playing) {
+        filter: brightness(120%);
+    }
 }
 
 #main-layout .player-wrapper {
