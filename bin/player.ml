@@ -84,11 +84,28 @@ struct
     Lwd.set playstate.current_index 0
 
   let make () =
-    let src =
-      Lwd.get now_playing
-      |> Lwd.map ~f:(function
-           | None -> At.src (Jstr.v "")
-           | Some { url; _ } -> At.src (Jstr.v url))
+    let audio_elt =
+      El.audio
+        ~at:
+          [
+            At.v (Jstr.v "controls") (Jstr.v "true");
+            At.v (Jstr.v "autoplay") (Jstr.v "true");
+            At.v (Jstr.v "preload") (Jstr.v "auto");
+          ]
+        []
+    in
+    let set_src url = El.set_at (Jstr.v "src") (Some (Jstr.v url)) audio_elt in
+    let _auto_play =
+      (* We cannot rely on the main [Lwd] observer for playback control because
+         it is tied to the [requestAnimationFrames] callback. This prevent the
+         player to start playing the next song if the tab is in the background.
+      *)
+      let root = Lwd.observe (Lwd.get now_playing) in
+      Lwd.set_on_invalidate root (fun _ ->
+          match Lwd.quick_sample root with
+          | Some { url } -> set_src url
+          | None -> ());
+      Lwd.quick_sample root |> ignore
     in
     let next () =
       let playlist = Lwd.peek playstate.playlist in
@@ -98,39 +115,31 @@ struct
       Lwd.set playstate.current_index next_index
     in
     let () =
+      (* Enable control from OS *)
       let open Brr_io.Media.Session in
       let session = of_navigator G.navigator in
       set_action_handler session Action.next_track next
     in
-    let next _ = next () in
-    let on_ended = Elwd.handler Ev.ended next in
-    let on_error =
-      Elwd.handler Ev.error (fun ev ->
-          Ev.stop_immediate_propagation ev;
-          Ev.prevent_default ev;
-          Console.log
-            [
-              "A playback error happened. This is probably due to a codec \
-               unsupported by the browser.";
-              ev;
-            ];
-          next ev)
+    let on_error ev =
+      Ev.stop_immediate_propagation ev;
+      Ev.prevent_default ev;
+      Console.log
+        [
+          "A playback error happened. This is probably due to a codec \
+           unsupported by the browser.";
+          ev;
+        ];
+      next ()
     in
-    let ev = [ `P on_ended; `P on_error ] in
-    let audio =
-      Elwd.audio
-        ~at:
-          [
-            `P (At.v (Jstr.v "controls") (Jstr.v "true"));
-            `P (At.v (Jstr.v "autoplay") (Jstr.v "true"));
-            `P (At.v (Jstr.v "preload") (Jstr.v "auto"));
-            `R src;
-          ]
-        ~ev []
+    let next _ = next () in
+    let () =
+      let target = El.as_target audio_elt in
+      ignore @@ Ev.listen Ev.ended next target;
+      ignore @@ Ev.listen Ev.error on_error target
     in
     let btn_next =
       Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
     in
     let at = [ `P (At.class' (Jstr.v "player-wrapper")) ] in
-    Elwd.div ~at [ `R audio; `R btn_next ]
+    Elwd.div ~at [ `P audio_elt; `R btn_next ]
 end
