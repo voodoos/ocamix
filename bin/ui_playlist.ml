@@ -16,7 +16,7 @@ let columns () =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~reset_playlist ~fetch _ (view : (Db.View.t, 'a) Fut.result Lwd.t) =
+let make ~reset_playlist ~fetch (view : (Db.View.t, 'a) Fut.result Lwd.t) =
   let img_url server_id item_id =
     let servers =
       (* should this be reactive ? *)
