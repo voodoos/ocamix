@@ -47,7 +47,7 @@ struct
           let+ result = P.fetch playlist [| current_index |] in
           match result with
           | [| Some { Db.Stores.Items.item; _ } |] ->
-              let { DS.Api.Item.server_id; id; name; _ } = item in
+              let { DS.Api.Item.server_id; id; album_id; name; _ } = item in
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
               let url = audio_url connexion id in
@@ -55,9 +55,11 @@ struct
               let () =
                 let open Brr_io.Media.Session in
                 let session = of_navigator G.navigator in
+                let image_id = Option.value ~default:id album_id in
                 let img_src =
-                  Printf.sprintf "%s/Items/%s/Images/Primary?width=500"
-                    connexion.base_url id
+                  Printf.sprintf
+                    "%s/Items/%s/Images/Primary?width=500&format=Jpg"
+                    connexion.base_url image_id
                 in
                 let title = name in
                 let album = "" in
@@ -67,10 +69,11 @@ struct
                     {
                       Media_metadata.src = img_src;
                       sizes = "500x500";
-                      type' = "";
+                      type' = "image/jpeg";
                     };
                   ]
                 in
+                Console.log [ artwork ];
                 set_metadata session { title; artist; album; artwork }
               in
               { item; url }
