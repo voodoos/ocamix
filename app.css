@@ -33,14 +33,14 @@ body {
     & .playlist div.row:has(div.playing) {
         filter: brightness(120%);
     }
-}
 
-#main-layout .player-wrapper {
-    display: flex;
-    width: 100%;
-}
+    & .player-wrapper {
+        display: flex;
+        width: 100%;
+    }
 
 
-#main-layout .player-wrapper audio {
-    border-radius: 0.5rem;
+    & .player-wrapper audio {
+        border-radius: 0.5rem;
+    }
 }
