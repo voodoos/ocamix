@@ -164,11 +164,53 @@ struct
     let btn_next =
       Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
     in
-    let at = [ `P (At.class' (Jstr.v "player-wrapper")) ] in
+    let open Brr_lwd_ui in
     let now_playing =
-      Lwd.map (Lwd.get now_playing) ~f:(function
-        | None -> El.txt' "Nothing playing"
-        | Some { item = { name; _ }; _ } -> El.txt' name)
+      let track_cover =
+        let style =
+          Lwd.map (Lwd.get now_playing) ~f:(fun np ->
+              let src =
+                match np with
+                | None -> "track.png"
+                | Some { item = { id; album_id; server_id; _ }; _ } ->
+                    let image_id = Option.value ~default:id album_id in
+                    let servers =
+                      Lwd_seq.to_list (Lwd.peek Servers.connexions)
+                    in
+                    let connexion : DS.connexion =
+                      List.assq server_id servers
+                    in
+                    (* todo: this is done in multiple places, we should factor
+                       that out. *)
+                    Printf.sprintf
+                      "%s/Items/%s/Images/Primary?width=500&format=Jpg"
+                      connexion.base_url image_id
+              in
+              Printf.sprintf "background-image: url(%S)" src)
+        in
+        let at =
+          Attrs.(
+            add At.Name.class' (`P "now-playing-cover") []
+            |> add At.Name.style (`R style))
+        in
+        Elwd.div ~at []
+      in
+      let track_details =
+        Lwd.map (Lwd.get now_playing) ~f:(function
+          | None -> El.txt' "Nothing playing"
+          | Some { item = { name; _ }; _ } -> El.txt' name)
+      in
+      let at =
+        Attrs.(
+          add At.Name.class' (`P "box") []
+          |> add At.Name.class' (`P "now-playing-display"))
+      in
+      Elwd.div ~at [ `R track_cover; `R track_details ]
+    in
+    let at =
+      Attrs.(
+        add At.Name.class' (`P "player-wrapper") []
+        |> add At.Name.class' (`P "box"))
     in
     Elwd.div ~at [ `R now_playing; `P audio_elt; `R btn_next ]
 end
