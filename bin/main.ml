@@ -22,13 +22,13 @@ let app _idb =
                  El.txt' ("click" ^ string_of_int pl)));
         ])
   in
-  let player = P.make () in
   let status =
     Elwd.div
       ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ]
       [ `P (El.h1 [ El.txt' "Welcome to OCAMIX" ]); `R (Servers.ui ()) ]
   in
   let player_ui =
+    let player = P.make () in
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
   let f_search =

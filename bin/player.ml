@@ -165,5 +165,10 @@ struct
       Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
     in
     let at = [ `P (At.class' (Jstr.v "player-wrapper")) ] in
-    Elwd.div ~at [ `P audio_elt; `R btn_next ]
+    let now_playing =
+      Lwd.map (Lwd.get now_playing) ~f:(function
+        | None -> El.txt' "Nothing playing"
+        | Some { item = { name; _ }; _ } -> El.txt' name)
+    in
+    Elwd.div ~at [ `R now_playing; `P audio_elt; `R btn_next ]
 end
