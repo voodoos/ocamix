@@ -11,7 +11,7 @@ body {
     box-sizing: border-box;
 
     grid-template-columns: 2fr 1fr;
-    grid-template-rows: 5rem 1fr 2rem 1rem;
+    grid-template-rows: 5rem 1fr 2rem;
 
     gap: 1.5rem;
     padding: 1.5rem;
@@ -22,7 +22,8 @@ body {
     width: 100%;
     height: 100%;
 
-    & .item-list, & .playlist {
+    & .item-list,
+    & .playlist {
         display: flex;
         flex-direction: column;
         height: 100%;
