@@ -64,9 +64,11 @@ body {
         }
 
         & .now-playing-display .now-playing-cover {
-            border-radius: var(--border-radius);
             height: 100%;
             aspect-ratio: 1 / 1;
+            border-top-left-radius: var(--border-radius);
+            border-bottom-left-radius: var(--border-radius);
+            box-shadow: 0px 0px 0px 2px var(--dark-bg-color)inset;
             background-size: cover;
             background-color: var(--light-bg-color);
         }
