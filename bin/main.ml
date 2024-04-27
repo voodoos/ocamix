@@ -100,7 +100,6 @@ let app _idb =
       `R
         (Elwd.div ~at:[ `P (At.class' (Jstr.v "playlist")) ] [ `R now_playing ]);
       `R player_ui;
-      `P (El.div [ El.txt' "icons by icons8" ]);
     ]
 
 let is_storage_persistent =

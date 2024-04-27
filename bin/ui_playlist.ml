@@ -27,7 +27,7 @@ let make ~reset_playlist ~fetch (view : (Db.View.t, 'a) Fut.result Lwd.t) =
         let connexion : DS.connexion = List.assq server_id servers in
         Printf.sprintf "%s/Items/%s/Images/Primary?width=50" connexion.base_url
           item_id
-      with Not_found -> "error-globe-64.png"
+      with Not_found -> "server-error.png"
     in
     At.src (Jstr.v url)
   in
@@ -48,7 +48,7 @@ let make ~reset_playlist ~fetch (view : (Db.View.t, 'a) Fut.result Lwd.t) =
     let img_url =
       match (image_blur_hashes, album_id) with
       | { primary = None }, _ | _, None ->
-          Lwd.return (At.src (Jstr.v "music-50.png"))
+          Lwd.return (At.src (Jstr.v "track.png"))
       | _, Some id -> Lwd.return (img_url server_id id)
     in
     let status =
