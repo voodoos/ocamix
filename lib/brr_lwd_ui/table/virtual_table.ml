@@ -287,19 +287,16 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let grid_style = Schema.style ui_table in
   let s = At.style (Jstr.v @@ grid_style) in
   let at = `P s :: at in
-  let el =
-    let container =
-      Elwd.div
-        ~ev:[ `R scroll_handler ]
-        ~at
-        [ `R table_header; `S (Lwd_seq.lift table_body) ]
-      |> Lwd.map ~f:(tee (Resize_observer.observe observer))
-    in
+  let table =
     Elwd.div
-      ~at:Attrs.(to_at @@ classes [ "lwdui-lazy-table-wrapper" ])
-      [ `R container ]
+      ~ev:[ `R scroll_handler ]
+      ~at
+      [ `R table_header; `S (Lwd_seq.lift table_body) ]
+    |> Lwd.map ~f:(tee (Resize_observer.observe observer))
   in
-  el
+  Elwd.div
+    ~at:Attrs.(to_at @@ classes [ "lwdui-lazy-table-wrapper" ])
+    [ `R table ]
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
 ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
