@@ -196,9 +196,16 @@ struct
         Elwd.div ~at []
       in
       let track_details =
-        Lwd.map (Lwd.get now_playing) ~f:(function
-          | None -> El.txt' "Nothing playing"
-          | Some { item = { name; _ }; _ } -> El.txt' name)
+        let at = Attrs.add At.Name.class' (`P "now-playing-details") [] in
+        let title =
+          let txt =
+            Lwd.map (Lwd.get now_playing) ~f:(function
+              | None -> El.txt' "Nothing playing"
+              | Some { item = { name; _ }; _ } -> El.txt' name)
+          in
+          Elwd.span [ `R txt ]
+        in
+        Elwd.div ~at [ `R title ]
       in
       let at =
         Attrs.(
