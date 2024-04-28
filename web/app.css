@@ -54,6 +54,7 @@ body {
         height: 100%;
 
         & .now-playing-display.box {
+            border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
             display: flex;
             flex-direction: row;
             padding: 0;
@@ -66,10 +67,11 @@ body {
         & .now-playing-display .now-playing-cover {
             height: 100%;
             aspect-ratio: 1 / 1;
-            border-top-left-radius: var(--border-radius);
+            /* border-top-left-radius: var(--border-radius);
             border-bottom-left-radius: var(--border-radius);
-            box-shadow: 0px 0px 0px 2px var(--dark-bg-color)inset;
+            box-shadow: 0px 0px 0px 4px var(--dark-bg-color)inset; */
             background-size: cover;
+            background-position: center;
             background-color: var(--light-bg-color);
         }
     }
