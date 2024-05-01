@@ -3,5 +3,5 @@
  (modes js)
  (js_of_ocaml
   (flags
-   (:standard --no-inline)))
+   (:standard --no-inline --source-map-inline --pretty)))
  (libraries js_of_ocaml brrer lib data_source db))
