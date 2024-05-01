@@ -1,3 +1,10 @@
+(** A virtual table that can handle large dataset.
+
+    TODO: this is clearly over-engineered: the large lwd table that reduces to 
+    rows and placeholders with a monoid is elegant bu does not scale well. It 
+    might be possible to optimize it (especially the "uniqueue" LRU thingy), 
+    but having too large a lwd_table is probably a hard limit. *)
+
 open Std
 open Brrer
 open Brr
