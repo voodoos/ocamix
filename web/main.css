@@ -68,6 +68,7 @@ body {
     height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
+    scroll-behavior: smooth;
     background-color: rgb(207, 207, 207);
     position: relative;
     font-size: 1.2rem;
@@ -110,4 +111,15 @@ body {
 
 .lwdui-lazy-table span {
     vertical-align: middle;
+}
+
+.lwdui-controlled-scroll-wrapper {
+    position: relative;
+    overflow: hidden;
+
+    & .lwdui-controlled-scroll-controls {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+    }
 }
