@@ -14,11 +14,16 @@ let reactive t = `R t
 let sequence t = `S t
 
 module Unit = struct
+  (** Conversion between CSS units. Very early WIP. *)
   type t = Px of float | Rem of float | Em of float
 
   let of_string s =
+    (* TODO: proper parsing *)
     match String.chop_suffix ~suf:"px" s with
-    | Some i -> Float.of_string_opt i |> Option.map (fun i -> Px i)
+    | Some i -> (
+        match Int.of_string i with
+        | Some i -> Some (Px (float_of_int i))
+        | None -> Float.of_string_opt i |> Option.map (fun i -> Px i))
     | None -> (
         match String.chop_suffix ~suf:"rem" s with
         | Some f -> Float.of_string_opt f |> Option.map (fun f -> Rem f)
@@ -37,7 +42,10 @@ module Unit = struct
       let font_size =
         El.computed_style (Jstr.v "font-size") parent |> Jstr.to_string
       in
-      match of_string font_size with Some (Px i) -> i | _ -> assert false
+      match of_string font_size with
+      | None -> 16.
+      | Some (Px i) -> i
+      | Some _ -> failwith "not implemented"
     in
     function
     | Px i -> i
