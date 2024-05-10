@@ -1,0 +1,38 @@
+open Brr
+open Brr_lwd
+module A = Attrs
+
+type target = Pos of int | El of Elwd.t
+type t = { elt : Elwd.t Lwd.t; scroll_position : target option Lwd.var }
+
+(* TODO: make a proper binding *)
+let js_scroll elt target =
+  match target with
+  | Pos x ->
+      let elt = El.to_jv elt in
+      ignore @@ Jv.call elt "scroll" [| Jv.of_int 0; Jv.of_int x |]
+  | El el -> El.scroll_into_view el
+
+let make ?(at = []) ~scroll_target elt =
+  let active = Lwd.var true in
+  let at = A.O.(`P (C "lwdui-controlled-scroll-wrapper") @ at) in
+  let controls =
+    let at = A.class_ (`P "lwdui-controlled-scroll-controls") in
+    let ev =
+      let on_click _ = Lwd.set active true in
+      let handler = Elwd.handler Ev.click on_click in
+      [ `P handler ]
+    in
+    Elwd.div ~at ~ev [ `R (Elwd.button [ `P (El.txt' "Show playing") ]) ]
+  in
+  let on_wheel =
+    Elwd.handler Ev.wheel (fun _ev ->
+        if Lwd.peek active then Lwd.set active false)
+  in
+  let elt =
+    let state = Utils.triple elt (Lwd.get active) scroll_target in
+    Lwd.map state ~f:(fun (elt, active, pos) ->
+        if active then Option.iter (js_scroll elt) pos;
+        elt)
+  in
+  Elwd.div ~at ~ev:[ `P on_wheel ] [ `R elt; `R controls ]
