@@ -74,6 +74,7 @@ type ('data, 'error) data_source = {
 
 let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
+    ?(scroll_target : int Lwd.t option)
     (data_source : (data, _) data_source Lwd.t) =
   ignore placeholder;
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
@@ -294,9 +295,18 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       [ `R table_header; `S (Lwd_seq.lift table_body) ]
     |> Lwd.map ~f:(tee (Resize_observer.observe observer))
   in
-  Elwd.div
-    ~at:Attrs.(to_at @@ classes [ "lwdui-lazy-table-wrapper" ])
-    [ `R table ]
+  let at = Attrs.O.(v (`P (C "lwdui-lazy-table-wrapper"))) in
+  match scroll_target with
+  | Some scroll_target ->
+      let scroll_target =
+        Lwd.map2 table scroll_target ~f:(fun parent i ->
+            let row_height =
+              Int.of_float (Utils.Unit.to_px ~parent ui_table.row_height)
+            in
+            Some (Controlled_scroll.Pos (i * row_height)))
+      in
+      Controlled_scroll.make ~at ~scroll_target table
+  | None -> Elwd.div ~at [ `R table ]
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
 ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
