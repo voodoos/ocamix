@@ -16,7 +16,8 @@ let columns () =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~reset_playlist ~fetch (view : (Db.View.t, 'a) Fut.result Lwd.t) =
+let make ~reset_playlist ~fetch ?scroll_target
+    (view : (Db.View.t, 'a) Fut.result Lwd.t) =
   let img_url server_id item_id =
     let servers =
       (* should this be reactive ? *)
@@ -81,4 +82,9 @@ let make ~reset_playlist ~fetch (view : (Db.View.t, 'a) Fut.result Lwd.t) =
         let render = render view in
         { Table.Virtual.total_items; fetch; render })
   in
-  Table.Virtual.make ~ui_table ~placeholder data_source
+  Table.Virtual.make ~ui_table ~placeholder ?scroll_target data_source
+
+let make_now_playing ~reset_playlist ~fetch
+    (view : (Db.View.t, 'a) Fut.result Lwd.t) =
+  let scroll_target = Lwd.get Player.playstate.current_index in
+  make ~scroll_target ~reset_playlist ~fetch view

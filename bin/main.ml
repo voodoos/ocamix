@@ -83,7 +83,7 @@ let app _idb =
       Lwd.map (Lwd.get Player.playstate.playlist) ~f:(function
         | None -> Elwd.span [ `P (El.txt' "Nothing playing") ]
         | Some playlist ->
-            Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch
+            Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist ~fetch
               (Lwd.pure (Fut.ok playlist)))
     in
     (*todo: do we need that join ?*)
