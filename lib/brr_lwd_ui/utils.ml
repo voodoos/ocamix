@@ -56,3 +56,13 @@ module Unit = struct
         let font_size = get_font_size_in_px parent in
         f *. font_size
 end
+
+let listen ~f t =
+  let root = Lwd.observe t in
+  Lwd.set_on_invalidate root (fun _ -> f (Lwd.quick_sample root));
+  Lwd.quick_sample root |> ignore
+
+let map3 ~f a b c =
+  Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)
+
+let triple a b c = map3 a b c ~f:(fun a b c -> (a, b, c))
