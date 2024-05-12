@@ -33,12 +33,7 @@ let app _idb =
   in
   let f_search =
     let open Brr_lwd_ui.Field_textinput in
-    make
-      {
-        name = "pouet";
-        default = None;
-        desc = { placeholder = Lwd.pure None; label = [] };
-      }
+    make { name = "pouet"; default = None; label = [] }
   in
 
   let filters, f_value =

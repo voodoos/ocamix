@@ -4,16 +4,8 @@ open! Brr_lwd
 module A = Attrs
 
 type 'a validation = Ok of 'a | Error of string | Empty
-
-module type S = sig
-  type value
-  type parameters
-
-  val render : parameters -> Elwd.t
-  val get_value : Elwd.t -> value
-end
-
-module Make (Params : S) = struct end
+type label = Elwd.t Elwd.col
+type 'a desc = { name : string; default : 'a; label : label }
 
 (* A form field is composed of:
    - An html input element with potential validation via attributes
@@ -40,6 +32,10 @@ let make_handler ~(value : Jv.t -> 'a) ~(value_change_event : _ Ev.type')
   in
   (on_change, var)
 
+(* TODO: it's probably better to split the validation aprt from the field
+   creation. Validation make more sense in the case of a form. There is an
+   alternative implementation for the text inputs in `Field_textinput` that should
+   be used instead. *)
 let make_input ~(value : Jv.t -> 'a) ?validate ?d ?(at = []) ?ev
     ?(required = false) ~value_change_event ?pattern ~type' default_value =
   let type' = At.type' (Jstr.v type') in
