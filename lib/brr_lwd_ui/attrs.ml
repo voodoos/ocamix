@@ -81,7 +81,7 @@ let add_str at_name v at =
 let add_opt at_name v at =
   match v with None -> at | Some v -> `P (At.v at_name @@ Jstr.v v) :: at
 
-type at = C of string | At of At.t
+type at = C of string | A of At.t
 type 'at t' = 'at Elwd.col
 
 let map_col f = function
@@ -89,15 +89,15 @@ let map_col f = function
   | `R v -> `R (Lwd.map v ~f)
   | `S v -> `S (Lwd_seq.map f v)
 
-let of_at = function At at -> at | C name -> At.class' (Jstr.v name)
+let of_at = function A at -> at | C name -> At.class' (Jstr.v name)
 let cons at t = map_col of_at at :: t
 let class_ n = cons (map_col (fun n -> C n) n) []
 
 module O = struct
-  type nonrec at = at = C of string | At of At.t
+  type nonrec at = at = C of string | A of At.t
 
   let v at = cons at []
-  let ( @ ) at t = cons at t
+  let ( $:: ) at t = cons at t
 end
 
 let with_id s t =
