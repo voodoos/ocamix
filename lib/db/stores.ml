@@ -48,9 +48,9 @@ module Items = struct
   let compare t t' = String.compare t.sorts.sort_name t'.sorts.sort_name
 
   module Key = struct
-    type t = string * string * string list
+    type t = { id : string; sort_name : string; views : string list }
 
-    let to_jv (id, sort_name, views) =
+    let to_jv { id; sort_name; views } =
       let id = Jv.of_string id in
       let sort_name = Jv.of_string sort_name in
       let views = Jv.of_list Jv.of_string views in
@@ -62,15 +62,12 @@ module Items = struct
           let id = Jv.to_string id in
           let sort_name = Jv.to_string sort_name in
           let views = Jv.to_list Jv.to_string views in
-          (id, sort_name, views)
+          { id; sort_name; views }
       | _ -> assert false
 
     let path =
       Indexed_db.Key_path.(
         S [| Id "item.Id"; Id "item.Name"; Id "sorts.views" |])
-    (* "item.Id,item.sorts.sort_name" *)
-    (* pc 110ms "let path = "item.Id"*)
-       (* pc 214ms "let path = "item.Id, item.Name"*)
   end
 
   module Key_date_added = struct
@@ -125,7 +122,13 @@ module Items = struct
   let name = "items"
   let to_jv t = t_to_jv yojson_of_t t
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-  let get_key t = (t.sorts.sort_name, t.item.Item.id, t.sorts.views)
+
+  let get_key t =
+    {
+      Key.sort_name = t.sorts.sort_name;
+      id = t.item.Item.id;
+      views = t.sorts.views;
+    }
 end
 
 module Virtual_folder = struct

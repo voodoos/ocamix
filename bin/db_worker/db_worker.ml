@@ -73,7 +73,8 @@ module Worker () = struct
               match src_views with
               | All -> all_keys
               | Only src_views ->
-                  Array.filter all_keys ~f:(fun (_, _sn, views) ->
+                  Array.filter all_keys
+                    ~f:(fun { Db.Stores.Items.Key.views; _ } ->
                       List.exists views ~f:(fun v -> List.memq v ~set:src_views))
             in
             Hashtbl.add view_memo src_views keys;
@@ -83,7 +84,7 @@ module Worker () = struct
           match filters with
           | [ Search sub ] when not (String.is_empty sub) ->
               let sub = String.lowercase_ascii sub in
-              Array.filter keys ~f:(fun (_, sort_name, _) ->
+              Array.filter keys ~f:(fun { Db.Stores.Items.Key.sort_name; _ } ->
                   let sort_name = String.lowercase_ascii sort_name in
                   let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
                   String.Find.find ~pattern sort_name >= 0)
