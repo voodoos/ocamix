@@ -304,11 +304,17 @@ module Database = struct
     Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
     |> S.of_jv
 
+  let delete_object_store t name =
+    Jv.call t "deleteObjectStore" [| Jv.of_string name |] |> ignore
+
   let transaction stores ?(mode = Transaction.Readonly) t =
     let mode = Transaction.string_of_mode mode |> Jv.of_string in
     let jv_of_store (module S : Store) = Jv.of_string S.Content.name in
     Jv.call t "transaction" [| Jv.of_list jv_of_store stores; mode |]
     |> Transaction.of_jv
+
+  let object_store_names t =
+    Jv.get t "objectStoreNames" |> Jv.to_array Jv.to_string
 end
 
 module Open_db_request = struct

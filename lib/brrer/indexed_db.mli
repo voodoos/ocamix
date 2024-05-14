@@ -191,8 +191,12 @@ module Database : sig
   val create_object_store :
     (module Store with type t = 't) -> ?auto_increment:bool -> t -> 't
 
+  val delete_object_store : t -> string -> unit
+
   val transaction :
     (module Store) list -> ?mode:Transaction.mode -> t -> Transaction.t
+
+  val object_store_names : t -> string array
 end
 
 module Open_db_request : sig

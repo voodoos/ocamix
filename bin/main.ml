@@ -7,7 +7,7 @@ module P = Player.Playback_controller (struct
   let fetch = fetch
 end)
 
-let app _idb =
+let app =
   let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);
@@ -103,10 +103,7 @@ let is_storage_persistent =
 let _ =
   let on_load _ =
     Console.log [ "Persist ?"; is_storage_persistent ];
-    Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
-    ignore
-    @@
-    let app = Lwd.observe @@ app idb in
+    let app = Lwd.observe @@ app in
     let on_invalidate _ =
       ignore @@ G.request_animation_frame
       @@ fun _ -> ignore @@ Lwd.quick_sample app

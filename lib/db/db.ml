@@ -29,6 +29,9 @@ let on_upgrade_needed e q =
       "Upgrading indexed_db schema from version"; old_version; "to"; new_version;
     ];
   let db = Request.result q in
+  let stores = Database.object_store_names db in
+  Console.info [ "Erasing existing stores" ];
+  Array.iter (Database.delete_object_store db) stores;
   let list =
     Database.create_object_store (module OI) ~auto_increment:false db
   in
