@@ -296,14 +296,19 @@ module System = struct
   end
 end
 
+(* Forward declaration to be filled by the app *)
+let session_uuid = ref None
+let set_session_uuid s = session_uuid := Some s
+
 let authorization ?token () =
   let token =
     match token with None -> "" | Some t -> Printf.sprintf ", Token=%S" t
   in
+  let session_uuid = Option.value ~default:"" !session_uuid in
   Printf.sprintf
     "MediaBrowser Client=\"Ocamix\", Device=\"Firefox\", DeviceId=\"%s\", \
      Version=\"0.1\"%s"
-    "abcdef" token
+    session_uuid token
 
 let request (type pp p r) ?base_url ?token ?headers
     (module Q : Query
@@ -317,6 +322,7 @@ let request (type pp p r) ?base_url ?token ?headers
     |> Result.get_ok
   in
   let authorization = authorization ?token () in
+  Console.log [ authorization ];
   let headers =
     Headers.of_assoc ?init:headers
       Jstr.

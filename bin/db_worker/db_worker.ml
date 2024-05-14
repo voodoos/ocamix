@@ -111,6 +111,9 @@ module Worker () = struct
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
+    | Set_session_uuid s ->
+        let () = Data_source.Jellyfin_api.set_session_uuid s in
+        Fut.ok ()
     | Add_servers l ->
         let* idb = idb in
         let open Fut.Syntax in

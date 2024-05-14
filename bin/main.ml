@@ -1,6 +1,18 @@
 open Import
 open Brr
 
+(* The session uuid is stored to the local storage and used to identify a user
+   session. This is required by Jellyfin authorization scheme. *)
+let session_uuid =
+  (* We never react to this var we could replace it *)
+  Brr_lwd_ui.Persistent.var_f ~key:"session_uuid" (fun () ->
+      Std.new_uuid_v4 () |> Uuidm.to_string)
+
+let _ =
+  let uuid = Lwd.peek session_uuid in
+  Data_source.Jellyfin_api.set_session_uuid uuid;
+  Worker_client.query (Set_session_uuid (Lwd.peek session_uuid))
+
 let fetch view i = Worker_client.(query (Get (view, i)))
 
 module P = Player.Playback_controller (struct
