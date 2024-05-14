@@ -13,6 +13,7 @@ module Item_store = struct
 
   module Index = struct
     module Id = Stores.ItemsById
+    module Date_added = Stores.ItemsByDateAdded
     module Type_Name = Stores.ItemsByTypeAndName
     module Kind_View = Stores.ItemsByViewAndKind
   end

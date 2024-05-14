@@ -45,20 +45,24 @@ module Worker () = struct
     |> IDB.Transaction.object_store (module Db.I)
 
   let get_view_keys =
-    let view_memo : (string Db.View.selection, IS.Content.Key.t array) Hashtbl.t
-        =
+    let view_memo :
+        ( string Db.View.selection * Db.View.Sort.criteria option,
+          IS.Content.Key.t array )
+        Hashtbl.t =
       Hashtbl.create 64
     in
     let last_view : (int * IS.Content.Key.t array) ref = ref (-1, [||]) in
-    fun store { Db.View.kind = _; src_views; sort = _; filters } ->
+    fun store { Db.View.kind = _; src_views; sort; filters } ->
       (* todo: staged memoization + specialized queries using indexes *)
       let open Fut.Result_syntax in
-      let hash = Hashtbl.hash (src_views, filters) in
+      let sort_criteria =
+        match sort with Random -> None | Some (criteria, _) -> Some criteria
+      in
+      let hash = Hashtbl.hash (src_views, sort_criteria, filters) in
       if Int.equal (fst !last_view) hash then Fut.ok (snd !last_view)
       else
-        let idx = IS.index (module IS.Index.Kind_View) store in
         let+ keys =
-          try Fut.ok @@ Hashtbl.find view_memo src_views
+          try Fut.ok @@ Hashtbl.find view_memo (src_views, sort_criteria)
           with Not_found ->
             let+ all_keys =
               let lower = Jv.of_array Jv.of_string [| "Audio" |] in
@@ -67,6 +71,7 @@ module Worker () = struct
                 IDB.Key_range.bound ~lower ~upper ~lower_open:true
                   ~upper_open:false ()
               in
+              let idx = IS.index (module IS.Index.Kind_View) store in
               IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
             in
             let keys =
@@ -77,7 +82,7 @@ module Worker () = struct
                     ~f:(fun { Db.Stores.Items.Key.views; _ } ->
                       List.exists views ~f:(fun v -> List.memq v ~set:src_views))
             in
-            Hashtbl.add view_memo src_views keys;
+            Hashtbl.add view_memo (src_views, sort_criteria) keys;
             keys
         in
         let keys =
@@ -89,6 +94,16 @@ module Worker () = struct
                   let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
                   String.Find.find ~pattern sort_name >= 0)
           | _ -> keys
+        in
+        let () =
+          match sort with
+          | Some (Name, _) ->
+              Array.sort keys
+                ~cmp:(fun
+                    { Db.Stores.Items.Key.sort_name = sna; _ }
+                    { Db.Stores.Items.Key.sort_name = snb; _ }
+                  -> String.compare sna snb)
+          | _ -> ()
         in
         last_view := (hash, keys);
         keys

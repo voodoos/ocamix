@@ -1,9 +1,15 @@
 open Std
 
 module Sort = struct
-  type criteria = Date_added
+  type criteria = Date_added | Name
   type direction = Asc | Desc
   type t = Some of criteria * direction | Random
+
+  let of_string ?(direction = Asc) = function
+    | "date_added" -> Some (Date_added, direction)
+    | "name" -> Some (Name, direction)
+    | "random" -> Random
+    | _ -> failwith "wrong sort of sort"
 end
 
 (** Some sorts require a custom ordering which is done using a table of indexes. For example, to get a random sort we simple shuffle an array which size is the one of the result. *)
