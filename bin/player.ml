@@ -3,7 +3,7 @@ open Brr
 open Brr_lwd
 
 type playstate = {
-  playlist : Db.View.t option Lwd.var;
+  playlist : Db.View.ranged option Lwd.var;
   current_index : int Lwd.var;
 }
 
@@ -33,7 +33,7 @@ let audio_url (server : DS.connexion) item_id =
 
 module Playback_controller (P : sig
   val fetch :
-    Db.View.t ->
+    Db.View.ranged ->
     int array ->
     (Db.Stores.Items.t option array, Db.Worker_api.error) Fut.result
 end) =

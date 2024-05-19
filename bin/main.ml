@@ -13,7 +13,8 @@ let _ =
   Data_source.Jellyfin_api.set_session_uuid uuid;
   Worker_client.query (Set_session_uuid (Lwd.peek session_uuid))
 
-let fetch view i = Worker_client.(query (Get (view, i)))
+let fetch ranged_view i =
+  Worker_client.(query (Get (ranged_view.View.view, ranged_view.order, i)))
 
 module P = Player.Playback_controller (struct
   let fetch = fetch
@@ -91,8 +92,18 @@ let app =
           ];
         let open Fut.Result_syntax in
         let sort = Db.View.Sort.of_string s in
-        Worker_client.query
-          (Create_view Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ())))
+        let open Fut.Result_syntax in
+        let+ view =
+          Worker_client.query
+            (Create_view
+               Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
+        in
+        let order =
+          match s with
+          | "random" -> View.Order.random ~size:view.item_count
+          | _ -> View.Order.Initial
+        in
+        { View.view; first = 0; last = view.item_count; order })
   in
 
   let main_list =

@@ -46,7 +46,7 @@ module Worker () = struct
 
   let get_view_keys =
     let view_memo :
-        ( string Db.View.selection * Db.View.Sort.criteria option,
+        ( string Db.View.selection * Db.View.Sort.t,
           IS.Content.Key.t array )
         Hashtbl.t =
       Hashtbl.create 64
@@ -55,14 +55,11 @@ module Worker () = struct
     fun store { Db.View.kind = _; src_views; sort; filters } ->
       (* todo: staged memoization + specialized queries using indexes *)
       let open Fut.Result_syntax in
-      let sort_criteria =
-        match sort with Random -> None | Some (criteria, _) -> Some criteria
-      in
-      let hash = Hashtbl.hash (src_views, sort_criteria, filters) in
+      let hash = Hashtbl.hash (src_views, sort, filters) in
       if Int.equal (fst !last_view) hash then Fut.ok (snd !last_view)
       else
         let+ keys =
-          try Fut.ok @@ Hashtbl.find view_memo (src_views, sort_criteria)
+          try Fut.ok @@ Hashtbl.find view_memo (src_views, sort)
           with Not_found ->
             let+ all_keys =
               let lower = Jv.of_array Jv.of_string [| "Audio" |] in
@@ -82,7 +79,7 @@ module Worker () = struct
                     ~f:(fun { Db.Stores.Items.Key.views; _ } ->
                       List.exists views ~f:(fun v -> List.memq v ~set:src_views))
             in
-            Hashtbl.add view_memo (src_views, sort_criteria) keys;
+            Hashtbl.add view_memo (src_views, sort) keys;
             keys
         in
         let keys =
@@ -97,7 +94,7 @@ module Worker () = struct
         in
         let () =
           match sort with
-          | Some (Name, _) ->
+          | Name ->
               Array.sort keys
                 ~cmp:(fun
                     { Db.Stores.Items.Key.sort_name = sna; _ }
@@ -174,9 +171,8 @@ module Worker () = struct
         let* store = read_only_store () in
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
-        let order = Db.View.Order.of_sort ~size:item_count request.sort in
-        { Db.View.uuid; request; order; start_offset = 0; item_count }
-    | Get (view, indexes) ->
+        { Db.View.uuid; request; start_offset = 0; item_count }
+    | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
         let* store = read_only_store () in
@@ -186,7 +182,7 @@ module Worker () = struct
           Array.map indexes ~f:(fun index ->
               try
                 let index = index + view.start_offset in
-                let index = Db.View.Order.apply view.order index in
+                let index = Db.View.Order.apply order index in
                 (* This could be optimize when access is sequential *)
                 let key = keys.(index) in
                 let open Fut.Syntax in

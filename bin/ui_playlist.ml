@@ -17,7 +17,7 @@ let columns () =
     |]
 
 let make ~reset_playlist ~fetch ?scroll_target
-    (view : (Db.View.t, 'a) Fut.result Lwd.t) =
+    (view : (Db.View.ranged, 'a) Fut.result Lwd.t) =
   let img_url server_id item_id =
     let servers =
       (* should this be reactive ? *)
@@ -41,9 +41,16 @@ let make ~reset_playlist ~fetch ?scroll_target
     let play_from _ =
       ignore
         (let open Fut.Result_syntax in
-         let+ (view : Db.View.t) = view in
+         let+ (view : Db.View.ranged) = view in
          reset_playlist
-           { view with start_offset = view.start_offset + start_index })
+           {
+             view with
+             view =
+               {
+                 view.view with
+                 start_offset = view.view.start_offset + start_index;
+               };
+           })
     in
     let play_on_click = Elwd.handler Ev.click play_from in
     let img_url =
@@ -73,7 +80,11 @@ let make ~reset_playlist ~fetch ?scroll_target
   in
   let data_source =
     Lwd.map view ~f:(fun view ->
-        let total_items = Fut.map (Result.map Db.View.item_count) view in
+        let total_items =
+          Fut.map
+            (Result.map (fun view -> Db.View.item_count view.View.view))
+            view
+        in
         let fetch i =
           let open Fut.Result_syntax in
           let* view = view in
@@ -85,6 +96,6 @@ let make ~reset_playlist ~fetch ?scroll_target
   Table.Virtual.make ~ui_table ~placeholder ?scroll_target data_source
 
 let make_now_playing ~reset_playlist ~fetch
-    (view : (Db.View.t, 'a) Fut.result Lwd.t) =
+    (view : (Db.View.ranged, 'a) Fut.result Lwd.t) =
   let scroll_target = Lwd.get Player.playstate.current_index in
   make ~scroll_target ~reset_playlist ~fetch view
