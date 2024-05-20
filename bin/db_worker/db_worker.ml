@@ -182,7 +182,9 @@ module Worker () = struct
           Array.map indexes ~f:(fun index ->
               try
                 let index = index + view.start_offset in
-                let index = Db.View.Order.apply order index in
+                let index =
+                  Db.View.Order.apply ~size:view.item_count order index
+                in
                 (* This could be optimize when access is sequential *)
                 let key = keys.(index) in
                 let open Fut.Syntax in

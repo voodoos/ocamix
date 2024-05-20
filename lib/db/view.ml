@@ -9,9 +9,16 @@ module Order = struct
     let () = Array.shuffle tbl in
     Custom tbl
 
-  let apply t i =
+  let of_string ~size = function
+    | "random" -> random ~size
+    | "asc" -> Asc
+    | "desc" -> Desc
+    | _ -> Initial
+
+  let apply t ~size i =
     match t with
-    | Initial | Asc | Desc -> i
+    | Initial | Asc -> i
+    | Desc -> size - 1 - i
     | Custom a -> (* todo check bounds *) a.(i)
 end
 

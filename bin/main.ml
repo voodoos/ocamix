@@ -52,13 +52,20 @@ let app =
     let open Brr_lwd_ui.Field_select in
     let options =
       Lwd.pure
-        (Lwd_seq.of_list
-           [
-             ("date_added", "Date added"); ("name", "Name"); ("random", "Random");
-           ])
+        (Lwd_seq.of_list [ ("date_added", "Date added"); ("name", "Name") ])
     in
     make { name = "view-sort"; default = "date_added"; label = [] } options
   in
+  let f_order =
+    let open Brr_lwd_ui.Field_select in
+    let options =
+      Lwd.pure
+        (Lwd_seq.of_list
+           [ ("asc", "Asc"); ("desc", "Desc"); ("random", "Random") ])
+    in
+    make { name = "view-order"; default = "desc"; label = [] } options
+  in
+  let f_sort_order = Lwd.pair f_sort.value f_order.value in
   let filters, f_value =
     let f_libraries =
       let open Brr_lwd_ui.Field_checkboxes in
@@ -76,12 +83,18 @@ let app =
       make { name = "pouet"; desc = Lwd.join choices }
     in
     let filters =
-      Elwd.div [ `R f_sort.field; `R f_search.field; `R f_libraries.field ]
+      Elwd.div
+        [
+          `R f_sort.field;
+          `R f_order.field;
+          `R f_search.field;
+          `R f_libraries.field;
+        ]
     in
     (filters, f_libraries.value)
   in
   let main_view =
-    Ui_utils.map3 f_value f_search.value f_sort.value ~f:(fun l t s ->
+    Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
         let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
         Console.log
           [
@@ -98,11 +111,7 @@ let app =
             (Create_view
                Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
         in
-        let order =
-          match s with
-          | "random" -> View.Order.random ~size:view.item_count
-          | _ -> View.Order.Initial
-        in
+        let order = View.Order.of_string ~size:view.item_count o in
         { View.view; first = 0; last = view.item_count; order })
   in
 
