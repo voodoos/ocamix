@@ -1,58 +1,14 @@
 (** A virtual table that can handle large dataset.
 
-    TODO: this is clearly over-engineered: the large lwd table that reduces to 
-    rows and placeholders with a monoid is elegant bu does not scale well. It 
-    might be possible to optimize it (especially the "uniqueue" LRU thingy), 
+    TODO: this is clearly over-engineered: the large lwd table that reduces to
+    rows and placeholders with a monoid is elegant bu does not scale well. It
+    might be possible to optimize it (especially the "uniqueue" LRU thingy),
     but having too large a lwd_table is probably a hard limit. *)
 
 open Std
 open Brrer
 open Brr
 open Brr_lwd
-
-module Uniqueue (O : Set.OrderedType) = struct
-  module Set = Set.Make (O)
-
-  type nonrec t = { mutable queue : O.t Queue.t; mutable uniq : Set.t }
-
-  let create () =
-    let queue = Queue.create () in
-    let uniq = Set.empty in
-    { queue; uniq }
-
-  let add v t =
-    let new_elt = not (Set.mem v t.uniq) in
-    let () =
-      if new_elt then
-        let () = Queue.add v t.queue in
-        t.uniq <- Set.add v t.uniq
-      else
-        (* If the element is already in the queue we "bubble" it up *)
-        (* Todo: this is not made in a very efficient way... *)
-        let new_queue = Queue.create () in
-        Queue.iter
-          (fun v' ->
-            if not @@ Int.equal (O.compare v v') 0 then Queue.add v' new_queue)
-          t.queue;
-        Queue.add v new_queue;
-        t.queue <- new_queue
-    in
-    new_elt
-
-  let take t =
-    let i = Queue.take t.queue in
-    t.uniq <- Set.remove i t.uniq;
-    i
-
-  let length t = Queue.length t.queue
-
-  let clear t =
-    let new_queue = create () in
-    t.queue <- new_queue.queue;
-    t.uniq <- new_queue.uniq
-end
-
-module Int_uniqueue = Uniqueue (Int)
 
 type 'a row_data = {
   index : int;
@@ -86,16 +42,15 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let row_index : (int, data row_data Lwd_table.row) Hashtbl.t =
     Hashtbl.create 2048
   in
-  let unload_queue = Int_uniqueue.create () in
-
+  let unload i =
+    let open Option.Infix in
+    (let* row = Hashtbl.get row_index i in
+     let+ row_data = Lwd_table.get row in
+     Lwd_table.set row { row_data with content = None })
+    |> ignore
+  in
+  let cache = FFCache.empty ~size:50 ~on_insert:ignore ~on_evict:unload in
   let add ~fetch ?(max_items = 200) indexes =
-    let unload i =
-      let open Option.Infix in
-      (let* row = Hashtbl.get row_index i in
-       let+ row_data = Lwd_table.get row in
-       Lwd_table.set row { row_data with content = None })
-      |> ignore
-    in
     let load indexes =
       (let open Fut.Result_syntax in
        let+ (data : data option array) = fetch indexes in
@@ -110,18 +65,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
            |> ignore))
       |> ignore
     in
-    let cleanup () =
-      let q_length = Int_uniqueue.length unload_queue in
-      if q_length > max_items then
-        for _ = max_items to q_length do
-          try unload (Int_uniqueue.take unload_queue) with Queue.Empty -> ()
-        done
-    in
-    let to_load =
-      List.filter indexes ~f:(fun i -> Int_uniqueue.add i unload_queue)
-    in
-    load (Array.of_list to_load);
-    cleanup ()
+    let to_load = List.filter indexes ~f:(fun i -> FFCache.insert cache i) in
+    load (Array.of_list to_load)
   in
   let table_height = Lwd.var None in
   let compute_visible_rows ~last_scroll_y div =
@@ -159,7 +104,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       (* Cleanup *)
       Lwd_table.clear table;
       Hashtbl.clear row_index;
-      Int_uniqueue.clear unload_queue
+      FFCache.clear cache
     in
     for i = 0 to total - 1 do
       let set = { index = i; content = None; render } in
