@@ -23,7 +23,11 @@ body {
     box-sizing: border-box;
 
     grid-template-columns: 2fr 1fr;
-    grid-template-rows: 5rem 1fr 6rem;
+    grid-template-rows: 5rem 1fr;
+
+    @media screen and (max-width: 512px) {
+            grid-template-columns: 1fr;
+      }
 
     gap: 1.5rem;
     padding: 1.5rem;
@@ -42,6 +46,12 @@ body {
         overflow: hidden;
     }
 
+    @media screen and (max-width: 512px) {
+        & .playlist {
+            display: none;
+        }
+      }
+
     & .playlist div.row:has(div.playing) {
         filter: brightness(120%);
     }
@@ -50,9 +60,9 @@ body {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 0.5rem;
         width: 100%;
-        height: 100%;
 
         & audio {
             border-radius: 0.5rem;
@@ -63,12 +73,13 @@ body {
             position:relative;
             display: flex;
             flex-direction: row;
-            height: 100%;
+            flex-grow: 1;
+            max-width: 30rem;
+            height: 5rem;
             padding: 0;
             gap: 0.5rem;
             border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
             background-color: var(--dark-bg-color);
-            width: 30rem;
 
             & .now-playing-cover {
                 height: 100%;
@@ -83,9 +94,13 @@ body {
 
             & .now-playing-details {
                 flex-grow: 1;
-                text-overflow: ellipsis;
                 overflow: hidden;
-                text-wrap: nowrap;
+
+                & span {
+                    display: inline-block;
+                    height: 1.5em;
+                    overflow: hidden;
+                }
 
                 & span:hover {
                     position: absolute;
