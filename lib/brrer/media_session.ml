@@ -86,5 +86,4 @@ let set_position_state ?duration ?playback_rate ?position t =
     in
     match state_dict with [] -> [||] | sd -> [| Jv.obj (Array.of_list sd) |]
   in
-  Console.log [ args ];
   Jv.call t "setPositionState" args |> ignore

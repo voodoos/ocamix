@@ -73,7 +73,6 @@ struct
                     };
                   ]
                 in
-                Console.log [ artwork ];
                 set_metadata session { title; artist; album; artwork }
               in
               { item; url }
