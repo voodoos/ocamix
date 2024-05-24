@@ -97,7 +97,7 @@ module O = struct
   type nonrec at = at = C of string | A of At.t
 
   let v at = cons at []
-  let ( $:: ) at t = cons at t
+  let ( @:: ) at t = cons at t
 end
 
 let with_id s t =

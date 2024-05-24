@@ -15,7 +15,7 @@ let js_scroll elt target =
 
 let make ?(at = []) ~scroll_target elt =
   let active = Lwd.var true in
-  let at = A.O.(`P (C "lwdui-controlled-scroll-wrapper") $:: at) in
+  let at = A.O.(`P (C "lwdui-controlled-scroll-wrapper") @:: at) in
   let controls =
     let at = A.class_ (`P "lwdui-controlled-scroll-controls") in
     let ev =

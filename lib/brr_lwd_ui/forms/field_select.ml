@@ -41,7 +41,7 @@ let make ?(at = []) ?(ev = []) (desc : string Field.desc) options =
             Lwd.map (Lwd.get var) ~f:(fun selected ->
                 A (At.if' (Equal.poly selected value) At.selected))
           in
-          let at = `R selected $:: at in
+          let at = `R selected @:: at in
           Elwd.option ~at [ `P (El.txt' name) ])
         options
     in
