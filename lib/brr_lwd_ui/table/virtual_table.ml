@@ -27,6 +27,7 @@ type ('data, 'error) data_source = {
    refreshed when it does. Additionnaly it needs to react to multiple dom
    events, notably vertical resize of the container and scroll events, to ensure
    that the visible part of the talbe is always populated with rows. *)
+module Cache = FFCache.Make (Int)
 
 let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
@@ -49,8 +50,10 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
      Lwd_table.set row { row_data with content = None })
     |> ignore
   in
-  let cache = FFCache.empty ~size:50 ~on_insert:ignore ~on_evict:unload in
+  let new_cache () = Cache.create ~size:50 in
+  let cache_ref = ref (new_cache ()) in
   let add ~fetch ?(max_items = 200) indexes =
+    let cache = !cache_ref in
     let load indexes =
       (let open Fut.Result_syntax in
        let+ (data : data option array) = fetch indexes in
@@ -65,7 +68,12 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
            |> ignore))
       |> ignore
     in
-    let to_load = List.filter indexes ~f:(fun i -> FFCache.insert cache i) in
+    let cache, to_load =
+      List.fold_left ~init:(cache, []) indexes ~f:(fun (cache, acc) i ->
+          let cache, inserted = Cache.insert ~on_evict:unload cache i i in
+          if inserted then (cache, i :: acc) else (cache, acc))
+    in
+    cache_ref := cache;
     load (Array.of_list to_load)
   in
   let table_height = Lwd.var None in
@@ -104,7 +112,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       (* Cleanup *)
       Lwd_table.clear table;
       Hashtbl.clear row_index;
-      FFCache.clear cache
+      cache_ref := new_cache ()
     in
     for i = 0 to total - 1 do
       let set = { index = i; content = None; render } in
@@ -113,13 +121,12 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let populate_on_scroll =
     Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
-        let add = add ~fetch in
         let last_scroll_y = ref 0. in
         let update div =
           let visible_rows = compute_visible_rows ~last_scroll_y div in
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
-          add ~max_items:(4 * List.length visible_rows) visible_rows
+          add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows
         in
         let open Fut.Syntax in
         let+ total_items = total_items in
@@ -140,7 +147,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
               let last_update = ref 0. in
               let timeout = ref (-1) in
               let reset_ticker div =
-                let debouncing_interval = 25 in
+                let debouncing_interval = 500 in
                 (* We use [last_update] to have regular debounced updates and the
                    [timeout] to ensure that the last scroll event is always taken into
                    account even it it happens during the debouncing interval. *)

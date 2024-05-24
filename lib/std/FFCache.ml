@@ -9,96 +9,107 @@
 
 (* A [RA_queue] pairs a [Queue.t] with a [Hashtbl.t] to enable efficient random
    access to elements of the queue. *)
-module RA_queue = struct
-  type ('key, 'v) t = { queue : 'key Queue.t; elts : ('key, 'v) Hashtbl.t }
+module RA_queue (Key : Map.OrderedType) = struct
+  module Queue = CCFQueue
+  module Map = Map.Make (Key)
 
-  let create () = { queue = Queue.create (); elts = Hashtbl.create 64 }
+  type 'v t = { queue : Key.t Queue.t; elts : 'v Map.t }
 
-  let clear t =
-    Queue.clear t.queue;
-    Hashtbl.clear t.elts
-
-  let add t k x =
-    Queue.add k t.queue;
-    Hashtbl.add t.elts k x
+  let size t = Queue.size t.queue
+  let create () = { queue = Queue.empty; elts = Map.empty }
+  let empty = { queue = Queue.empty; elts = Map.empty }
+  let add t k x = { queue = Queue.cons k t.queue; elts = Map.add k x t.elts }
 
   let take_opt t =
-    match Queue.take_opt t.queue with
-    | None -> None
-    | Some k ->
-        let x = Hashtbl.find t.elts k in
-        Hashtbl.remove t.elts k;
-        Some x
+    match Queue.take_back t.queue with
+    | None -> (t, None)
+    | Some (queue, k) ->
+        let x = Map.find k t.elts in
+        ({ queue; elts = Map.remove k t.elts }, Some (k, x))
 
-  let find t k = Hashtbl.find_opt t.elts k
+  let find t k = Map.find_opt k t.elts
 end
 
-type 'a elt = { elt : 'a; visited : bool ref }
+module type S = sig
+  type key
+  (** The type of the cache keys. *)
 
-type 'a t = {
-  q1 : ('a, 'a elt) RA_queue.t;
-  q2 : ('a, 'a elt) RA_queue.t;
-  size : int;
-  hand : 'a elt option;
-  on_insert : 'a -> unit;
-  on_evict : 'a -> unit;
-}
+  type +!'a t
+  (** The type of caches from type [key] to type ['a]. *)
 
-let empty ~size ~on_insert ~on_evict =
-  let q1 = RA_queue.create () in
-  let q2 = RA_queue.create () in
-  { q1; q2; size; hand = None; on_insert; on_evict }
+  val create : size:int -> 'a t
+  (** Creates an empty cache. *)
 
-let clear t =
-  RA_queue.clear t.q1;
-  RA_queue.clear t.q2
+  val insert :
+    'a t ->
+    ?on_insert:('a -> unit) ->
+    ?on_evict:('a -> unit) ->
+    key ->
+    'a ->
+    'a t * bool
+end
 
-(** [evict_one t] first tries to evict the last element of [t.q2].
+module Make (Key : Map.OrderedType) : S with type key = Key.t = struct
+  module RA_queue = RA_queue (Key)
+
+  type key = Key.t
+  type 'a elt = { elt : 'a; visited : bool ref }
+  type 'a t = { q1 : 'a elt RA_queue.t; q2 : 'a elt RA_queue.t; size : int }
+
+  let create ~size =
+    let q1 = RA_queue.create () in
+    let q2 = RA_queue.create () in
+    { q1; q2; size }
+
+  (** [evict_one t] first tries to evict the last element of [t.q2].
     If that last element has been visited, it is moved to the head of [t.q1].
     Loop until an element is evicted or [t.q2] is empty.
     If [t.q2] is empty we perform the same process by inversing the roles of
     [t.q2] and [t.q1].
 
     /!\ This function will loop if both queues are empty. *)
-let rec evict_one t = evict_q2 t
+  let rec evict_one ~on_evict t = evict_q2 ~on_evict t
 
-and evict_q2 t =
-  match RA_queue.take_opt t.q2 with
-  | Some { elt; visited } when !visited ->
-      RA_queue.add t.q1 elt { elt; visited = ref false };
-      evict_q2 t
-  | Some { elt; _ } -> t.on_evict elt
-  | None -> evict_q1 t
+  and evict_q2 ~on_evict t =
+    match RA_queue.take_opt t.q2 with
+    | q2, Some (k, { elt; visited }) when !visited ->
+        let q1 = RA_queue.add t.q1 k { elt; visited = ref false } in
+        evict_q2 ~on_evict { t with q1; q2 }
+    | q2, Some (_k, { elt; _ }) ->
+        on_evict elt;
+        { t with q2 }
+    | _, None -> evict_q1 ~on_evict t
 
-and evict_q1 t =
-  match RA_queue.take_opt t.q1 with
-  | Some { elt; visited } when !visited ->
-      RA_queue.add t.q2 elt { elt; visited = ref false };
-      evict_q1 t
-  | Some { elt; _ } -> t.on_evict elt
-  | None -> evict_q2 t
+  and evict_q1 ~on_evict t =
+    match RA_queue.take_opt t.q1 with
+    | q1, Some (k, { elt; visited }) when !visited ->
+        let q2 = RA_queue.add t.q2 k { elt; visited = ref false } in
+        evict_q1 ~on_evict { t with q1; q2 }
+    | q1, Some (_k, { elt; _ }) ->
+        on_evict elt;
+        { t with q1 }
+    | _, None -> evict_q2 ~on_evict t
 
-let rec evict t =
-  let size = Queue.length t.q1.queue + Queue.length t.q2.queue in
-  if size > 0 && size > t.size then (
-    evict_one t;
-    evict t)
+  let rec evict ~on_evict t =
+    let size = RA_queue.size t.q1 + RA_queue.size t.q2 in
+    if size > 0 && size > t.size then evict ~on_evict (evict_one ~on_evict t)
+    else t
 
-let insert t x =
-  match RA_queue.find t.q1 x with
-  | Some { elt; visited } ->
-      (* If the elt is already in q1 we mark it as visited *)
-      visited := true;
-      false
-  | None -> (
-      match RA_queue.find t.q2 x with
-      (* If the elt is already in q2 we mark it as visited *)
-      | Some { elt; visited } ->
-          visited := true;
-          false
-      | None ->
-          (* If the elt was not yet in the cache we add it to q1 *)
-          RA_queue.add t.q1 x { elt = x; visited = ref false };
-          t.on_insert x;
-          evict t;
-          true)
+  let insert t ?(on_insert = ignore) ?(on_evict = ignore) k x =
+    match RA_queue.find t.q1 k with
+    | Some { elt; visited } ->
+        (* If the elt is already in q1 we mark it as visited *)
+        visited := true;
+        (t, false)
+    | None -> (
+        match RA_queue.find t.q2 k with
+        (* If the elt is already in q2 we mark it as visited *)
+        | Some { elt; visited } ->
+            visited := true;
+            (t, false)
+        | None ->
+            (* If the elt was not yet in the cache we add it to q1 *)
+            let q1 = RA_queue.add t.q1 k { elt = x; visited = ref false } in
+            on_insert x;
+            (evict ~on_evict { t with q1 }, true))
+end
