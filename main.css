@@ -12,7 +12,7 @@ body {
 
 /* Ham menu */
 .hover-menu {
-    /* Required for absolute positionning of child */
+    /* Required for absolute positioning of child */
     /* position: relative; */
 }
 
@@ -95,6 +95,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    overflow: hidden;
 }
 
 .lwdui-lazy-table>div:first-child {
@@ -121,5 +122,12 @@ body {
         position: absolute;
         bottom: 0;
         right: 0;
+
+        transition: opacity 0.3s, visibility 0.3s;
+    }
+
+    &.locked .lwdui-controlled-scroll-controls {
+        visibility: hidden;
+        opacity: 0;
     }
 }
