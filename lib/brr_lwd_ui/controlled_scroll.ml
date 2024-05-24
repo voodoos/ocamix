@@ -1,6 +1,5 @@
 open Brr
 open Brr_lwd
-module A = Attrs
 
 type target = Pos of int | El of Elwd.t
 type t = { elt : Elwd.t Lwd.t; scroll_position : target option Lwd.var }
@@ -15,9 +14,17 @@ let js_scroll elt target =
 
 let make ?(at = []) ~scroll_target elt =
   let active = Lwd.var true in
-  let at = A.O.(`P (C "lwdui-controlled-scroll-wrapper") @:: at) in
+  let active_class =
+    Lwd.map (Lwd.get active) ~f:(function
+      | false -> Attrs.A At.void
+      | true -> Attrs.A (At.class' (Jstr.v "locked")))
+  in
+  let at =
+    Attrs.O.(
+      `P (C "lwdui-controlled-scroll-wrapper") @:: `R active_class @:: at)
+  in
   let controls =
-    let at = A.class_ (`P "lwdui-controlled-scroll-controls") in
+    let at = Attrs.class_ (`P "lwdui-controlled-scroll-controls") in
     let ev =
       let on_click _ = Lwd.set active true in
       let handler = Elwd.handler Ev.click on_click in
