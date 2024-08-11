@@ -319,12 +319,13 @@ let request (type pp p r) ~base_url ?token ?headers
   let base_uri = Uri.v (Jstr.v base_url) in
   let base_path_segments = Result.get_ok @@ Uri.path_segments base_uri in
   let endpoint_path_segments = List.map Jstr.v (Q.endpoint path_params) in
-  let path_segments = List.concat [base_path_segments; endpoint_path_segments] in
+  let path_segments =
+    if base_path_segments = [ Jstr.empty ] then endpoint_path_segments
+    else List.concat [ base_path_segments; endpoint_path_segments ]
+  in
   let uri = Uri.with_path_segments base_uri path_segments in
   let uri = Result.get_ok uri in
-  let () = Console.log [uri] in
   let authorization = authorization ?token () in
-  Console.log [ authorization ];
   let headers =
     Headers.of_assoc ?init:headers
       Jstr.
