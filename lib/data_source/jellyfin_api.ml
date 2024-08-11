@@ -58,7 +58,7 @@ module Authenticate_by_name = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Post
-  let endpoint _ = ["Users";"AuthenticateByName"]
+  let endpoint _ = [ "Users"; "AuthenticateByName" ]
 end
 
 module Item = struct
@@ -238,7 +238,7 @@ module Items = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Get
-  let endpoint _ = ["Items"]
+  let endpoint _ = [ "Items" ]
 end
 
 module Views = struct
@@ -257,7 +257,7 @@ module Views = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Get
-  let endpoint pp = ["Users"; pp.user_id;"Views"]
+  let endpoint pp = [ "Users"; pp.user_id; "Views" ]
 end
 
 module Virtual_folders = struct
@@ -274,7 +274,7 @@ module Virtual_folders = struct
   type response = virtual_folder list [@@deriving yojson]
 
   let method' = Get
-  let endpoint _ = ["Library";"VirtualFolders"]
+  let endpoint _ = [ "Library"; "VirtualFolders" ]
 end
 
 module System = struct
@@ -292,7 +292,7 @@ module System = struct
     [@@deriving yojson] [@@yojson.allow_extra_fields]
 
     let method' = Get
-    let endpoint _ = ["System";"Info"]
+    let endpoint _ = [ "System"; "Info" ]
   end
 end
 
