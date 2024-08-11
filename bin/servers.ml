@@ -60,17 +60,17 @@ module Connect_form = struct
     let url_field =
       field
         (Lwd.pure
-        @@ Field.text_input ~required:true (Some "http://localhost:8096"))
+        @@ Field.text_input ~required:true (Some "https://demo.jellyfin.org/stable"))
         (fun t v -> { t with url = v })
     in
     let username_field =
       field
-        (Lwd.pure @@ Field.text_input ~required:true None)
+        (Lwd.pure @@ Field.text_input ~required:true (Some "demo"))
         (fun t v -> { t with username = v })
     in
     let password_field =
       field
-        (Lwd.pure @@ Field.password_input ~required:true None)
+        (Lwd.pure @@ Field.password_input ~required:false None)
         (fun t v -> { t with password = v })
     in
     let submit =
@@ -91,6 +91,9 @@ let ui_form () =
       | { url = Ok url; username = Ok username; password = Ok password } ->
           Console.log [ "Form submitted:"; url; username ];
           ignore @@ new_connexion ~base_url:url ~username ~password
+      | { url = Ok url; username = Ok username; _ } ->
+          Console.log [ "Form submitted:"; url; username ];
+          ignore @@ new_connexion ~base_url:url ~username ~password:""
       | _ -> ())
 
 let ui_status server =

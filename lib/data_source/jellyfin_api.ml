@@ -41,7 +41,7 @@ module type Query = sig
   type response [@@deriving yojson]
 
   val method' : method'
-  val endpoint : path_params -> string
+  val endpoint : path_params -> string list
 end
 
 module Authenticate_by_name = struct
@@ -58,7 +58,7 @@ module Authenticate_by_name = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Post
-  let endpoint _ = "/Users/AuthenticateByName"
+  let endpoint _ = ["Users";"AuthenticateByName"]
 end
 
 module Item = struct
@@ -238,7 +238,7 @@ module Items = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Get
-  let endpoint _ = "/Items"
+  let endpoint _ = ["Items"]
 end
 
 module Views = struct
@@ -257,7 +257,7 @@ module Views = struct
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let method' = Get
-  let endpoint pp = Printf.sprintf "/Users/%s/Views" pp.user_id
+  let endpoint pp = ["Users"; pp.user_id;"Views"]
 end
 
 module Virtual_folders = struct
@@ -274,7 +274,7 @@ module Virtual_folders = struct
   type response = virtual_folder list [@@deriving yojson]
 
   let method' = Get
-  let endpoint _ = Printf.sprintf "/Library/VirtualFolders"
+  let endpoint _ = ["Library";"VirtualFolders"]
 end
 
 module System = struct
@@ -292,7 +292,7 @@ module System = struct
     [@@deriving yojson] [@@yojson.allow_extra_fields]
 
     let method' = Get
-    let endpoint _ = "/System/Info"
+    let endpoint _ = ["System";"Info"]
   end
 end
 
@@ -310,17 +310,19 @@ let authorization ?token () =
      Version=\"0.1\"%s"
     session_uuid token
 
-let request (type pp p r) ?base_url ?token ?headers
+let request (type pp p r) ~base_url ?token ?headers
     (module Q : Query
       with type path_params = pp
        and type params = p
        and type response = r) (params : p) (path_params : pp) : r Fut.or_error =
   let open Brr_io.Fetch in
-  let uri =
-    Jstr.(
-      Uri.of_jstr ?base:(Option.map v base_url) (v (Q.endpoint path_params)))
-    |> Result.get_ok
-  in
+  let base_uri = Uri.v (Jstr.v base_url) in
+  let base_path_segments = Result.get_ok @@ Uri.path_segments base_uri in
+  let endpoint_path_segments = List.map Jstr.v (Q.endpoint path_params) in
+  let path_segments = List.concat [base_path_segments; endpoint_path_segments] in
+  let uri = Uri.with_path_segments base_uri path_segments in
+  let uri = Result.get_ok uri in
+  let () = Console.log [uri] in
   let authorization = authorization ?token () in
   Console.log [ authorization ];
   let headers =
