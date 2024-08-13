@@ -114,14 +114,51 @@ let fut_to_lwd ~init f =
   let () = Fut.await f (Lwd.set v) in
   Lwd.get v
 
+let seq_share ~cmp ~prev next =
+  let rec aux prev next =
+    match (Lwd_seq.view prev, Lwd_seq.view next) with
+    | Empty, Empty -> (prev, true)
+    | Element i, Element i' when cmp i i' -> (prev, true)
+    | Concat (l, r), Concat (l', r') ->
+        let l, l_same = aux l l' in
+        let r, r_same = aux r r' in
+        if l_same && r_same then (prev, true) else (Lwd_seq.concat l r, false)
+    | _, _ -> (next, false)
+  in
+  fst @@ aux prev next
+
 let servers_libraries =
+  let rec lib_diff ~prev next =
+    let open Db.Stores.Items in
+    seq_share ~cmp:(fun i i' -> String.(i.item.id = i'.item.id)) ~prev next
+  in
   Lwd_seq.map
     (fun (server_id, { refresh; _ }) ->
       let views =
-        Lwd.bind (Lwd.get refresh) ~f:(fun () ->
-            Worker_client.query (Get_server_libraries server_id)
-            |> Fut.map (Result.get_or ~default:[])
-            |> fut_to_lwd ~init:[])
+        Console.log [ "NEW REF" ];
+        let previous_value = ref None in
+        Lwd.map ~f:(fun v ->
+            let new_value =
+              Option.map_or ~default:v
+                (fun prev -> lib_diff ~prev v)
+                !previous_value
+            in
+            previous_value := Some new_value;
+            new_value)
+        @@ Lwd.bind (Lwd.get refresh) ~f:(fun () ->
+               Worker_client.query (Get_server_libraries server_id)
+               |> Fut.map (Result.get_or ~default:[])
+               |> Fut.map (fun l ->
+                      Console.log [ "GOT L="; l ];
+                      l)
+               |> Fut.map Lwd_seq.of_list
+               (* FIXME: This is bad: we create a lwd var each time we refresh
+                  and thiq var had an empty seq value. This caused flickering
+                  when syncing. Having the correct initial value is not a much
+                  better option since there are still to lwd updates instead of
+                  one. We probably need proper polling and a root. *)
+               |> fut_to_lwd
+                    ~init:(Option.value ~default:Lwd_seq.empty !previous_value))
       in
       (server_id, views))
     servers_with_status

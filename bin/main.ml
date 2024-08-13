@@ -72,11 +72,10 @@ let app =
       let choices =
         Lwd_seq.fold_monoid
           (fun (_, l) ->
-            let l : Db.Stores.Items.t list Lwd.t = l in
-            Lwd.map l ~f:(fun l ->
-                Lwd_seq.transform_list l (fun l ->
-                    Lwd_seq.element
-                    @@ Check (l.item.id, [ `P (El.txt' l.item.name) ], true))))
+            Lwd_seq.map
+              (fun (l : Db.Stores.Items.t) ->
+                Check (l.item.id, [ `P (El.txt' l.item.name) ], true))
+              l)
           (Lwd.return Lwd_seq.empty, Lwd.map2 ~f:Lwd_seq.concat)
           Servers.servers_libraries
       in
