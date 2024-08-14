@@ -38,8 +38,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let table : data row_data Lwd_table.t = Lwd_table.make () in
-  (* The [rows] table is used to relate divs to the table's rows in the
-     observer's callback *)
+  (* The [row_index] table is used to provide fast random access to the table's
+     rows in the observer's callback *)
   let row_index : (int, data row_data Lwd_table.row) Hashtbl.t =
     Hashtbl.create 2048
   in
@@ -51,6 +51,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     |> ignore
   in
   let new_cache () = Cache.create ~size:50 in
+  (* The cache is some sort of LRU to keep live the content of recently seen
+     rows *)
   let cache_ref = ref (new_cache ()) in
   let add ~fetch ?(max_items = 200) indexes =
     let cache = !cache_ref in
@@ -64,7 +66,9 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
             let data =
               match data with Some data -> data | _ -> raise Not_found
             in
-            Lwd_table.set row { row_data with content = Some data })
+            (* todo: let users provide comparison *)
+            if not (Equal.poly row_data.content @@ Some data) then
+              Lwd_table.set row { row_data with content = Some data })
            |> ignore))
       |> ignore
     in
@@ -108,15 +112,25 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     List.init (last - first) ~f:(fun i -> first + i)
   in
   let prepare ~total_items:total ~render =
-    let () =
-      (* Cleanup *)
-      Lwd_table.clear table;
-      Hashtbl.clear row_index;
-      cache_ref := new_cache ()
-    in
-    for i = 0 to total - 1 do
-      let set = { index = i; content = None; render } in
-      Hashtbl.add row_index i @@ Lwd_table.append ~set table
+    let () = cache_ref := new_cache () in
+    let i = ref 0 in
+    let current_row = ref (Lwd_table.first table) in
+    while Option.is_some !current_row || !i < total - 1 do
+      match !current_row with
+      | Some row ->
+          if !i < total - 1 then
+            let () = Hashtbl.replace row_index !i row in
+            Lwd_table.set row { index = !i; content = None; render }
+          else Lwd_table.unset row;
+          incr i;
+          current_row := Lwd_table.next row
+      | None ->
+          if !i < total - 1 then (
+            let set = { index = !i; content = None; render } in
+            let row = Lwd_table.append ~set table in
+            Hashtbl.add row_index !i row;
+            incr i;
+            current_row := Lwd_table.next row)
     done
   in
   let populate_on_scroll =
