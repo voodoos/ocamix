@@ -3,6 +3,20 @@ open Brr
 
 (* The session uuid is stored to the local storage and used to identify a user
    session. This is required by Jellyfin authorization scheme. *)
+(* The official client does it like this:
+
+   function generateDeviceId() {
+       const keys = [];
+
+       keys.push(navigator.userAgent);
+       keys.push(new Date().getTime());
+       if (window.btoa) {
+           return btoa(keys.join('|')).replaceAll('=', '1');
+       }
+
+       return new Date().getTime();
+   }
+*)
 let session_uuid =
   (* We never react to this var we could replace it *)
   Brr_lwd_ui.Persistent.var_f ~key:"session_uuid" (fun () ->
