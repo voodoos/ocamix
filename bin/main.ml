@@ -107,25 +107,33 @@ let app =
     (filters, f_libraries.value)
   in
   let main_view =
-    Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
-        let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
-        Console.log
-          [
-            "Updating main view:";
-            Jv.of_option ~none:(Jv.of_string "\"\"") Jv.of_string t;
-            Jv.of_list Jv.of_string l;
-            Jv.of_string s;
-          ];
-        let open Fut.Result_syntax in
-        let sort = Db.View.Sort.of_string s in
-        let open Fut.Result_syntax in
-        let+ view =
-          Worker_client.query
-            (Create_view
-               Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
-        in
-        let order = View.Order.of_string ~size:view.item_count o in
-        { View.view; first = 0; last = view.item_count; order })
+    let view =
+      Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
+          let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
+          Console.log
+            [
+              "Updating main view:";
+              Jv.of_option ~none:(Jv.of_string "\"\"") Jv.of_string t;
+              Jv.of_list Jv.of_string l;
+              Jv.of_string s;
+            ];
+          let open Fut.Result_syntax in
+          let sort = Db.View.Sort.of_string s in
+          let open Fut.Result_syntax in
+          Worker_client.create_view
+            Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
+    in
+    (* FIXME *)
+    let view = Lwd.join view in
+    Lwd.map2 view f_sort_order ~f:(fun view (_, order) ->
+        Option.map
+          (fun view ->
+            let open Result in
+            let+ (view : View.t) = view in
+            let size = view.item_count in
+            let order = View.Order.of_string ~size order in
+            { View.view; first = 0; last = 0; order })
+          view)
   in
 
   let main_list =
@@ -137,7 +145,7 @@ let app =
         | None -> Elwd.span [ `P (El.txt' "Nothing playing") ]
         | Some playlist ->
             Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist ~fetch
-              (Lwd.pure (Fut.ok playlist)))
+              (Lwd.pure (Some (Result.return playlist))))
     in
     (*todo: do we need that join ?*)
     Lwd.join playlist

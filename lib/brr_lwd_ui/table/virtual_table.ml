@@ -13,13 +13,13 @@ open Brr_lwd
 type 'a row_data = {
   index : int;
   content : 'a option;
-  render : int -> 'a -> Elwd.t Elwd.col;
+  render : (int -> 'a -> Elwd.t Elwd.col) Lwd.t;
 }
 
 type ('data, 'error) data_source = {
-  total_items : (int, 'error) Fut.result;
-  fetch : int array -> ('data option array, 'error) Fut.result;
-  render : int -> 'data -> Elwd.t Elwd.col;
+  total_items : int Lwd.t;
+  fetch : (int array -> ('data option array, 'error) Fut.result) Lwd.t;
+  render : (int -> 'data -> Elwd.t Elwd.col) Lwd.t;
 }
 
 (* The virtual table is a complex reactive component. Primarily, it reacts to
@@ -32,7 +32,7 @@ module Cache = FFCache.Make (Int)
 let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ?(scroll_target : int Lwd.t option)
-    (data_source : (data, _) data_source Lwd.t) =
+    ({ total_items; fetch; render } : (data, _) data_source) =
   ignore placeholder;
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
@@ -134,21 +134,16 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     done
   in
   let populate_on_scroll =
-    Lwd.map data_source ~f:(fun { total_items; fetch; render } ->
-        let last_scroll_y = ref 0. in
+    let last_scroll_y = ref 0. in
+    Lwd.map2 total_items fetch ~f:(fun total_items fetch ->
         let update div =
           let visible_rows = compute_visible_rows ~last_scroll_y div in
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
           add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows
         in
-        let open Fut.Syntax in
-        let+ total_items = total_items in
-        match total_items with
-        | Ok total_items ->
-            prepare ~total_items ~render;
-            update
-        | _ -> ignore)
+        prepare ~total_items ~render;
+        update)
   in
   let scroll_handler =
     Lwd.map populate_on_scroll ~f:(fun update ->
@@ -156,7 +151,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
             let open Fut.Syntax in
             ignore
             @@
-            let+ update = update in
             let scroll_handler =
               let last_update = ref 0. in
               let timeout = ref (-1) in
@@ -185,7 +179,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let root = Lwd.observe repopulate_deps in
     Lwd.set_on_invalidate root (fun _ ->
         match Lwd.quick_sample root with
-        | update, Some (_h, div) -> Fut.await update (fun update -> update div)
+        | update, Some (_h, div) -> update div
         | _ -> ());
     Lwd.quick_sample root |> ignore
   in
@@ -194,12 +188,20 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
   in
-  let render _ { content; index; render } =
+  let render _row { content; index; render } =
     let at = Attrs.add At.Name.class' (`P "row") [] in
     let style = `P (At.style (Jstr.v height)) in
     match content with
     | Some data ->
-        (0, Lwd_seq.element @@ Elwd.div ~at:(style :: at) (render index data), 0)
+        let rendered_row =
+          Lwd.map render ~f:(fun render ->
+              Lwd_seq.of_list
+                (List.map (render index data) ~f:(fun elt -> Elwd.div [ elt ])))
+        in
+        ( 0,
+          Lwd_seq.element
+          @@ Elwd.div ~at:(style :: at) [ `S (Lwd_seq.lift rendered_row) ],
+          0 )
     | None -> (1, Lwd_seq.empty, 0)
   in
   let table_body =
