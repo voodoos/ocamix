@@ -49,6 +49,7 @@ type progress = { total : int; remaining : int }
 type report = { status : status; sync_progress : progress option }
 
 val initial_report : report
+val pp_report : Format.formatter -> report -> unit
 
 val check_and_sync :
   ?report:(report -> unit) ->

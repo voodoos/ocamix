@@ -110,6 +110,27 @@ type report = { status : status; sync_progress : progress option }
 
 let initial_report = { status = Unknown; sync_progress = None }
 
+let status_to_string = function
+  | Unknown -> "Unknown"
+  | In_sync -> "Synchronized"
+  | Inconsistent -> "Inconsistent"
+  | New_items { first_missing_key; first_unfetched_key; last_source_item_key }
+    ->
+      Format.sprintf "New items: last: %i missing: %i unfetched: %i"
+        last_source_item_key first_missing_key first_unfetched_key
+  | Partial_fetch { first_unfetched_key; last_source_item_key } ->
+      Format.sprintf "Partial: last: %i unfetched: %i" first_unfetched_key
+        first_unfetched_key
+
+let pp_progress fmt { total; remaining } =
+  Format.fprintf fmt "(%i/%i)" remaining total
+
+let pp_report fmt { status; sync_progress } =
+  let status = status_to_string status in
+  Format.fprintf fmt "%s%a" status
+    (Format.pp_print_option pp_progress)
+    sync_progress
+
 let log_status = function
   | Unknown -> Console.info [ "Database status is unknown" ]
   | In_sync -> Console.info [ "Database is synchronized" ]
