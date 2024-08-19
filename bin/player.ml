@@ -192,7 +192,14 @@ struct
             add At.Name.class' (`P "now-playing-cover") []
             |> add At.Name.style (`R style))
         in
-        Elwd.div ~at []
+        let on_click =
+          Elwd.handler Ev.click (fun _ ->
+              (match Lwd.peek App_state.active_layout with
+              | Kiosk -> Main
+              | Main -> Kiosk)
+              |> Lwd.set App_state.active_layout)
+        in
+        Elwd.div ~at ~ev:[ `P on_click ] []
       in
       let track_details =
         let at = Attrs.add At.Name.class' (`P "now-playing-details") [] in

@@ -128,6 +128,32 @@ let app =
     (*todo: do we need that join ?*)
     Lwd.join playlist
   in
+  let big_cover =
+    let open Attrs.O in
+    let display_none =
+      Lwd.map (Lwd.get App_state.active_layout) ~f:(function
+        | Main -> At.class' (Jstr.v "display-none")
+        | Kiosk -> At.void)
+    in
+    let style =
+      Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
+          let src =
+            match np with
+            | None -> "track.png"
+            | Some { item = { id; album_id; server_id; _ }; _ } ->
+                let image_id = Option.value ~default:id album_id in
+                let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+                let connexion : DS.connexion = List.assq server_id servers in
+                (* todo: this is done in multiple places, we should factor
+                   that out. *)
+                Printf.sprintf "%s/Items/%s/Images/Primary?width=800&format=Jpg"
+                  connexion.base_url image_id
+          in
+          At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
+    in
+    let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
+    Elwd.div ~at [ `R (Elwd.div ~at:[ `R style ] []) ]
+  in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
     [
@@ -135,7 +161,7 @@ let app =
       `R
         (Elwd.div
            ~at:[ `P (At.class' (Jstr.v "item-list")) ]
-           [ `R filters; `R main_list ]);
+           [ `R big_cover; `R filters; `R main_list ]);
       `R
         (Elwd.div ~at:[ `P (At.class' (Jstr.v "playlist")) ] [ `R now_playing ]);
       `R player_ui;
