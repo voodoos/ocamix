@@ -121,7 +121,8 @@ let app =
           let sort = Db.View.Sort.of_string s in
           let open Fut.Result_syntax in
           Console.debug [ "Request changed" ];
-          Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
+          Db.View.(
+            req Audio ~src_views:(Only (Lwd_seq.to_list l)) ~sort ?filters ()))
     in
     let item_count =
       Lwd.map request ~f:(fun req -> Worker_client.get_view_item_count req)

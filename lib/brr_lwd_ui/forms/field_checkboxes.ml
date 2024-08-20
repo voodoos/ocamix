@@ -59,7 +59,7 @@ let make t =
   let elts = Lwd_seq.map (fun (elt, _) -> elt) all in
   let value =
     Lwd_seq.fold_monoid (fun (_, v) -> Lwd_seq.element v) Lwd_seq.monoid all
-    |> Lwd_seq.lift |> Lwd_seq.filter_map Fun.id |> Lwd.map ~f:Lwd_seq.to_list
+    |> Lwd_seq.lift |> Lwd_seq.filter_map Fun.id
   in
   { field = Elwd.div [ `S (Lwd_seq.lift elts) ]; value }
 
