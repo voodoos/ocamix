@@ -518,21 +518,21 @@ let rec iter f = function
   | Root t ->
     iter f t.child
 
-let rec left_most : 'a row -> 'a row option = function
+let left_most : 'a row -> 'a row option = 
+  let rec aux acc = function
   | Root _ -> assert false
-  | Leaf -> None
-  | Node n as self ->
-    match left_most n.left with
-    | Some _ as x -> x
-    | None -> Some self
+  | Leaf -> acc
+  | Node n as self -> aux (Some self) n.left
+  in
+  fun r -> aux None r
 
-let rec right_most : 'a row -> 'a row option = function
+let rec right_most : 'a row -> 'a row option = 
+  let rec aux acc = function
   | Root _ -> assert false
-  | Leaf -> None
-  | Node n as self ->
-    match right_most n.right with
-    | Some _ as x -> x
-    | None -> Some self
+  | Leaf -> acc
+  | Node n as self -> aux (Some self) n.right
+  in
+  fun r -> aux None r
 
 let first : 'a t -> 'a row option = function
   | Leaf | Node _ -> assert false
