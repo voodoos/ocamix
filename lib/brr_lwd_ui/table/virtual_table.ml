@@ -115,17 +115,17 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let () = cache_ref := new_cache () in
     let i = ref 0 in
     let current_row = ref (Lwd_table.first table) in
-    while Option.is_some !current_row || !i < total - 1 do
+    while Option.is_some !current_row || !i <= total - 1 do
       match !current_row with
       | Some row ->
-          if !i < total - 1 then
+          if !i <= total - 1 then
             let () = Hashtbl.replace row_index !i row in
             Lwd_table.set row { index = !i; content = None; render }
           else Lwd_table.unset row;
           incr i;
           current_row := Lwd_table.next row
       | None ->
-          if !i < total - 1 then (
+          if !i <= total - 1 then (
             let set = { index = !i; content = None; render } in
             let row = Lwd_table.append ~set table in
             Hashtbl.add row_index !i row;
@@ -173,9 +173,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
             scroll_handler div))
   in
   let () =
-    let repopulate_deps =
-      Lwd.map2 populate_on_scroll (Lwd.get table_height) ~f:(fun a b -> (a, b))
-    in
+    let repopulate_deps = Lwd.pair populate_on_scroll (Lwd.get table_height) in
     let root = Lwd.observe repopulate_deps in
     Lwd.set_on_invalidate root (fun _ ->
         match Lwd.quick_sample root with
