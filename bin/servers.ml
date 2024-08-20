@@ -135,10 +135,27 @@ let servers_libraries =
   in
   Lwd_seq.map
     (fun (server_id, { refresh; _ }) ->
+      Console.log [ "NEW REF" ];
+      let previous_value = ref None in
+      let v =
+        Lwd.bind (Lwd.get refresh) ~f:(fun () ->
+            Worker_client.query (Get_server_libraries server_id)
+            |> Fut.map (Result.get_or ~default:[])
+            |> Fut.map (fun l ->
+                   Console.log [ "GOT L="; l ];
+                   l)
+            |> Fut.map Lwd_seq.of_list
+            (* FIXME: This is bad: we create a lwd var each time we refresh
+               and thiq var had an empty seq value. This caused flickering
+               when syncing. Having the correct initial value is not a much
+               better option since there are still to lwd updates instead of
+               one. We probably need proper polling and a root. *)
+            |> fut_to_lwd
+                 ~init:(Option.value ~default:Lwd_seq.empty !previous_value))
+      in
       let views =
-        Console.log [ "NEW REF" ];
-        let previous_value = ref None in
-        Lwd.map ~f:(fun v ->
+        Lwd.map
+          ~f:(fun v ->
             let new_value =
               Option.map_or ~default:v
                 (fun prev -> lib_diff ~prev v)
@@ -146,20 +163,7 @@ let servers_libraries =
             in
             previous_value := Some new_value;
             new_value)
-        @@ Lwd.bind (Lwd.get refresh) ~f:(fun () ->
-               Worker_client.query (Get_server_libraries server_id)
-               |> Fut.map (Result.get_or ~default:[])
-               |> Fut.map (fun l ->
-                      Console.log [ "GOT L="; l ];
-                      l)
-               |> Fut.map Lwd_seq.of_list
-               (* FIXME: This is bad: we create a lwd var each time we refresh
-                  and thiq var had an empty seq value. This caused flickering
-                  when syncing. Having the correct initial value is not a much
-                  better option since there are still to lwd updates instead of
-                  one. We probably need proper polling and a root. *)
-               |> fut_to_lwd
-                    ~init:(Option.value ~default:Lwd_seq.empty !previous_value))
+          v
       in
       (server_id, views))
     servers_with_status
