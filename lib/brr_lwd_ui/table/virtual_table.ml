@@ -135,13 +135,14 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let populate_on_scroll =
     let last_scroll_y = ref 0. in
-    Lwd.map2 total_items fetch ~f:(fun total_items fetch ->
-        let update div =
+    let update =
+      Lwd.map fetch ~f:(fun fetch div ->
           let visible_rows = compute_visible_rows ~last_scroll_y div in
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
-          add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows
+          add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows)
         in
+    Lwd.map2 total_items update ~f:(fun total_items update ->
         prepare ~total_items ~render;
         update)
   in
