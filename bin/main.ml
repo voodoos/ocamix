@@ -107,6 +107,7 @@ let app =
     (filters, f_libraries.value)
   in
   let main_view =
+    let previous_value = ref None in
     let request =
       Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
           let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
@@ -120,9 +121,17 @@ let app =
           let open Fut.Result_syntax in
           let sort = Db.View.Sort.of_string s in
           let open Fut.Result_syntax in
-          Console.debug [ "Request changed" ];
-          Db.View.(
-            req Audio ~src_views:(Only (Lwd_seq.to_list l)) ~sort ?filters ()))
+          let new_view =
+            Db.View.(
+              req Audio ~src_views:(Only (Lwd_seq.to_list l)) ~sort ?filters ())
+          in
+          Option.map_or ~default:new_view
+            (fun old ->
+              if Equal.poly old new_view then old
+              else (
+                previous_value := Some new_view;
+                new_view))
+            !previous_value)
     in
     let item_count =
       Lwd.map request ~f:(fun req -> Worker_client.get_view_item_count req)
