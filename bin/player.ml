@@ -33,7 +33,7 @@ let audio_url (server : DS.connexion) item_id =
 
 module Playback_controller (P : sig
   val fetch :
-    Db.View.ranged ->
+    View.ranged ->
     int array ->
     (Db.Stores.Items.t option array, Db.Worker_api.error) Fut.result
 end) =

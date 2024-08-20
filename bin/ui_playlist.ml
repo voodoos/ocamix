@@ -16,8 +16,11 @@ let columns () =
       v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
     |]
 
-let make ~reset_playlist ~fetch ?scroll_target
-    (ranged_view : (View.ranged, Db.Worker_api.error) result option Lwd.t) =
+let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
+  let ranged =
+    Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun view order ->
+        { View.view; first = 0; last = 0; order })
+  in
   let img_url server_id item_id =
     let servers =
       (* should this be reactive ? *)
@@ -32,30 +35,27 @@ let make ~reset_playlist ~fetch ?scroll_target
     in
     At.src (Jstr.v url)
   in
-  let render view start_index
+  let render (ranged : View.ranged Lwd.t) start_index
       {
         Db.Stores.Items.item =
           { Api.Item.id; name; album_id; server_id; image_blur_hashes; _ };
         _;
       } =
-    let play_from view _ =
-      ignore
-        (let open Option.Infix in
-         let+ view = view in
-         let open Result in
-         let+ (view : Db.View.ranged) = view in
-         reset_playlist
-           {
-             view with
-             view =
+    let play_from (ranged : View.ranged Lwd.t) =
+      Lwd.map ranged ~f:(fun ranged _ ->
+          ignore
+            (reset_playlist
                {
-                 view.view with
-                 start_offset = view.view.start_offset + start_index;
-               };
-           })
+                 ranged with
+                 view =
+                   {
+                     ranged.view with
+                     start_offset = ranged.view.start_offset + start_index;
+                   };
+               }))
     in
     let play_on_click =
-      Lwd.map view ~f:(fun view -> Elwd.handler Ev.click (play_from view))
+      Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
     let img_url =
       match (image_blur_hashes, album_id) with
@@ -83,24 +83,13 @@ let make ~reset_playlist ~fetch ?scroll_target
     { Table.table = { columns = columns () }; row_height = Em 4. }
   in
   let data_source =
-    let total_items =
-      Lwd.map ranged_view ~f:(function
-        | Some (Ok ranged) -> Db.View.item_count ranged.view
-        | _ -> 0)
-    in
-
-    let fetch =
-      Lwd.map ranged_view ~f:(fun view i ->
-          match view with
-          | Some (Ok view) -> fetch view i
-          | _ -> Fut.error (`Msg "No view !"))
-    in
-    let render = Lwd.pure (render ranged_view) in
+    let total_items = view.item_count in
+    let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
+    let render = Lwd.pure (render ranged) in
     { Table.Virtual.total_items; fetch; render }
   in
   Table.Virtual.make ~ui_table ~placeholder ?scroll_target data_source
 
-let make_now_playing ~reset_playlist ~fetch
-    (ranged_view : (View.ranged, Db.Worker_api.error) result option Lwd.t) =
+let make_now_playing ~reset_playlist ~fetch view =
   let scroll_target = Lwd.get Player.playstate.current_index in
-  make ~scroll_target ~reset_playlist ~fetch ranged_view
+  make ~scroll_target ~reset_playlist ~fetch view

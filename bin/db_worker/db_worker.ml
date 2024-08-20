@@ -169,11 +169,10 @@ module Worker () = struct
         in
         items
     | Create_view request ->
-        let uuid = new_uuid_v4 () in
         let* store = read_only_store () in
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
-        { Db.View.uuid; request; start_offset = 0; item_count }
+        { Db.View.request; start_offset = 0; item_count }
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)

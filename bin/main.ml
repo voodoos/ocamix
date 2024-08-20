@@ -107,33 +107,33 @@ let app =
     (filters, f_libraries.value)
   in
   let main_view =
-    let view =
+    let request =
       Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
           let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
           Console.log
             [
               "Updating main view:";
               Jv.of_option ~none:(Jv.of_string "\"\"") Jv.of_string t;
-              Jv.of_list Jv.of_string l;
+              (* Jv.of_list Jv.of_string l; *)
               Jv.of_string s;
             ];
           let open Fut.Result_syntax in
           let sort = Db.View.Sort.of_string s in
           let open Fut.Result_syntax in
-          Worker_client.create_view
-            Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
+          Console.debug [ "Request changed" ];
+          Db.View.(req Audio ~src_views:(Only l) ~sort ?filters ()))
     in
-    (* FIXME *)
-    let view = Lwd.join view in
-    Lwd.map2 view f_sort_order ~f:(fun view (_, order) ->
-        Option.map
-          (fun view ->
-            let open Result in
-            let+ (view : View.t) = view in
-            let size = view.item_count in
-            let order = View.Order.of_string ~size order in
-            { View.view; first = 0; last = 0; order })
-          view)
+    let item_count =
+      Lwd.map request ~f:(fun req -> Worker_client.get_view_item_count req)
+    in
+    let item_count = (* FIXME *) Lwd.join item_count in
+    let order =
+      Lwd.map2 item_count f_sort_order ~f:(fun item_count (_, order) ->
+          let size = item_count in
+          let order = View.Order.of_string ~size order in
+          order)
+    in
+    { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
   in
 
   let main_list =
@@ -144,8 +144,16 @@ let app =
       Lwd.map (Lwd.get Player.playstate.playlist) ~f:(function
         | None -> Elwd.span [ `P (El.txt' "Nothing playing") ]
         | Some playlist ->
+            let view =
+              {
+                Lwd_view.request = Lwd.pure playlist.view.request;
+                item_count = Lwd.pure playlist.view.item_count;
+                start_offset = Lwd.pure playlist.view.start_offset;
+                order = Lwd.pure playlist.order;
+              }
+            in
             Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist ~fetch
-              (Lwd.pure (Some (Result.return playlist))))
+              view)
     in
     (*todo: do we need that join ?*)
     Lwd.join playlist

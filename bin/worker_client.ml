@@ -15,7 +15,21 @@ let servers_status =
   in
   var
 
-let create_view v =
-  let var = Lwd.var None in
-  Fut.await (query (Create_view v)) (fun v -> Lwd.set var (Some v));
-  Lwd.get var
+let update ?(eq = Equal.poly) var next =
+  let current = Lwd.peek var in
+  if not (eq current next) then Lwd.set var next
+
+let get_view_item_count v =
+  let item_count = Lwd.var 0 in
+  Fut.await (query (Create_view v)) (function
+    | Ok v ->
+        Console.debug
+          [
+            "Item count:";
+            v.View.item_count;
+            "Start offset:";
+            v.View.start_offset;
+          ];
+        update item_count v.item_count
+    | _ -> update item_count 0);
+  Lwd.get item_count

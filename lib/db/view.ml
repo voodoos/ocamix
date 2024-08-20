@@ -42,7 +42,7 @@ type req = {
   filters : filter list;
 }
 
-type t = { uuid : Uuidm.t; request : req; start_offset : int; item_count : int }
+type t = { request : req; start_offset : int; item_count : int }
 type ranged = { view : t; first : int; last : int; order : Order.t }
 
 let item_count t = t.item_count - t.start_offset
