@@ -35,6 +35,7 @@ module P = Player.Playback_controller (struct
 end)
 
 let app =
+  let open Brr_lwd_ui.Forms in
   let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
   let on_click _ _ =
     Lwd.set playlist (Lwd.peek playlist + 1);
@@ -59,11 +60,11 @@ let app =
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
   let f_search =
-    let open Brr_lwd_ui.Field_textinput in
+    let open Field_textinput in
     make { name = "pouet"; default = None; label = [] }
   in
   let f_sort =
-    let open Brr_lwd_ui.Field_select in
+    let open Field_select in
     let options =
       Lwd.pure
         (Lwd_seq.of_list [ ("date_added", "Date added"); ("name", "Name") ])
@@ -71,7 +72,7 @@ let app =
     make { name = "view-sort"; default = "date_added"; label = [] } options
   in
   let f_order =
-    let open Brr_lwd_ui.Field_select in
+    let open Field_select in
     let options =
       Lwd.pure
         (Lwd_seq.of_list
@@ -82,7 +83,7 @@ let app =
   let f_sort_order = Lwd.pair f_sort.value f_order.value in
   let filters, f_value =
     let f_libraries =
-      let open Brr_lwd_ui.Field_checkboxes in
+      let open Field_checkboxes in
       let choices =
         Lwd_seq.fold_monoid
           (fun (_, l) ->

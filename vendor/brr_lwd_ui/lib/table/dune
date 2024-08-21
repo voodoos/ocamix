@@ -1,6 +1,6 @@
 (library
- (name brr_lwd_ui)
- (public_name brr-lwd-ui)
+ (name table)
+ (public_name brr-lwd-ui.table)
  (flags :standard -open Common)
  (libraries
   containers
@@ -10,7 +10,4 @@
   brr-lwd
   base64
   common
-  button
-  controlled_scroll
-  forms
-  table))
+  controlled_scroll))

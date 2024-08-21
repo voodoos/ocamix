@@ -1,0 +1,5 @@
+(library
+ (name controlled_scroll)
+ (public_name brr-lwd-ui.controlled-scroll)
+ (flags :standard -open Common)
+ (libraries containers containers-data brrer lwd brr-lwd base64 common))

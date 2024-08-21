@@ -46,7 +46,7 @@ let new_connexion ~base_url ~username ~password =
     connexions
 
 module Connect_form = struct
-  open Brr_lwd_ui.Form
+  open Brr_lwd_ui.Forms.Form
 
   type t = {
     url : string Field.validation;
@@ -82,7 +82,7 @@ module Connect_form = struct
 end
 
 let ui_form () =
-  let open Brr_lwd_ui.Form in
+  let open Brr_lwd_ui.Forms.Form in
   create
     (module Connect_form)
     (fun t ->

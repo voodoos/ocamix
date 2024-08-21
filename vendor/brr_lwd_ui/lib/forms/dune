@@ -1,0 +1,5 @@
+(library
+ (name forms)
+ (public_name brr-lwd-ui.forms)
+ (flags :standard -open Common)
+ (libraries containers containers-data brrer lwd brr-lwd base64 common))
