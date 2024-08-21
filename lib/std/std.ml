@@ -1,5 +1,4 @@
 include ContainersLabels
-module FFCache = FFCache
 
 module String = struct
   include String

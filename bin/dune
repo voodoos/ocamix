@@ -7,10 +7,10 @@
  (flags :standard -open Brrer)
  (libraries
   js_of_ocaml
-  brrer
   lwd
   brr-lwd
-  ocamix.brr-lwd-ui
+  brr-lwd-ui
+  brr-lwd-ui.brrer
   lib
   data_source
   db

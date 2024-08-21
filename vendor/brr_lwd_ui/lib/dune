@@ -1,0 +1,6 @@
+(include_subdirs unqualified)
+
+(library
+ (name brr_lwd_ui)
+ (public_name brr-lwd-ui)
+ (libraries containers containers-data brrer lwd brr-lwd base64))

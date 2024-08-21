@@ -1,4 +1,4 @@
 (library
  (name brrer)
- (public_name ocamix.brrer)
+ (public_name brr-lwd-ui.brrer)
  (libraries brr))

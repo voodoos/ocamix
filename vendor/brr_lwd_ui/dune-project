@@ -1,0 +1,19 @@
+(lang dune 3.11)
+
+(generate_opam_files)
+
+(source
+ (github voodoos/brr-lwd-ui))
+
+(license AGPL-3.0)
+
+(authors "Ulysse G\195\169rard")
+
+(maintainers "")
+
+(package
+ (allow_empty)
+ (name brr-lwd-ui)
+ (synopsis "UI components for use with with brr_lwd")
+ (description "A _really_ long description")
+ (depends containers js_of_ocaml js_of_ocaml-ppx brr lwd brr-lwd))

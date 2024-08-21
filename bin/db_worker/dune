@@ -4,4 +4,4 @@
  (js_of_ocaml
   (flags
    (:standard --no-inline --source-map-inline --pretty)))
- (libraries js_of_ocaml brrer lib data_source db))
+ (libraries js_of_ocaml brr-lwd-ui.brrer lib data_source db))

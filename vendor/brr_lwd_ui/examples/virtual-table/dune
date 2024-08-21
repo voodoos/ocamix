@@ -1,0 +1,8 @@
+(executable
+ (name main)
+ (modes js)
+ (promote (until-clean))
+ (js_of_ocaml
+  (flags
+   (:standard --no-inline)))
+ (libraries js_of_ocaml lwd brr-lwd brr-lwd-ui))

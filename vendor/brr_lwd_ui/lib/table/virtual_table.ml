@@ -5,7 +5,7 @@
     might be possible to optimize it (especially the "uniqueue" LRU thingy),
     but having too large a lwd_table is probably a hard limit. *)
 
-open Std
+open Import
 open Brrer
 open Brr
 open Brr_lwd
@@ -141,7 +141,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
           add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows)
-        in
+    in
     Lwd.map2 total_items update ~f:(fun total_items update ->
         prepare ~total_items ~render;
         update)
