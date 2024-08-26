@@ -108,10 +108,9 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let visible_height = height div |> float_of_int in
     let parent = Utils.Forward_ref.get_exn State.content_div in
     let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
-    let header_height = row_height in
     let number_of_visible_rows = visible_height /. row_height |> int_of_float in
     let bleeding = number_of_visible_rows in
-    let scroll_y = scroll_y -. header_height in
+    let scroll_y = scroll_y in
     let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
     let last_visible_row = first_visible_row + number_of_visible_rows in
     let first =
