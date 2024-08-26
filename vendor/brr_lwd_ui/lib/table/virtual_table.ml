@@ -268,29 +268,37 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         | None -> Lwd.set table_height (Some height)
         | _ -> ())
   in
-  let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-  let grid_style = Schema.style ui_table in
-  let s = At.style (Jstr.v @@ grid_style) in
-  let at = `P s :: at in
-  let on_create el = Utils.Forward_ref.set_exn State.content_div el in
-  let table =
-    Elwd.div ~at ~on_create [ `R table_header; `S (Lwd_seq.lift table_body) ]
+  let rows =
+    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
+    let on_create el = Utils.Forward_ref.set_exn State.content_div el in
+    Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
   in
-  let at = Attrs.O.(v (`P (C "lwdui-lazy-table-wrapper"))) in
-  let ev = [ `R scroll_handler ] in
-  let on_create el = Utils.Forward_ref.set_exn State.wrapper_div el in
-  (match scroll_target with
-  | Some scroll_target ->
-      let scroll_target =
-        Lwd.map2 table scroll_target ~f:(fun parent i ->
-            let row_height =
-              Int.of_float (Utils.Unit.to_px ~parent ui_table.row_height)
-            in
-            Some (Controlled_scroll.Pos (i * row_height)))
-      in
-      Controlled_scroll.make ~at ~ev ~on_create ~scroll_target table
-  | None -> Elwd.div ~at ~ev ~on_create [ `R table ])
-  |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
+  let wrapper =
+    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content-wrapper"))) in
+    let ev = [ `R scroll_handler ] in
+    let on_create el = Utils.Forward_ref.set_exn State.wrapper_div el in
+    (match scroll_target with
+    | Some scroll_target ->
+        let scroll_target =
+          Lwd.map scroll_target ~f:(fun i ->
+              let row_height =
+                let parent = Utils.Forward_ref.get_exn State.content_div in
+                Int.of_float (Utils.Unit.to_px ~parent ui_table.row_height)
+              in
+              Some (Controlled_scroll.Pos (i * row_height)))
+        in
+        Controlled_scroll.make ~at ~ev ~on_create ~scroll_target rows
+    | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
+    |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
+  in
+  let table =
+    let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
+    let grid_style = Schema.style ui_table in
+    let s = At.style (Jstr.v @@ grid_style) in
+    let at = `P s :: at in
+    Elwd.div ~at [ `R table_header; `R wrapper ]
+  in
+  table
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
 ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
