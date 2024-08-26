@@ -100,18 +100,20 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let compute_visible_rows ~last_scroll_y div =
     let height elt =
       let jv = El.to_jv elt in
-      Jv.get jv "offsetHeight" |> Jv.to_int
+      Jv.get jv "offsetHeight" |> Jv.to_float
     in
     let scroll_y = El.scroll_y div in
     let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
     let () = last_scroll_y := scroll_y in
-    let visible_height = height div |> float_of_int in
+    let visible_height = height div in
     let parent = Utils.Forward_ref.get_exn State.content_div in
     let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
-    let number_of_visible_rows = visible_height /. row_height |> int_of_float in
+    let number_of_visible_rows =
+      Int.of_float (ceil (visible_height /. row_height))
+    in
     let bleeding = number_of_visible_rows in
     let scroll_y = scroll_y in
-    let first_visible_row = int_of_float (scroll_y /. row_height) + 1 in
+    let first_visible_row = int_of_float (scroll_y /. row_height) in
     let last_visible_row = first_visible_row + number_of_visible_rows in
     let first =
       let bleeding =
@@ -161,33 +163,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     Lwd.map2 total_items update ~f:(fun total_items update ->
         prepare ~total_items ~render;
         update)
-  in
-  let scroll_handler =
-    Lwd.map populate_on_scroll ~f:(fun update ->
-        Elwd.handler Ev.scroll (fun ev ->
-            let open Fut.Syntax in
-            ignore
-            @@
-            let scroll_handler =
-              let last_update = ref 0. in
-              let timeout = ref (-1) in
-              let reset_ticker div =
-                let debouncing_interval = 500 in
-                (* We use [last_update] to have regular debounced updates and the
-                   [timeout] to ensure that the last scroll event is always taken into
-                   account even it it happens during the debouncing interval. *)
-                let now = Performance.now_ms G.performance in
-                if !timeout >= 0 then G.stop_timer !timeout;
-                timeout :=
-                  G.set_timeout ~ms:debouncing_interval (fun () -> update div);
-                if now -. !last_update >. float_of_int debouncing_interval then (
-                  last_update := now;
-                  update div)
-              in
-              fun div -> reset_ticker div
-            in
-            let div = Ev.target ev |> Ev.target_to_jv |> El.of_jv in
-            scroll_handler div))
   in
   let () =
     let repopulate_deps = Lwd.pair populate_on_scroll (Lwd.get table_height) in
@@ -274,6 +249,34 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let wrapper =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content-wrapper"))) in
+    let scroll_handler =
+      Lwd.map populate_on_scroll ~f:(fun update ->
+          Elwd.handler Ev.scroll (fun _ev ->
+              let open Fut.Syntax in
+              ignore
+              @@
+              let scroll_handler =
+                let last_update = ref 0. in
+                let timeout = ref (-1) in
+                let reset_ticker div =
+                  let debouncing_interval = 500 in
+                  (* We use [last_update] to have regular debounced updates and the
+                     [timeout] to ensure that the last scroll event is always taken into
+                     account even it it happens during the debouncing interval. *)
+                  let now = Performance.now_ms G.performance in
+                  if !timeout >= 0 then G.stop_timer !timeout;
+                  timeout :=
+                    G.set_timeout ~ms:debouncing_interval (fun () -> update div);
+                  if now -. !last_update >. float_of_int debouncing_interval
+                  then (
+                    last_update := now;
+                    update div)
+                in
+                fun div -> reset_ticker div
+              in
+              let div = Utils.Forward_ref.get_exn State.wrapper_div in
+              scroll_handler div))
+    in
     let ev = [ `R scroll_handler ] in
     let on_create el = Utils.Forward_ref.set_exn State.wrapper_div el in
     (match scroll_target with
