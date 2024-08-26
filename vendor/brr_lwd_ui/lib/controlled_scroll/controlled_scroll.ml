@@ -13,7 +13,7 @@ let js_scroll elt target =
       ignore @@ Jv.call elt "scroll" [| Jv.of_int 0; Jv.of_int x |]
   | El el -> El.scroll_into_view el
 
-let make ?(at = []) ~scroll_target elt =
+let make ?(at = []) ?(ev = []) ?on_create ~scroll_target elt =
   let active = Lwd.var true in
   let active_class =
     Lwd.map (Lwd.get active) ~f:(function
@@ -43,4 +43,4 @@ let make ?(at = []) ~scroll_target elt =
         if active then Option.iter (js_scroll elt) pos;
         elt)
   in
-  Elwd.div ~at ~ev:[ `P on_wheel ] [ `R elt; `R controls ]
+  Elwd.div ~at ~ev:(`P on_wheel :: ev) ?on_create [ `R elt; `R controls ]

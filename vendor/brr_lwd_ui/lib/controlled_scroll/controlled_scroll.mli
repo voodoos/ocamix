@@ -1,13 +1,16 @@
 (** This module's API is still a work in progress and subject to changes. *)
 
 open Brr
+open Brr_lwd
 
 (** The target of a controlled scroll: can be a position in pixels or an DOM
   element. *)
 type target = Pos of int | El of El.t
 
 val make :
-  ?at:[ `P of At.t | `R of At.t Lwd.t | `S of At.t Lwd_seq.t Lwd.t ] list ->
+  ?at:At.t Elwd.col ->
+  ?ev:Elwd.handler Elwd.col ->
+  ?on_create:(El.t -> unit) ->
   scroll_target:target option Lwd.t ->
   El.t Lwd.t ->
   El.t Lwd.t

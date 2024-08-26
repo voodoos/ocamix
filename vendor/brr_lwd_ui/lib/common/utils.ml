@@ -66,3 +66,26 @@ let map3 ~f a b c =
   Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)
 
 let triple a b c = map3 a b c ~f:(fun a b c -> (a, b, c))
+
+module Forward_ref : sig
+  type 'a t
+
+  exception Not_set
+  exception Already_set
+
+  val make : unit -> 'a t
+  val set_exn : 'a t -> 'a -> unit
+  val get_exn : 'a t -> 'a
+end = struct
+  type 'a t = 'a option ref
+
+  exception Not_set
+  exception Already_set
+
+  let make () = ref None
+
+  let set_exn t v =
+    match !t with None -> t := Some v | Some _ -> raise Already_set
+
+  let get_exn t = match !t with None -> raise Not_set | Some v -> v
+end

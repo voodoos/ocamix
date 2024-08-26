@@ -10,6 +10,8 @@ open Brrer
 open Brr
 open Brr_lwd
 
+let logger = Logger.for_section "virtual table"
+
 type 'a row_data = {
   index : int;
   content : 'a option;
@@ -34,6 +36,20 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(scroll_target : int Lwd.t option)
     ({ total_items; fetch; render } : (data, _) data_source) =
   ignore placeholder;
+
+  let module State = struct
+    (* The wrapper_div ref should be initialized with the correct element as
+       soon as it is created. It is not reactive per se. *)
+    let content_div : El.t Utils.Forward_ref.t = Utils.Forward_ref.make ()
+
+    (* The wrapper_div ref should be initialized with the correct element as
+       soon as it is created. It is not reactive per se. *)
+    let wrapper_div : El.t Utils.Forward_ref.t = Utils.Forward_ref.make ()
+
+    (* The height of the window is a reactive value that might change during
+       execution when the browser is resized or other layout changes are made. *)
+    let window_height : int option Lwd.var = Lwd.var None
+  end in
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
@@ -78,7 +94,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           if inserted then (cache, i :: acc) else (cache, acc))
     in
     cache_ref := cache;
-    load (Array.of_list to_load)
+    match Array.of_list to_load with [||] -> () | to_load -> load to_load
   in
   let table_height = Lwd.var None in
   let compute_visible_rows ~last_scroll_y div =
@@ -90,7 +106,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
     let () = last_scroll_y := scroll_y in
     let visible_height = height div |> float_of_int in
-    let row_height = Utils.Unit.to_px ~parent:div ui_table.row_height in
+    let parent = Utils.Forward_ref.get_exn State.content_div in
+    let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
     let header_height = row_height in
     let number_of_visible_rows = visible_height /. row_height |> int_of_float in
     let bleeding = number_of_visible_rows in
@@ -178,7 +195,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let root = Lwd.observe repopulate_deps in
     Lwd.set_on_invalidate root (fun _ ->
         match Lwd.quick_sample root with
-        | update, Some (_h, div) -> update div
+        | update, Some _h ->
+            update (Utils.Forward_ref.get_exn State.wrapper_div)
         | _ -> ());
     Lwd.quick_sample root |> ignore
   in
@@ -246,24 +264,22 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         let rect = Resize_observer.Entry.content_rect entry in
         let height = Dom_rect_read_only.height rect in
         match Lwd.peek table_height with
-        | Some (h, _) when h <> height ->
-            Lwd.set table_height (Some (height, div))
-        | None -> Lwd.set table_height (Some (height, div))
+        | Some h when h <> height -> Lwd.set table_height (Some height)
+        | None -> Lwd.set table_height (Some height)
         | _ -> ())
   in
   let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
   let grid_style = Schema.style ui_table in
   let s = At.style (Jstr.v @@ grid_style) in
   let at = `P s :: at in
+  let on_create el = Utils.Forward_ref.set_exn State.content_div el in
   let table =
-    Elwd.div
-      ~ev:[ `R scroll_handler ]
-      ~at
-      [ `R table_header; `S (Lwd_seq.lift table_body) ]
-    |> Lwd.map ~f:(tee (Resize_observer.observe observer))
+    Elwd.div ~at ~on_create [ `R table_header; `S (Lwd_seq.lift table_body) ]
   in
   let at = Attrs.O.(v (`P (C "lwdui-lazy-table-wrapper"))) in
-  match scroll_target with
+  let ev = [ `R scroll_handler ] in
+  let on_create el = Utils.Forward_ref.set_exn State.wrapper_div el in
+  (match scroll_target with
   | Some scroll_target ->
       let scroll_target =
         Lwd.map2 table scroll_target ~f:(fun parent i ->
@@ -272,8 +288,9 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
             in
             Some (Controlled_scroll.Pos (i * row_height)))
       in
-      Controlled_scroll.make ~at ~scroll_target table
-  | None -> Elwd.div ~at [ `R table ]
+      Controlled_scroll.make ~at ~ev ~on_create ~scroll_target table
+  | None -> Elwd.div ~at ~ev ~on_create [ `R table ])
+  |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
 ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
