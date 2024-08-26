@@ -260,11 +260,12 @@ let attach_events el events =
     ) (pure_unit, fun _ _ -> pure_unit)
     events
 
-let v ?d ?(at=[]) ?(ev=[]) tag children =
+let v ?d ?(at=[]) ?(ev=[]) ?(on_create = fun _ -> ()) tag children =
   let at, impure_at = prepare_col at in
   let ev, impure_ev = prepare_col ev in
   let children, impure_children = consume_children children in
   let el = El.v ?d ~at tag children in
+  let () = on_create el in
   let result =
     match impure_at, impure_children with
     | [], None -> Lwd.pure el
@@ -290,16 +291,16 @@ let v ?d ?(at=[]) ?(ev=[]) tag children =
 
 (** {1:els Element constructors} *)
 
-type cons =  ?d:document -> ?at:At.t col -> ?ev:handler col -> t col -> t Lwd.t
+type cons =  ?d:document -> ?at:At.t col -> ?ev:handler col -> ?on_create:(t -> unit) -> t col -> t Lwd.t
 (** The type for element constructors. This is simply {!v} with a
     pre-applied element name. *)
 
-type void_cons = ?d:document -> ?at:At.t col -> ?ev:handler col -> unit -> t Lwd.t
+type void_cons = ?d:document -> ?at:At.t col -> ?ev:handler col -> ?on_create:(t -> unit) -> unit -> t Lwd.t
 (** The type for void element constructors. This is simply {!v}
     with a pre-applied element name and without children. *)
 
-let cons name ?d ?at ?ev cs = v ?d ?at ?ev name cs
-let void_cons name ?d ?at ?ev () = v ?d ?at ?ev name []
+let cons name ?d ?at ?ev ?on_create cs = v ?d ?at ?ev ?on_create name cs
+let void_cons name ?d ?at ?ev ?on_create () = v ?d ?at ?ev ?on_create name []
 
 let a = cons Name.a
 let abbr = cons Name.abbr
