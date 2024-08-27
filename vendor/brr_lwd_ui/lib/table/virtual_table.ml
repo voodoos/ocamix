@@ -9,6 +9,7 @@ open Import
 open Brrer
 open Brr
 open Brr_lwd
+module FRef = Utils.Forward_ref
 
 let logger = Logger.for_section "virtual table"
 
@@ -97,17 +98,19 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     match Array.of_list to_load with [||] -> () | to_load -> load to_load
   in
   let table_height = Lwd.var None in
-  let compute_visible_rows ~last_scroll_y div =
+  let compute_visible_rows ~last_scroll_y =
     let height elt =
       let jv = El.to_jv elt in
       Jv.get jv "offsetHeight" |> Jv.to_float
     in
+    let div = FRef.get_exn State.wrapper_div in
     let scroll_y = El.scroll_y div in
     let direction = if scroll_y >. !last_scroll_y then `Down else `Up in
     let () = last_scroll_y := scroll_y in
     let visible_height = height div in
     let parent = Utils.Forward_ref.get_exn State.content_div in
     let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
+    logger.debug [ "Visible height:"; visible_height; "Row height"; row_height ];
     let number_of_visible_rows =
       Int.of_float (ceil (visible_height /. row_height))
     in
@@ -154,8 +157,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let populate_on_scroll =
     let last_scroll_y = ref 0. in
     let update =
-      Lwd.map fetch ~f:(fun fetch div ->
-          let visible_rows = compute_visible_rows ~last_scroll_y div in
+      Lwd.map fetch ~f:(fun fetch () ->
+          let visible_rows = compute_visible_rows ~last_scroll_y in
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
           add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows)
@@ -169,8 +172,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let root = Lwd.observe repopulate_deps in
     Lwd.set_on_invalidate root (fun _ ->
         match Lwd.quick_sample root with
-        | update, Some _h ->
-            update (Utils.Forward_ref.get_exn State.wrapper_div)
+        | update, Some _h -> update ()
         | _ -> ());
     Lwd.quick_sample root |> ignore
   in
@@ -180,7 +182,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     El.div ~at:(style :: at) []
   in
   let render _row { content; index; render } =
-    let at = Attrs.add At.Name.class' (`P "row") [] in
+    let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
     let style = `P (At.style (Jstr.v height)) in
     match content with
     | Some data ->
@@ -275,7 +277,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
                 fun div -> reset_ticker div
               in
               let div = Utils.Forward_ref.get_exn State.wrapper_div in
-              scroll_handler div))
+              scroll_handler ()))
     in
     let ev = [ `R scroll_handler ] in
     let on_create el = Utils.Forward_ref.set_exn State.wrapper_div el in

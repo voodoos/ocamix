@@ -32,7 +32,11 @@ let style t =
 let header t =
   let row_height = Utils.Unit.to_string t.row_height in
   let at =
-    [ `P (At.style (Jstr.v @@ Printf.sprintf "height: %s" row_height)) ]
+    [
+      `P (At.style (Jstr.v @@ Printf.sprintf "height: %s" row_height));
+      `P (At.class' (Jstr.v "lwdui-lazy-table-header"));
+      `P (At.class' (Jstr.v "lwdui-virtual-table-row"));
+    ]
   in
   Elwd.div ~at @@ Columns.to_header t.table.columns
 
