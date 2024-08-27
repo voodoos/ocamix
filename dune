@@ -11,3 +11,9 @@
  (mode
   (promote (until-clean)))
  (files ../bin/db_worker/db_worker.bc.js))
+
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (alias default)
+ (files ../vendor/brr_lwd_ui/examples/virtual-table/brr_lwd_ui.css))
