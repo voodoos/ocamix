@@ -76,17 +76,20 @@ html {
     border-left: 1px solid black;
     border-bottom: 1px solid black;
 
+    & .lwdui-lazy-table-content,
+    & .lwdui-lazy-table-content-wrapper,
+    & .lwdui-virtual-table-row {
+        display: grid;
+        grid-template-columns: subgrid;
+        grid-column: 1/-1;
+    }
 
-    & .lwdui-lazy-table-content-wrapper {
-        width: 100%;
+    & .lwdui-lazy-table-content-wrapper{
         height: 100%;
         overflow: auto;
     }
 
     & .lwdui-virtual-table-row {
-        display: grid;
-        grid-template-columns: subgrid;
-        grid-column: 1/-1;
         padding: 0;
         overflow-x: auto;
         overflow-y: hidden;
