@@ -28,8 +28,11 @@ let app =
   let table = { table; row_height = Em 5. } in
   let table = Virtual.make ~ui_table:table data in
   Elwd.div
-    ~at:Attrs.O.(v (`P (A (At.style (Jstr.v "height:50vh")))))
-    [ `R table ]
+    ~at:Attrs.O.(v (`P (C "flex")))
+    [
+      `P (El.div [ El.txt' "options" ]);
+      `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
+    ]
 
 let _ =
   let on_load _ =
