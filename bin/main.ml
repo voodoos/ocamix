@@ -202,7 +202,7 @@ let app =
       `R
         (Elwd.div
            ~at:[ `P (At.class' (Jstr.v "item-list")) ]
-           [ `R big_cover; `R filters; `R main_list ]);
+           [ `R big_cover; `R filters; `R (Elwd.div [ `R main_list ]) ]);
       `R
         (Elwd.div ~at:[ `P (At.class' (Jstr.v "playlist")) ] [ `R now_playing ]);
       `R player_ui;

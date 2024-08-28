@@ -261,7 +261,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
                 let last_update = ref 0. in
                 let timeout = ref (-1) in
                 let reset_ticker div =
-                  let debouncing_interval = 500 in
+                  let debouncing_interval = 800 in
                   (* We use [last_update] to have regular debounced updates and the
                      [timeout] to ensure that the last scroll event is always taken into
                      account even it it happens during the debouncing interval. *)
