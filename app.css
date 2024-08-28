@@ -35,8 +35,9 @@ body {
     justify-items: stretch;
     align-items: stretch;
 
-    width: 100wv;
-    height: 100wh;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
 
     & .item-list,
     & .playlist {
@@ -45,6 +46,12 @@ body {
         flex-direction: column;
         height: 100%;
         overflow: hidden;
+        align-items: stretch;
+
+
+        &>div:last-child {
+            flex-grow: 1;
+        }
     }
 
     @media screen and (max-width: 512px) {
