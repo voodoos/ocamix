@@ -1,0 +1,9 @@
+(rule
+ (deps
+  yjs.js
+  package.json
+  yarn.lock
+  (source_tree node_modules))
+ (targets bundle.js)
+ (action
+  (run yarn build)))
