@@ -1,35 +1,37 @@
-val global : Jv.t
-
 type observer
 
 module Event : sig
-  type t
+  type 'a t
+  type 'a changes = { delta : 'a array }
 
-  external of_jv : Jv.t -> t = "%identity"
-
-  type changes = { delta : Jv.t }
-
-  val changes : t -> changes
+  val changes : 'change t -> 'change changes
 end
 
-module Array : sig
+module rec Array : sig
   type t
+  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+  type change = Retain of int | Insert of value array | Delete of int
 
   external to_jv : t -> Jv.t = "%identity"
   external of_jv : Jv.t -> t = "%identity"
-  val insert : t -> int -> Jv.t array -> unit
-  val observe : t -> (Event.t -> unit) -> observer
+  val make : unit -> t
+  val insert : t -> int -> value array -> unit
+  val iter : t -> f:(index:int -> value -> t -> unit) -> unit
+  val observe : t -> (change Event.t -> unit) -> observer
 end
 
-module Map : sig
+and Map : sig
   type t
+  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+  type change = Retain of int | Insert of value | Delete of int
 
   external to_jv : t -> Jv.t = "%identity"
   external of_jv : Jv.t -> t = "%identity"
-  val get : t -> key:string -> Jv.t (* TODO: this could be tighter *)
-  val set : t -> key:string -> Jv.t -> unit
+  val make : unit -> t
+  val get : t -> key:string -> value
+  val set : t -> key:string -> value -> unit
   val entries : t -> Jv.It.t
-  val observe : t -> (Event.t -> unit) -> observer
+  val observe : t -> (change Event.t -> unit) -> observer
 end
 
 module Doc : sig
