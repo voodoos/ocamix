@@ -5,9 +5,9 @@ module String = struct
   module Set = Set.Make (String)
 end
 
-module Yojson = struct
-  include Jsonxt.Yojson
-end
+(* module Yojson = struct
+     include Jsonxt.Yojson
+   end *)
 
 module Encodings = struct
   let to_jstr t = Jv.repr t |> Brr.Json.encode

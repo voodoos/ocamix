@@ -110,7 +110,7 @@ let app =
   let main_view =
     let previous_value = ref None in
     let request =
-      Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, o) ->
+      Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, _o) ->
           let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
           Console.log
             [
@@ -119,9 +119,7 @@ let app =
               (* Jv.of_list Jv.of_string l; *)
               Jv.of_string s;
             ];
-          let open Fut.Result_syntax in
           let sort = Db.View.Sort.of_string s in
-          let open Fut.Result_syntax in
           let new_view =
             Db.View.(
               req Audio ~src_views:(Only (Lwd_seq.to_list l)) ~sort ?filters ())
@@ -170,7 +168,6 @@ let app =
     Lwd.join playlist
   in
   let big_cover =
-    let open Attrs.O in
     let display_none =
       Lwd.map (Lwd.get App_state.active_layout) ~f:(function
         | Main -> At.class' (Jstr.v "display-none")

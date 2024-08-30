@@ -1,4 +1,3 @@
-module Yojson = Std.Yojson
 open Brr
 
 type method' = Get | Post

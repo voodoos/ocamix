@@ -7,7 +7,7 @@
 
 (license AGPL-3.0)
 
-(authors "Ulysse G\195\169rard")
+(authors "Ulysse Gérard")
 
 (maintainers "")
 
@@ -25,7 +25,7 @@
   lwd
   brr-lwd
   yojson
-  jsonxt
+  ;jsonxt
   ppx_yojson_conv
   uuidm
   base64))

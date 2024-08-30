@@ -118,7 +118,7 @@ let status_to_string = function
     ->
       Format.sprintf "New items: last: %i missing: %i unfetched: %i"
         last_source_item_key first_missing_key first_unfetched_key
-  | Partial_fetch { first_unfetched_key; last_source_item_key } ->
+  | Partial_fetch { first_unfetched_key; last_source_item_key = _ } ->
       Format.sprintf "Partial: last: %i unfetched: %i" first_unfetched_key
         first_unfetched_key
 
