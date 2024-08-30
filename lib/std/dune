@@ -1,4 +1,4 @@
 (library
  (name std)
  (public_name ocamix.std)
- (libraries containers containers-data jsonxt brr base64 uuidm))
+ (libraries containers containers-data brr base64 uuidm))

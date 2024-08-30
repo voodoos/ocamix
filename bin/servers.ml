@@ -21,7 +21,7 @@ let connect (server_id, { connexion; status; refresh }) =
           | Some { remaining; _ }, Some { remaining = remaining'; _ }
             when remaining <> remaining' ->
               Lwd.set refresh ()
-          | Some { remaining; _ }, None -> Lwd.set refresh ()
+          | Some _, None -> Lwd.set refresh ()
           | _ -> ()))
   in
   ignore (Worker_client.query @@ Add_servers [ (server_id, connexion) ])
@@ -129,7 +129,7 @@ let seq_share ~cmp ~prev next =
   fst @@ aux prev next
 
 let servers_libraries =
-  let rec lib_diff ~prev next =
+  let lib_diff ~prev next =
     let open Db.Stores.Items in
     seq_share ~cmp:(fun i i' -> String.(i.item.id = i'.item.id)) ~prev next
   in
