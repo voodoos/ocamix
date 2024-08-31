@@ -1,5 +1,7 @@
 type observer
 
+module StringMap : module type of Map.Make (String)
+
 module Event : sig
   type 'a t
   type 'a changes = { delta : 'a array }
@@ -23,7 +25,17 @@ end
 and Map : sig
   type t
   type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
-  type change = Retain of int | Insert of value | Delete of int
+
+  module Event : sig
+    type t
+
+    external of_jv : Jv.t -> t = "%identity"
+
+    type action = Add | Update | Delete
+    type change = { action : action; old_value : value option }
+
+    val keys_changes : t -> change StringMap.t
+  end
 
   external to_jv : t -> Jv.t = "%identity"
   external of_jv : Jv.t -> t = "%identity"
@@ -31,7 +43,7 @@ and Map : sig
   val get : t -> key:string -> value
   val set : t -> key:string -> value -> unit
   val entries : t -> Jv.It.t
-  val observe : t -> (change Event.t -> unit) -> observer
+  val observe : t -> (Event.t -> unit) -> observer
 end
 
 module Doc : sig

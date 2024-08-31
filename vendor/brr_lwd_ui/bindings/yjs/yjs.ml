@@ -1,4 +1,5 @@
 open Brr
+module StringMap = Map.Make (String)
 
 let yjs = Jv.get Jv.global "yjs"
 let array_class = Jv.get yjs "Array"
@@ -88,12 +89,22 @@ and Map : sig
   val make : unit -> t
 
   type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
-  type change = Retain of int | Insert of value | Delete of int
+
+  module Event : sig
+    type t
+
+    external of_jv : Jv.t -> t = "%identity"
+
+    type action = Add | Update | Delete
+    type change = { action : action; old_value : value option }
+
+    val keys_changes : t -> change StringMap.t
+  end
 
   val get : t -> key:string -> value
   val set : t -> key:string -> value -> unit
   val entries : t -> Jv.It.t
-  val observe : t -> (change Event.t -> unit) -> observer
+  val observe : t -> (Event.t -> unit) -> observer
 end = struct
   type t = Jv.t
 
@@ -101,23 +112,40 @@ end = struct
   external of_jv : Jv.t -> t = "%identity"
 
   type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
-  type change = Retain of int | Insert of value | Delete of int
 
   let value_of_jv jv =
     if Jv.instanceof jv ~cons:array_class then `Array (Array.of_jv jv)
     else if Jv.instanceof jv ~cons:map_class then `Map (Map.of_jv jv)
     else `Jv jv
 
-  let change_of_jv jv =
-    match Jv.find jv "retain" with
-    | Some i -> Retain (Jv.to_int i)
-    | None -> (
-        match Jv.find jv "insert" with
-        | Some a -> Insert (value_of_jv a)
-        | None -> (
-            match Jv.find jv "delete" with
-            | Some i -> Delete (Jv.to_int i)
-            | None -> assert false))
+  module Event = struct
+    type t = Jv.t
+
+    external of_jv : Jv.t -> t = "%identity"
+
+    type action = Add | Update | Delete
+    type change = { action : action; old_value : value option }
+
+    let change_of_jv obj =
+      let action =
+        match Jv.get obj "action" |> Jv.to_string with
+        | "add" -> Add
+        | "update" -> Update
+        | "delete" -> Delete
+      in
+      let old_value =
+        let jv = Jv.get obj "oldValue" in
+        if Jv.is_none jv then None else Some (value_of_jv jv)
+      in
+      { action; old_value }
+
+    let keys_changes t =
+      let key_map = Jv.get (Jv.get t "changes") "keys" in
+      let entries = Jv.call key_map "entries" in
+      Jv.It.fold_bindings ~key:Jv.to_string ~value:change_of_jv
+        (fun k v acc -> StringMap.add k v acc)
+        key_map StringMap.empty
+  end
 
   let make () = Jv.new' map_class [||]
   let get (t : t) ~key = Jv.call t "get" [| Jv.of_string key |] |> value_of_jv
@@ -132,7 +160,7 @@ end = struct
 
   let observe t f : observer =
     let t = to_jv t in
-    let callback e = f (Event.of_jv ~change_of_jv e) in
+    let callback e = f (Event.of_jv e) in
     let cb = Jv.repr callback in
     ignore (Jv.call t "observe" [| cb |]);
     cb
