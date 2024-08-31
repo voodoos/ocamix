@@ -23,9 +23,6 @@ module Data_table = struct
            [|
              ("name", Jv.of_string "Column 1"); ("type", Jv.of_string "string");
            |]));
-    let row0 = Map.make () in
-    Map.set row0 "0" (`Jv (Jv.of_string "toto1"));
-    Array.insert content 0 [| `Map row0 |];
     Map.set v "columns" (`Map columns);
     Map.set v "content" (`Array content)
 end
@@ -84,6 +81,7 @@ module Indexed_table = struct
       vector [v], index [i], and length [n] at the end of the vector [v']. [v]
       must not be empty. *)
   let blit_append v i n v' =
+    Console.debug [ "[blit v(%i) %i %i v'(%i)]"; V.length v; i; n; V.length v' ];
     let v'_size = V.length v' in
     let filler = V.get v 0 in
     V.append_array v' (Array.init n (fun _ -> filler));
@@ -152,7 +150,8 @@ module Indexed_table = struct
             V.append_array new_index rows)
     in
     Array.iter apply_one delta;
-    blit_append old_index !cursor (V.length old_index - !cursor) new_index;
+    let remaining = V.length old_index - !cursor in
+    if remaining > 0 then blit_append old_index !cursor remaining new_index;
     t.index <- new_index;
     Console.debug
       [
@@ -172,7 +171,11 @@ let rec lwd_of_yjs_map map =
     let changes = Map.Event.keys_changes e in
     StringMap.iter
       (fun key -> function
-        | { Map.Event.action = Add | Update; new_value; old_value } ->
+        | {
+            Map.Event.action = Add | Update;
+            new_value = Some new_value;
+            old_value;
+          } ->
             Console.debug
               [
                 "Key:";
@@ -182,8 +185,8 @@ let rec lwd_of_yjs_map map =
                 new_value;
                 "Old value:";
                 old_value;
-              ]
-            (* Lwd_map.set lwd_map key *)
+              ];
+            Lwd_map.set lwd_map key new_value
         | { Map.Event.action = Delete; old_value } ->
             Console.debug
               [ "Key:"; key; "Action: delete"; "Old value:"; old_value ])
@@ -228,15 +231,15 @@ and lwd_of_yjs_value = function
 let yjs_table = lwd_of_yjs_array Data_table.content
 
 let () =
-  let row1 = Yjs.Map.make () in
+  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
-  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
   Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |]
 
-let _ = lwd_of_yjs_map Data_table.v
-let _ = Yjs.Map.set Data_table.v ~key:"TOTORO" (`Jv (Jv.of_string "TAA"))
-let _ = Yjs.Map.set Data_table.v ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
+let row = Yjs.Map.make ()
+let _ = Yjs.Array.insert Data_table.content 2 [| `Map row |]
+let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
+let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA3"))
 
 let data =
   {
@@ -246,6 +249,42 @@ let data =
       Lwd.pure (fun i data ->
           [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]);
   }
+
+let reduce_row map =
+  Lwd_table.map_reduce
+    (fun _row v ->
+      let elt =
+        match v with
+        | { Lwd_map.key; value = `Jv jv } ->
+            Console.log [ key; ": jv"; jv ];
+            Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
+        | { key; value = `Map map } ->
+            Console.log [ key; ": map"; map ];
+            Elwd.div [ `P (El.txt' "array") ]
+        | { key; value = `Array jv } ->
+            Console.log [ key; ": array"; jv ];
+            Elwd.div [ `P (El.txt' "array") ]
+      in
+      Lwd_seq.element elt)
+    Lwd_seq.monoid map
+
+let reduce_table tbl =
+  Lwd_table.map_reduce
+    (fun _row v ->
+      let elt =
+        match v with
+        | `Jv jv ->
+            Console.log [ "Value: jv"; jv ];
+            Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
+        | `Map map ->
+            Console.log [ "Value: map"; map ];
+            Elwd.div [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
+        | `Array jv ->
+            Console.log [ "Value: array"; jv ];
+            Elwd.div [ `P (El.txt' "array") ]
+      in
+      Lwd_seq.element elt)
+    Lwd_seq.monoid tbl
 
 let app =
   let table =
@@ -259,25 +298,7 @@ let app =
   in
   let table = { table; row_height = Em 5. } in
   let table = Virtual.make ~ui_table:table data in
-  let yjs_table =
-    Lwd_table.(
-      map_reduce
-        (fun _row _v ->
-          let txt =
-            match _v with
-            | `Jv jv ->
-                Console.log [ "Value: jv"; jv ];
-                Jv.to_string jv
-            | `Map jv ->
-                Console.log [ "Value: map"; jv ];
-                "map"
-            | `Array jv ->
-                Console.log [ "Value: array"; jv ];
-                "array"
-          in
-          Lwd_seq.element @@ Elwd.div [ `P (El.txt' txt) ])
-        Lwd_seq.monoid yjs_table.table)
-  in
+  let yjs_table = reduce_table yjs_table.table in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
