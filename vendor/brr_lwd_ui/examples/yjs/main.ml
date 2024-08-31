@@ -30,12 +30,44 @@ module Data_table = struct
     Map.set v "content" (`Array content)
 end
 
+module Lwd_map = struct
+  type 'a binding = { key : string; value : 'a }
+
+  type 'a t = {
+    table : 'a binding Lwd_table.t;
+    map : (string, 'a binding Lwd_table.row) Hashtbl.t;
+  }
+
+  let lwd_table t = t.table
+
+  let make ?(size = 64) () =
+    let table = Lwd_table.make () in
+    let map = Hashtbl.create size in
+    { table; map }
+
+  let set t k v =
+    match Hashtbl.find_opt t.map k with
+    | Some row -> Lwd_table.set row v
+    | None ->
+        let row = Lwd_table.append ~set:v t.table in
+        Hashtbl.replace t.map k row
+
+  let get t k = Option.bind (Hashtbl.find_opt t.map k) Lwd_table.get
+
+  let delete t k =
+    match Hashtbl.find_opt t.map k with
+    | None -> ()
+    | Some row ->
+        Lwd_table.remove row;
+        Hashtbl.remove t.map k
+end
+
 module Indexed_table = struct
   module V = Hector.Poly
 
   type 'a t = { table : 'a Lwd_table.t; mutable index : 'a Lwd_table.row V.t }
 
-  let make ?(size = 64) () =
+  let make () =
     let table = Lwd_table.make () in
     let index = V.create () in
     { table; index }
@@ -48,7 +80,7 @@ module Indexed_table = struct
 
   (** [blit_append v i n v'] copies data from the vector segment determined by
       vector [v], index [i], and length [n] at the end of the vector [v']. [v]
-      must not be empty.   *)
+      must not be empty. *)
   let blit_append v i n v' =
     let v'_size = V.length v' in
     let filler = V.get v 0 in
