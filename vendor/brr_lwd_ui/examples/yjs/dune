@@ -5,7 +5,13 @@
  (js_of_ocaml
   (flags
    (:standard --no-inline)))
- (libraries js_of_ocaml lwd brr-lwd brr-lwd-ui brr-lwd-ui.bindings.yjs))
+ (libraries
+  js_of_ocaml
+  lwd
+  brr-lwd
+  brr-lwd-ui
+  brr-lwd-ui.bindings.yjs
+  hector))
 
 (alias
  (name examples)

@@ -31,31 +31,89 @@ module Data_table = struct
 end
 
 module Indexed_table = struct
-  type 'a t = {
-    size : int Lwd.var;
-    table : 'a Lwd_table.t;
-    index : 'a Lwd_table.row Dynarray.t;
-  }
+  module V = Hector.Poly
+
+  type 'a t = { table : 'a Lwd_table.t; mutable index : 'a Lwd_table.row V.t }
 
   let make ?(size = 64) () =
     let table = Lwd_table.make () in
-    let index = Dynarray.create () in
-    { size = Lwd.var 0; table; index }
+    let index = V.create () in
+    { table; index }
 
-  let first t =
-    try Some (Dynarray.get t.index 0) with Invalid_argument _ -> None
+  let first t = try Some (V.get t.index 0) with Invalid_argument _ -> None
 
   let append ?set t =
     let row = Lwd_table.append ?set t.table in
-    let size = Lwd.peek t.size in
-    Dynarray.add_last t.index row;
-    Lwd.set t.size (size + 1)
-end
+    V.add_last t.index row
 
-let apply_delta arr delta =
-  let cursor = ref 0 in
-  let apply_one = function Yjs.Array.Retain i -> cursor := !cursor + i in
-  Array.iter apply_one delta
+  let apply_delta (t : Yjs.Array.value t) delta =
+    let cursor = ref 0 in
+    let old_index = t.index in
+    let new_index = V.create () in
+    let apply_one = function
+      | Yjs.Array.Retain i ->
+          Console.debug [ "[apply delta] Retain"; i ];
+          let kept = V.sub old_index !cursor i in
+          V.append new_index kept;
+          cursor := !cursor + i
+      | Yjs.Array.Delete i ->
+          Console.debug [ "[apply delta] Delete"; i ];
+          let last = V.get_last new_index in
+          for _i = 1 to i do
+            (* We remove the [i] next rows *)
+            match Lwd_table.next last with
+            | None -> assert false
+            | Some row -> Lwd_table.remove last
+          done;
+          cursor := !cursor + i
+      | Insert a ->
+          Console.debug [ "[apply delta] Insert"; a ];
+          (* Three cases:
+              1. Insertion at the beginning of an empty table
+              2. Insertion at the beginning, before the first row
+              3. Insertion after another row *)
+          if V.length new_index = 0 then
+            match first t with
+            | None ->
+                (* Case 1: the table is empty *)
+                Console.debug [ "Insert in empty table" ];
+                Array.iter
+                  (fun set -> append ~set { t with index = new_index })
+                  a
+            | Some first_row ->
+                (* Case 2 *)
+                let rows =
+                  Array.map
+                    (fun set ->
+                      Console.debug [ "Insert before first element"; set ];
+                      Lwd_table.before first_row ~set)
+                    a
+                in
+                V.append_array new_index rows
+          else (
+            (* Case 3 *)
+            Console.debug [ "Insert after some element" ];
+            let last = ref (V.get_last new_index) in
+            let rows =
+              Array.map
+                (fun set ->
+                  let row = Lwd_table.after !last ~set in
+                  last := row;
+                  row)
+                a
+            in
+            V.append_array new_index rows)
+    in
+    Array.iter apply_one delta;
+    (* Todo, we could rezise and blit *)
+    V.append new_index (V.sub old_index !cursor (V.length old_index - !cursor));
+    t.index <- new_index;
+    Console.debug
+      [
+        "[apply delta] New index:";
+        Jv.of_array Jv.repr @@ Array.map Lwd_table.get @@ V.to_array t.index;
+      ]
+end
 
 let lwd_of_yjs_array arr =
   let lwd_table = Indexed_table.make () in
@@ -66,7 +124,7 @@ let lwd_of_yjs_array arr =
       | `Map jv -> Console.log [ "Value: map"; jv; "index:"; index ]
       | `Array jv -> Console.log [ "Value: array"; jv; "index:"; index ]
     in
-    Indexed_table.append ~set:"toto" lwd_table |> ignore
+    Indexed_table.append ~set:value lwd_table |> ignore
   in
   (* Load initial value (maybe we could also rely on the delta here) *)
   Yjs.Array.iter ~f arr;
@@ -74,17 +132,19 @@ let lwd_of_yjs_array arr =
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
     let delta = (Yjs.Event.changes e).delta in
     Console.log [ ("Delta:", delta) ];
-    apply_delta arr delta
+    Indexed_table.apply_delta lwd_table delta
   in
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
-let _ = lwd_of_yjs_array Data_table.content
+let yjs_table = lwd_of_yjs_array Data_table.content
 
 let () =
   let row1 = Yjs.Map.make () in
-  Yjs.Map.set row1 "0" (`Jv (Jv.of_string "toto1"));
-  Yjs.Array.insert Data_table.content 1 [| `Map row1 |]
+  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
+  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
+  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
+  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |]
 
 let data =
   {
@@ -107,11 +167,35 @@ let app =
   in
   let table = { table; row_height = Em 5. } in
   let table = Virtual.make ~ui_table:table data in
+  let yjs_table =
+    Lwd_table.(
+      map_reduce
+        (fun _row _v ->
+          let txt =
+            match _v with
+            | `Jv jv ->
+                Console.log [ "Value: jv"; jv ];
+                Jv.to_string jv
+            | `Map jv ->
+                Console.log [ "Value: map"; jv ];
+                "map"
+            | `Array jv ->
+                Console.log [ "Value: array"; jv ];
+                "array"
+          in
+          Lwd_seq.element @@ Elwd.div [ `P (El.txt' txt) ])
+        Lwd_seq.monoid yjs_table.table)
+  in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
       `P (El.div [ El.txt' "options" ]);
-      `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
+      (* `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
+       *)
+      `R
+        (Elwd.div
+           ~at:Attrs.O.(v (`P (C "table")))
+           [ `S (Lwd_seq.lift yjs_table) ]);
     ]
 
 let _ =

@@ -28,4 +28,5 @@
   ;jsonxt
   ppx_yojson_conv
   uuidm
-  base64))
+  base64
+  hector))
