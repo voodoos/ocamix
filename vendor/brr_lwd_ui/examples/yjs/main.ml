@@ -46,6 +46,15 @@ module Indexed_table = struct
     let row = Lwd_table.append ?set t.table in
     V.add_last t.index row
 
+  (** [blit_append v i n v'] copies data from the vector segment determined by
+      vector [v], index [i], and length [n] at the end of the vector [v']. [v]
+      must not be empty.   *)
+  let blit_append v i n v' =
+    let v'_size = V.length v' in
+    let filler = V.get v 0 in
+    V.append_array v' (Array.init n (fun _ -> filler));
+    V.blit v i v' v'_size n
+
   let apply_delta (t : Yjs.Array.value t) delta =
     let cursor = ref 0 in
     let old_index = t.index in
@@ -53,8 +62,7 @@ module Indexed_table = struct
     let apply_one = function
       | Yjs.Array.Retain i ->
           Console.debug [ "[apply delta] Retain"; i ];
-          let kept = V.sub old_index !cursor i in
-          V.append new_index kept;
+          blit_append old_index !cursor i new_index;
           cursor := !cursor + i
       | Yjs.Array.Delete i ->
           Console.debug [ "[apply delta] Delete"; i ];
@@ -105,8 +113,7 @@ module Indexed_table = struct
             V.append_array new_index rows)
     in
     Array.iter apply_one delta;
-    (* Todo, we could rezise and blit *)
-    V.append new_index (V.sub old_index !cursor (V.length old_index - !cursor));
+    blit_append old_index !cursor (V.length old_index - !cursor) new_index;
     t.index <- new_index;
     Console.debug
       [
