@@ -96,14 +96,24 @@ and Map : sig
     external of_jv : Jv.t -> t = "%identity"
 
     type action = Add | Update | Delete
-    type change = { action : action; old_value : value option }
+
+    type change = {
+      action : action;
+      new_value : value option;
+      old_value : value option;
+    }
 
     val keys_changes : t -> change StringMap.t
   end
 
-  val get : t -> key:string -> value
+  val get : t -> key:string -> value option
   val set : t -> key:string -> value -> unit
+  val delete : t -> string -> unit
   val entries : t -> Jv.It.t
+
+  val fold_entries :
+    t -> f:(string -> value -> 'acc -> 'acc) -> init:'acc -> 'acc
+
   val observe : t -> (Event.t -> unit) -> observer
 end = struct
   type t = Jv.t
@@ -118,13 +128,27 @@ end = struct
     else if Jv.instanceof jv ~cons:map_class then `Map (Map.of_jv jv)
     else `Jv jv
 
+  let make () = Jv.new' map_class [||]
+
+  let get (t : t) ~key =
+    Jv.call t "get" [| Jv.of_string key |] |> Jv.to_option value_of_jv
+
   module Event = struct
     type t = Jv.t
+
+    let map_of_jv = of_jv
 
     external of_jv : Jv.t -> t = "%identity"
 
     type action = Add | Update | Delete
-    type change = { action : action; old_value : value option }
+
+    type change = {
+      action : action;
+      new_value : value option;
+      old_value : value option;
+    }
+
+    let target t = Jv.get t "target" |> map_of_jv
 
     let change_of_jv obj =
       let action =
@@ -137,18 +161,17 @@ end = struct
         let jv = Jv.get obj "oldValue" in
         if Jv.is_none jv then None else Some (value_of_jv jv)
       in
-      { action; old_value }
+      { action; new_value = None; old_value }
 
     let keys_changes t =
       let key_map = Jv.get (Jv.get t "changes") "keys" in
-      let entries = Jv.call key_map "entries" in
+      let entries = Jv.call key_map "entries" [||] in
       Jv.It.fold_bindings ~key:Jv.to_string ~value:change_of_jv
-        (fun k v acc -> StringMap.add k v acc)
-        key_map StringMap.empty
+        (fun k v acc ->
+          let new_value = get (target t) ~key:k in
+          StringMap.add k { v with new_value } acc)
+        entries StringMap.empty
   end
-
-  let make () = Jv.new' map_class [||]
-  let get (t : t) ~key = Jv.call t "get" [| Jv.of_string key |] |> value_of_jv
 
   let set (t : t) ~key value =
     let value =
@@ -156,7 +179,13 @@ end = struct
     in
     ignore (Jv.call t "set" [| Jv.of_string key; value |])
 
+  let delete (t : t) key = ignore @@ Jv.call t "delete" [| Jv.of_string key |]
   let entries t = Jv.call t "entries" [||] |> Jv.It.iterator
+
+  let fold_entries t ~f ~init =
+    Jv.It.fold_bindings ~key:Jv.to_string ~value:value_of_jv
+      (fun k v acc -> f k v acc)
+      (entries t) init
 
   let observe t f : observer =
     let t = to_jv t in

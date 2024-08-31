@@ -32,7 +32,12 @@ and Map : sig
     external of_jv : Jv.t -> t = "%identity"
 
     type action = Add | Update | Delete
-    type change = { action : action; old_value : value option }
+
+    type change = {
+      action : action;
+      new_value : value option;
+      old_value : value option;
+    }
 
     val keys_changes : t -> change StringMap.t
   end
@@ -40,9 +45,14 @@ and Map : sig
   external to_jv : t -> Jv.t = "%identity"
   external of_jv : Jv.t -> t = "%identity"
   val make : unit -> t
-  val get : t -> key:string -> value
+  val get : t -> key:string -> value option
   val set : t -> key:string -> value -> unit
+  val delete : t -> string -> unit
   val entries : t -> Jv.It.t
+
+  val fold_entries :
+    t -> f:(string -> value -> 'acc -> 'acc) -> init:'acc -> 'acc
+
   val observe : t -> (Event.t -> unit) -> observer
 end
 
