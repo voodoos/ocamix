@@ -45,14 +45,16 @@ module Lwd_map = struct
     let map = Hashtbl.create size in
     { table; map }
 
-  let set t k v =
-    match Hashtbl.find_opt t.map k with
-    | Some row -> Lwd_table.set row v
+  let set t key value =
+    match Hashtbl.find_opt t.map key with
+    | Some row -> Lwd_table.set row { key; value }
     | None ->
-        let row = Lwd_table.append ~set:v t.table in
-        Hashtbl.replace t.map k row
+        let row = Lwd_table.append ~set:{ key; value } t.table in
+        Hashtbl.replace t.map key row
 
-  let get t k = Option.bind (Hashtbl.find_opt t.map k) Lwd_table.get
+  let get t k =
+    Option.bind (Hashtbl.find_opt t.map k) Lwd_table.get
+    |> Option.map (fun b -> b.value)
 
   let delete t k =
     match Hashtbl.find_opt t.map k with
@@ -154,14 +156,51 @@ module Indexed_table = struct
       ]
 end
 
-let lwd_of_yjs_array arr =
+let rec lwd_of_yjs_map map =
+  let open Yjs in
+  let lwd_map = Lwd_map.make () in
+  ignore
+    (Map.fold_entries map ~f:(fun k v () -> Lwd_map.set lwd_map k v) ~init:());
+
+  (* Observe changes *)
+  let on_event (e : Map.Event.t) =
+    let changes = Map.Event.keys_changes e in
+    StringMap.iter
+      (fun key -> function
+        | { Map.Event.action = Add | Update; new_value; old_value } ->
+            Console.debug
+              [
+                "Key:";
+                key;
+                "Action: add/update";
+                "New value";
+                new_value;
+                "Old value:";
+                old_value;
+              ]
+            (* Lwd_map.set lwd_map key *)
+        | { Map.Event.action = Delete; old_value } ->
+            Console.debug
+              [ "Key:"; key; "Action: delete"; "Old value:"; old_value ])
+      changes
+  in
+  ignore @@ Map.observe map on_event;
+  lwd_map
+
+and lwd_of_yjs_array arr =
   let lwd_table = Indexed_table.make () in
   let f ~index value _array =
-    let () =
+    let value =
       match value with
-      | `Jv jv -> Console.log [ "Value: jv"; jv; "index:"; index ]
-      | `Map jv -> Console.log [ "Value: map"; jv; "index:"; index ]
-      | `Array jv -> Console.log [ "Value: array"; jv; "index:"; index ]
+      | `Jv jv ->
+          Console.debug [ "Value: jv"; jv; "index:"; index ];
+          `Jv jv
+      | `Map map ->
+          Console.debug [ "Value: map"; map; "index:"; index ];
+          `Map (lwd_of_yjs_map map)
+      | `Array jv ->
+          Console.debug [ "Value: array"; jv; "index:"; index ];
+          `Array jv
     in
     Indexed_table.append ~set:value lwd_table |> ignore
   in
@@ -170,20 +209,24 @@ let lwd_of_yjs_array arr =
   (* Observe changes *)
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
     let delta = (Yjs.Event.changes e).delta in
-    Console.log [ ("Delta:", delta) ];
-    Indexed_table.apply_delta lwd_table delta
+    Console.debug [ ("Delta:", delta) ]
+    (* Indexed_table.apply_delta lwd_table delta *)
   in
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
 let yjs_table = lwd_of_yjs_array Data_table.content
 
-let () =
-  let row1 = Yjs.Map.make () in
-  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
-  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
-  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
-  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |]
+(* let () =
+   let row1 = Yjs.Map.make () in
+   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
+   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
+   Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
+   Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |] *)
+
+let _ = lwd_of_yjs_map Data_table.v
+let _ = Yjs.Map.set Data_table.v ~key:"TOTORO" (`Jv (Jv.of_string "TAA"))
+let _ = Yjs.Map.set Data_table.v ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
 
 let data =
   {
