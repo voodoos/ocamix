@@ -42,6 +42,9 @@ module Indexed_table = struct
     let index = Dynarray.create () in
     { size = Lwd.var 0; table; index }
 
+  let first t =
+    try Some (Dynarray.get t.index 0) with Invalid_argument _ -> None
+
   let append ?set t =
     let row = Lwd_table.append ?set t.table in
     let size = Lwd.peek t.size in
@@ -49,9 +52,10 @@ module Indexed_table = struct
     Lwd.set t.size (size + 1)
 end
 
-let replay_arr arr delta =
-  let apply_one = function Yjs.Array.Retain i -> () in
-  Array.iter delta
+let apply_delta arr delta =
+  let cursor = ref 0 in
+  let apply_one = function Yjs.Array.Retain i -> cursor := !cursor + i in
+  Array.iter apply_one delta
 
 let lwd_of_yjs_array arr =
   let lwd_table = Indexed_table.make () in
@@ -70,8 +74,7 @@ let lwd_of_yjs_array arr =
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
     let delta = (Yjs.Event.changes e).delta in
     Console.log [ ("Delta:", delta) ];
-
-    ()
+    apply_delta arr delta
   in
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
