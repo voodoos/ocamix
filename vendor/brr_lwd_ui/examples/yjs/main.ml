@@ -89,7 +89,8 @@ module Indexed_table = struct
     V.append_array v' (Array.init n (fun _ -> filler));
     V.blit v i v' v'_size n
 
-  let apply_delta (t : Yjs.Array.value t) delta =
+  let apply_delta (type value) (t : value t) ~(map : Yjs.Array.value -> value)
+      delta =
     let cursor = ref 0 in
     let old_index = t.index in
     let new_index = V.create () in
@@ -120,13 +121,16 @@ module Indexed_table = struct
                 (* Case 1: the table is empty *)
                 Console.debug [ "Insert in empty table" ];
                 Array.iter
-                  (fun set -> append ~set { t with index = new_index })
+                  (fun value ->
+                    let set = map value in
+                    append ~set { t with index = new_index })
                   a
             | Some first_row ->
                 (* Case 2 *)
                 let rows =
                   Array.map
-                    (fun set ->
+                    (fun value ->
+                      let set = map value in
                       Console.debug [ "Insert before first element"; set ];
                       Lwd_table.before first_row ~set)
                     a
@@ -138,7 +142,8 @@ module Indexed_table = struct
             let last = ref (V.get_last new_index) in
             let rows =
               Array.map
-                (fun set ->
+                (fun value ->
+                  let set = map value in
                   let row = Lwd_table.after !last ~set in
                   last := row;
                   row)
@@ -209,20 +214,25 @@ and lwd_of_yjs_array arr =
   (* Observe changes *)
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
     let delta = (Yjs.Event.changes e).delta in
-    Console.debug [ ("Delta:", delta) ]
-    (* Indexed_table.apply_delta lwd_table delta *)
+    Console.debug [ ("Delta:", delta) ];
+    Indexed_table.apply_delta ~map:lwd_of_yjs_value lwd_table delta
   in
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
+and lwd_of_yjs_value = function
+  | `Map map -> `Map (lwd_of_yjs_map map)
+  | `Jv jv -> `Jv jv
+  | `Array jv -> `Array jv
+
 let yjs_table = lwd_of_yjs_array Data_table.content
 
-(* let () =
-   let row1 = Yjs.Map.make () in
-   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
-   Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
-   Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
-   Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |] *)
+let () =
+  let row1 = Yjs.Map.make () in
+  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
+  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
+  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
+  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |]
 
 let _ = lwd_of_yjs_map Data_table.v
 let _ = Yjs.Map.set Data_table.v ~key:"TOTORO" (`Jv (Jv.of_string "TAA"))
