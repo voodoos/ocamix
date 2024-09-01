@@ -238,7 +238,7 @@ let () =
 let row = Yjs.Map.make ()
 let _ = Yjs.Array.insert Data_table.content 2 [| `Map row |]
 let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
-let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA3"))
+let _ = Yjs.Map.set row ~key:"TOTORO2" (`Jv (Jv.of_string "TAA3"))
 
 let reduce_row map =
   Lwd_table.map_reduce
@@ -257,24 +257,6 @@ let reduce_row map =
       in
       Lwd_seq.element elt)
     Lwd_seq.monoid map
-(*
-    let reduce_table tbl =
-      Lwd_table.map_reduce
-        (fun _row v ->
-          let elt =
-            match v with
-            | `Jv jv ->
-                Console.log [ "Value: jv"; jv ];
-                Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
-            | `Map map ->
-                Console.log [ "Value: map"; map ];
-                Elwd.div [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
-            | `Array jv ->
-                Console.log [ "Value: array"; jv ];
-                Elwd.div [ `P (El.txt' "array") ]
-          in
-          Lwd_seq.element elt)
-        Lwd_seq.monoid tbl *)
 
 let data_source =
   Virtual_bis.
@@ -282,17 +264,18 @@ let data_source =
       total_items = Lwd.pure 0;
       source_rows = yjs_table.table;
       render =
-        Lwd.pure (fun _ data ->
-            match data with
-            | `Jv jv ->
-                Console.log [ "Value: jv"; jv ];
-                [ `P (El.txt' (Jv.to_string jv)) ]
-            | `Map map ->
-                Console.log [ "Value: map"; map ];
-                [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
-            | `Array jv ->
-                Console.log [ "Value: array"; jv ];
-                [ `P (El.txt' "array") ]);
+        (fun _ data ->
+          match data with
+          | `Jv jv ->
+              Console.log [ "Value: jv"; jv ];
+              Lwd.pure
+                (Lwd_seq.element (Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]))
+          | `Map map ->
+              Console.log [ "Value: map"; map ];
+              reduce_row map.Lwd_map.table
+          | `Array jv ->
+              Console.log [ "Value: array"; jv ];
+              Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
     }
 
 let app =
