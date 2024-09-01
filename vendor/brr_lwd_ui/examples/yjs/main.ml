@@ -5,6 +5,10 @@ open Brr_lwd_ui.Table
 
 let yjs_doc = Yjs.Doc.make ()
 
+let _ =
+  Yjs.Webrtc_provider.make ~room_name:"testroom5267563"
+    ~signaling:[ "ws://localhost:4444" ] yjs_doc
+
 (* A data table is stored using multiple YJS shared types:
     - A Map storing general metadata
     - A Map storing column information columns uid -> name, type, etc
@@ -13,18 +17,18 @@ module Data_table = struct
   open Yjs
 
   let v = Doc.get_map yjs_doc "data_table"
-  let columns = Map.make ()
-  let content = Array.make ()
+  (* let columns = Map.make () *)
 
-  let () =
-    Map.set columns ~key:"0"
-      (`Jv
-        (Jv.obj
-           [|
-             ("name", Jv.of_string "Column 1"); ("type", Jv.of_string "string");
-           |]));
-    Map.set v ~key:"columns" (`Map columns);
-    Map.set v ~key:"content" (`Array content)
+  let init_content () =
+    let content = Array.make () in
+    Map.set v ~key:"content" (`Array content);
+    content
+
+  let content =
+    match Map.get v ~key:"content" with
+    | Some (`Array v) -> v
+    | Some _ -> assert false
+    | None -> init_content ()
 end
 
 module Lwd_map = struct
@@ -273,10 +277,10 @@ let add_row i id v =
   Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
   Yjs.Array.insert Data_table.content i [| `Map row |]
 
-let () =
-  for i = 0 to 50 do
-    add_row i (string_of_int i) (Printf.sprintf "Ligne %i" i)
-  done
+(* let () =
+   for i = 0 to 50 do
+     add_row i (string_of_int i) (Printf.sprintf "Ligne %i" i)
+   done *)
 
 module Connect_form = struct
   open Brr_lwd_ui.Forms.Form
