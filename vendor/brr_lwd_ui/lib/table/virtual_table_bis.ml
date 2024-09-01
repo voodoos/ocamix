@@ -46,7 +46,7 @@ let lwd_table_concat t1 t2 =
 let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ?(scroll_target : int Lwd.t option)
-    ({ total_items; source_rows; render } : (data, _) data_source) =
+    ({ total_items = _; source_rows; render } : (data, _) data_source) =
   ignore placeholder;
 
   let module State = struct
@@ -60,7 +60,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
 
     (* The height of the window is a reactive value that might change during
        execution when the browser is resized or other layout changes are made. *)
-    let window_height : int option Lwd.var = Lwd.var None
+    let _window_height : int option Lwd.var = Lwd.var None
   end in
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
@@ -90,7 +90,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   (* The cache is some sort of LRU to keep live the content of recently seen
      rows *)
   let cache_ref = ref (new_cache ()) in
-  let add ~fetch ?(max_items = 200) indexes =
+  let _add ~fetch ?(max_items = 200) indexes =
+    ignore max_items;
     let cache = !cache_ref in
     let load indexes =
       (let open Fut.Result_syntax in
@@ -117,7 +118,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     match Array.of_list to_load with [||] -> () | to_load -> load to_load
   in
   let table_height = Lwd.var None in
-  let compute_visible_rows ~last_scroll_y =
+  let _compute_visible_rows ~last_scroll_y =
     let height elt =
       let jv = El.to_jv elt in
       Jv.get jv "offsetHeight" |> Jv.to_float
@@ -201,7 +202,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
   in
-  let render { content; source_row; render } =
+  let render { content; source_row = _; render } =
     let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
     let style = `P (At.style (Jstr.v height)) in
     match content with
@@ -256,7 +257,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
         let entry = List.hd entries in
-        let div = Resize_observer.Entry.target entry in
+        let _div = Resize_observer.Entry.target entry in
         let rect = Resize_observer.Entry.content_rect entry in
         let height = Dom_rect_read_only.height rect in
         match Lwd.peek table_height with
@@ -274,7 +275,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let scroll_handler =
       Lwd.map populate_on_scroll ~f:(fun update ->
           Elwd.handler Ev.scroll (fun _ev ->
-              let open Fut.Syntax in
+              let open! Fut.Syntax in
               ignore
               @@
               let scroll_handler =
@@ -296,7 +297,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
                 in
                 fun div -> reset_ticker div
               in
-              let div = Utils.Forward_ref.get_exn State.wrapper_div in
+              let _div = Utils.Forward_ref.get_exn State.wrapper_div in
               scroll_handler ()))
     in
     let ev = [ `R scroll_handler ] in

@@ -3,7 +3,7 @@ open Brr
 open Brr_lwd
 
 type target = Pos of int | El of Elwd.t
-type t = { elt : Elwd.t Lwd.t; scroll_position : target option Lwd.var }
+type _t = { elt : Elwd.t Lwd.t; scroll_position : target option Lwd.var }
 
 (* TODO: make a proper binding *)
 let js_scroll elt target =
