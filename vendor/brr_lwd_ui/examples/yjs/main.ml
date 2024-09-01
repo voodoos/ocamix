@@ -286,6 +286,25 @@ let reduce_table tbl =
       Lwd_seq.element elt)
     Lwd_seq.monoid tbl
 
+let data_source =
+  Virtual_bis.
+    {
+      total_items = Lwd.pure 0;
+      source_rows = yjs_table.table;
+      render =
+        Lwd.pure (fun _ data ->
+            match data with
+            | `Jv jv ->
+                Console.log [ "Value: jv"; jv ];
+                [ `P (El.txt' (Jv.to_string jv)) ]
+            | `Map map ->
+                Console.log [ "Value: map"; map ];
+                [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
+            | `Array jv ->
+                Console.log [ "Value: array"; jv ];
+                [ `P (El.txt' "array") ]);
+    }
+
 let app =
   let table =
     {
@@ -297,18 +316,18 @@ let app =
     }
   in
   let table = { table; row_height = Em 5. } in
-  let table = Virtual.make ~ui_table:table data in
+  Jv.set (Window.to_jv G.window) "yjstbl" (Jv.repr Data_table.content);
+  let table = Virtual_bis.make ~ui_table:table data_source in
   let yjs_table = reduce_table yjs_table.table in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
       `P (El.div [ El.txt' "options" ]);
-      (* `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
-       *)
-      `R
-        (Elwd.div
-           ~at:Attrs.O.(v (`P (C "table")))
-           [ `S (Lwd_seq.lift yjs_table) ]);
+      `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
+      (* `R
+         (Elwd.div
+            ~at:Attrs.O.(v (`P (C "table")))
+            [ `S (Lwd_seq.lift yjs_table) ]); *)
     ]
 
 let _ =
