@@ -17,14 +17,14 @@ module Data_table = struct
   let content = Array.make ()
 
   let () =
-    Map.set columns "0"
+    Map.set columns ~key:"0"
       (`Jv
         (Jv.obj
            [|
              ("name", Jv.of_string "Column 1"); ("type", Jv.of_string "string");
            |]));
-    Map.set v "columns" (`Map columns);
-    Map.set v "content" (`Array content)
+    Map.set v ~key:"columns" (`Map columns);
+    Map.set v ~key:"content" (`Array content)
 end
 
 module Lwd_map = struct
@@ -34,8 +34,6 @@ module Lwd_map = struct
     table : 'a binding Lwd_table.t;
     map : (string, 'a binding Lwd_table.row) Hashtbl.t;
   }
-
-  let lwd_table t = t.table
 
   let make ?(size = 64) () =
     let table = Lwd_table.make () in
@@ -49,11 +47,11 @@ module Lwd_map = struct
         let row = Lwd_table.append ~set:{ key; value } t.table in
         Hashtbl.replace t.map key row
 
-  let get t k =
+  let _get t k =
     Option.bind (Hashtbl.find_opt t.map k) Lwd_table.get
     |> Option.map (fun b -> b.value)
 
-  let delete t k =
+  let _delete t k =
     match Hashtbl.find_opt t.map k with
     | None -> ()
     | Some row ->
@@ -104,7 +102,7 @@ module Indexed_table = struct
             (* We remove the [i] next rows *)
             match Lwd_table.next last with
             | None -> assert false
-            | Some row -> Lwd_table.remove last
+            | Some _row -> Lwd_table.remove last
           done;
           cursor := !cursor + i
       | Insert a ->
@@ -187,9 +185,10 @@ let rec lwd_of_yjs_map map =
                 old_value;
               ];
             Lwd_map.set lwd_map key new_value
-        | { Map.Event.action = Delete; old_value } ->
+        | { Map.Event.action = Delete; old_value; _ } ->
             Console.debug
-              [ "Key:"; key; "Action: delete"; "Old value:"; old_value ])
+              [ "Key:"; key; "Action: delete"; "Old value:"; old_value ]
+        | _ -> assert false)
       changes
   in
   ignore @@ Map.observe map on_event;
@@ -241,15 +240,6 @@ let _ = Yjs.Array.insert Data_table.content 2 [| `Map row |]
 let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
 let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA3"))
 
-let data =
-  {
-    Virtual.total_items = Lwd.pure 93_3;
-    fetch = Lwd.pure (fun i -> Fut.ok (Array.map (fun i -> Some (i - 1)) i));
-    render =
-      Lwd.pure (fun i data ->
-          [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]);
-  }
-
 let reduce_row map =
   Lwd_table.map_reduce
     (fun _row v ->
@@ -267,24 +257,24 @@ let reduce_row map =
       in
       Lwd_seq.element elt)
     Lwd_seq.monoid map
-
-let reduce_table tbl =
-  Lwd_table.map_reduce
-    (fun _row v ->
-      let elt =
-        match v with
-        | `Jv jv ->
-            Console.log [ "Value: jv"; jv ];
-            Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
-        | `Map map ->
-            Console.log [ "Value: map"; map ];
-            Elwd.div [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
-        | `Array jv ->
-            Console.log [ "Value: array"; jv ];
-            Elwd.div [ `P (El.txt' "array") ]
-      in
-      Lwd_seq.element elt)
-    Lwd_seq.monoid tbl
+(*
+    let reduce_table tbl =
+      Lwd_table.map_reduce
+        (fun _row v ->
+          let elt =
+            match v with
+            | `Jv jv ->
+                Console.log [ "Value: jv"; jv ];
+                Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
+            | `Map map ->
+                Console.log [ "Value: map"; map ];
+                Elwd.div [ `S (Lwd_seq.lift @@ reduce_row map.Lwd_map.table) ]
+            | `Array jv ->
+                Console.log [ "Value: array"; jv ];
+                Elwd.div [ `P (El.txt' "array") ]
+          in
+          Lwd_seq.element elt)
+        Lwd_seq.monoid tbl *)
 
 let data_source =
   Virtual_bis.
@@ -318,16 +308,11 @@ let app =
   let table = { table; row_height = Em 5. } in
   Jv.set (Window.to_jv G.window) "yjstbl" (Jv.repr Data_table.content);
   let table = Virtual_bis.make ~ui_table:table data_source in
-  let yjs_table = reduce_table yjs_table.table in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
       `P (El.div [ El.txt' "options" ]);
       `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
-      (* `R
-         (Elwd.div
-            ~at:Attrs.O.(v (`P (C "table")))
-            [ `S (Lwd_seq.lift yjs_table) ]); *)
     ]
 
 let _ =

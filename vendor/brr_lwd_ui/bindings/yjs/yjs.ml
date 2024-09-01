@@ -1,4 +1,3 @@
-open Brr
 module StringMap = Map.Make (String)
 
 let yjs = Jv.get Jv.global "yjs"
@@ -10,8 +9,6 @@ type observer = Jv.t
 module Event = struct
   type 'change t = (Jv.t -> 'change) * Jv.t
   type 'change changes = { delta : 'change array }
-
-  external of_jv : Jv.t -> 'a t = "%identity"
 
   let of_jv ~change_of_jv jv = (change_of_jv, jv)
 
@@ -156,6 +153,9 @@ end = struct
         | "add" -> Add
         | "update" -> Update
         | "delete" -> Delete
+        | s ->
+            raise
+            @@ Invalid_argument (Printf.sprintf "%S is not a valid action" s)
       in
       let old_value =
         let jv = Jv.get obj "oldValue" in
