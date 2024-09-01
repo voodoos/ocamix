@@ -14,8 +14,8 @@ module rec Array : sig
   type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
   type change = Retain of int | Insert of value array | Delete of int
 
-  external to_jv : t -> Jv.t = "%identity"
-  external of_jv : Jv.t -> t = "%identity"
+  val of_jv : Jv.t -> t
+  val to_jv : t -> Jv.t
   val make : unit -> t
   val insert : t -> int -> value array -> unit
   val iter : t -> f:(index:int -> value -> t -> unit) -> unit
@@ -29,7 +29,7 @@ and Map : sig
   module Event : sig
     type t
 
-    external of_jv : Jv.t -> t = "%identity"
+    val of_jv : Jv.t -> t
 
     type action = Add | Update | Delete
 
@@ -42,8 +42,8 @@ and Map : sig
     val keys_changes : t -> change StringMap.t
   end
 
-  external to_jv : t -> Jv.t = "%identity"
-  external of_jv : Jv.t -> t = "%identity"
+  val of_jv : Jv.t -> t
+  val to_jv : t -> Jv.t
   val make : unit -> t
   val get : t -> key:string -> value option
   val set : t -> key:string -> value -> unit
@@ -59,7 +59,8 @@ end
 module Doc : sig
   type t
 
-  external of_jv : Jv.t -> 'a = "%identity"
+  val of_jv : Jv.t -> t
+  val to_jv : t -> Jv.t
   val make : unit -> t
   val get_array : t -> string -> Array.t
   val get_map : t -> string -> Map.t

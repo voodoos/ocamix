@@ -12,6 +12,7 @@
     "esbuild": "^0.19.5"
   },
   "dependencies": {
+    "y-webrtc": "^10.3.0",
     "yjs": "^13.6.18"
   }
 }
