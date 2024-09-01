@@ -7,6 +7,8 @@
    (:standard --no-inline)))
  (libraries js_of_ocaml lwd brr-lwd brr-lwd-ui))
 
-(alias
- (name examples)
- (deps main.bc.js))
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (alias examples)
+ (files ../../css/brr_lwd_ui.css))

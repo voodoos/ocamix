@@ -16,3 +16,9 @@
 (alias
  (name examples)
  (deps main.bc.js))
+
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (alias examples)
+ (files ../../css/brr_lwd_ui.css))
