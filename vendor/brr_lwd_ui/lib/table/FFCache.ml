@@ -17,7 +17,7 @@ module RA_queue (Key : Map.OrderedType) = struct
 
   let size t = Queue.size t.queue
   let create () = { queue = Queue.empty; elts = Map.empty }
-  let empty = { queue = Queue.empty; elts = Map.empty }
+  let _empty = { queue = Queue.empty; elts = Map.empty }
   let add t k x = { queue = Queue.cons k t.queue; elts = Map.add k x t.elts }
 
   let take_opt t =
@@ -97,14 +97,14 @@ module Make (Key : Map.OrderedType) : S with type key = Key.t = struct
 
   let insert t ?(on_insert = ignore) ?(on_evict = ignore) k x =
     match RA_queue.find t.q1 k with
-    | Some { elt; visited } ->
+    | Some { elt = _; visited } ->
         (* If the elt is already in q1 we mark it as visited *)
         visited := true;
         (t, false)
     | None -> (
         match RA_queue.find t.q2 k with
         (* If the elt is already in q2 we mark it as visited *)
-        | Some { elt; visited } ->
+        | Some { elt = _; visited } ->
             visited := true;
             (t, false)
         | None ->

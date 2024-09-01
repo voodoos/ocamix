@@ -18,7 +18,6 @@ let make ?(at = []) ?(ev = []) (desc : string Field.desc) options =
   let var = Persistent.var ~key:id desc.default in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
   let field =
-    let open Lwd_infix in
     let at =
       let open Attrs in
       add At.Name.id (`P id) at

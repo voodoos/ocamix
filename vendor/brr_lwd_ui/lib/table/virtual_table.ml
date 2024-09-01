@@ -49,7 +49,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
 
     (* The height of the window is a reactive value that might change during
        execution when the browser is resized or other layout changes are made. *)
-    let window_height : int option Lwd.var = Lwd.var None
+    let _window_height : int option Lwd.var = Lwd.var None
   end in
   let row_size = ui_table.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
@@ -91,6 +91,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     in
     let cache, to_load =
       List.fold_left ~init:(cache, []) indexes ~f:(fun (cache, acc) i ->
+          ignore max_items (* cache is not configurable right now *);
           let cache, inserted = Cache.insert ~on_evict:unload cache i i in
           if inserted then (cache, i :: acc) else (cache, acc))
     in
@@ -236,7 +237,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
         let entry = List.hd entries in
-        let div = Resize_observer.Entry.target entry in
         let rect = Resize_observer.Entry.content_rect entry in
         let height = Dom_rect_read_only.height rect in
         match Lwd.peek table_height with
@@ -254,7 +254,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let scroll_handler =
       Lwd.map populate_on_scroll ~f:(fun update ->
           Elwd.handler Ev.scroll (fun _ev ->
-              let open Fut.Syntax in
               ignore
               @@
               let scroll_handler =
@@ -276,7 +275,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
                 in
                 fun div -> reset_ticker div
               in
-              let div = Utils.Forward_ref.get_exn State.wrapper_div in
               scroll_handler ()))
     in
     let ev = [ `R scroll_handler ] in
