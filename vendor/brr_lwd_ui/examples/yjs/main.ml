@@ -278,6 +278,53 @@ let () =
     add_row i (string_of_int i) (Printf.sprintf "Ligne %i" i)
   done
 
+module Connect_form = struct
+  open Brr_lwd_ui.Forms.Form
+
+  type t = {
+    index : int Field.validation;
+    id : string Field.validation;
+    value : string Field.validation;
+  }
+
+  let default = { index = Empty; id = Empty; value = Empty }
+
+  let fields =
+    Lwd.return
+      (Lwd_seq.of_list
+         [
+           field
+             (Lwd.pure @@ Field.text_input ~required:true (Some "0"))
+             (fun t v ->
+               let index =
+                 Field.map_validation
+                   ~f:(fun v -> int_of_string_opt v |> Option.value ~default:0)
+                   v
+               in
+               { t with index });
+           field
+             (Lwd.pure @@ Field.text_input ~required:true (Some "demo"))
+             (fun t v -> { t with id = v });
+           field
+             (Lwd.pure @@ Field.text_input ~required:false None)
+             (fun t v -> { t with value = v });
+           field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t);
+         ])
+end
+
+let ui_form () =
+  let open Brr_lwd_ui.Forms.Form in
+  create
+    (module Connect_form)
+    (fun t ->
+      Console.log [ "Form submitted:"; t ];
+      match t with
+      (* FIXME: validation already happened, it's redundant to have to match *)
+      | { index = Ok index; id = Ok id; value = Ok value } ->
+          Console.log [ "Form submitted:"; index; id; value ];
+          add_row index id value
+      | _ -> ())
+
 let app =
   let table =
     {
@@ -294,7 +341,7 @@ let app =
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
-      `P (El.div [ El.txt' "options" ]);
+      `R (ui_form ());
       `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
     ]
 
