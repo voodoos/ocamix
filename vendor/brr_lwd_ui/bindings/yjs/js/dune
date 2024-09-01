@@ -6,4 +6,6 @@
   (source_tree node_modules))
  (targets bundle.js)
  (action
-  (run yarn build)))
+  (progn
+   (run yarn)
+   (run yarn build))))
