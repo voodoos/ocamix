@@ -229,17 +229,6 @@ and lwd_of_yjs_value = function
 
 let yjs_table = lwd_of_yjs_array Data_table.content
 
-let () =
-  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "00") |];
-  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "11") |];
-  Yjs.Array.insert Data_table.content 1 [| `Jv (Jv.of_string "12") |];
-  Yjs.Array.insert Data_table.content 0 [| `Jv (Jv.of_string "01") |]
-
-let row = Yjs.Map.make ()
-let _ = Yjs.Array.insert Data_table.content 2 [| `Map row |]
-let _ = Yjs.Map.set row ~key:"TOTORO" (`Jv (Jv.of_string "TAA2"))
-let _ = Yjs.Map.set row ~key:"TOTORO2" (`Jv (Jv.of_string "TAA3"))
-
 let reduce_row map =
   Lwd_table.map_reduce
     (fun _row v ->
@@ -278,11 +267,16 @@ let data_source =
               Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
     }
 
-let _add_row i id v =
+let add_row i id v =
   let row = Yjs.Map.make () in
   Yjs.Map.set row ~key:"0" (`Jv (Jv.of_string id));
   Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
   Yjs.Array.insert Data_table.content i [| `Map row |]
+
+let () =
+  for i = 0 to 50 do
+    add_row i (string_of_int i) (Printf.sprintf "Ligne %i" i)
+  done
 
 let app =
   let table =
