@@ -278,13 +278,19 @@ let data_source =
               Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
     }
 
+let _add_row i id v =
+  let row = Yjs.Map.make () in
+  Yjs.Map.set row ~key:"0" (`Jv (Jv.of_string id));
+  Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
+  Yjs.Array.insert Data_table.content i [| `Map row |]
+
 let app =
   let table =
     {
       columns =
         [|
           Columns.v "a" "5em" [ `P (El.txt' "id") ];
-          Columns.v "a" "1fr" [ `P (El.txt' "minus1") ];
+          Columns.v "a" "1fr" [ `P (El.txt' "some well-though-of column name") ];
         |];
     }
   in
