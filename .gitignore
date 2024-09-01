@@ -4,3 +4,4 @@ node_modules
 .vscode
 *.bc.js
 web/brr_lwd_ui.css
+**/examples/**/brr_lwd_ui.css
