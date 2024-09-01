@@ -17,6 +17,11 @@ type 'a t = {
   validate : 'a -> 'a validation;
 }
 
+let map_validation ~(f : 'a -> 'b) = function
+  | Ok a -> Ok (f a)
+  | Error s -> Error s
+  | Empty -> Empty
+
 let get_value t =
   let jv = El.to_jv t in
   Jv.get jv "value"
