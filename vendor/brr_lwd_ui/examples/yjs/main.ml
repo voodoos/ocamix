@@ -5,9 +5,33 @@ open Brr_lwd_ui.Table
 
 let yjs_doc = Yjs.Doc.make ()
 
-let _ =
-  Yjs.Webrtc_provider.make ~room_name:"testroom5267563"
+let provider =
+  Yjs.Webrtc_provider.make ~room_name:"testroom5267564"
     ~signaling:[ "ws://localhost:4444" ] yjs_doc
+
+let () = Jv.set (Window.to_jv G.window) "yjsdoc" (Jv.repr yjs_doc)
+let () = Jv.set (Window.to_jv G.window) "yjsprovider" (Jv.repr provider)
+
+let _ =
+  Jv.call (Jv.repr provider) "on"
+    [|
+      Jv.of_string "synced";
+      Jv.callback ~arity:1 (fun _ -> Console.log [ "SYNCED!" ]);
+    |]
+
+let _ =
+  Jv.call (Jv.repr provider) "on"
+    [|
+      Jv.of_string "status";
+      Jv.callback ~arity:1 (fun e -> Console.log [ "STATUS"; e ]);
+    |]
+
+let _ =
+  Jv.call (Jv.repr provider) "on"
+    [|
+      Jv.of_string "peers";
+      Jv.callback ~arity:1 (fun e -> Console.log [ "PEERS"; e ]);
+    |]
 
 (* A data table is stored using multiple YJS shared types:
     - A Map storing general metadata
@@ -20,19 +44,22 @@ module Data_table = struct
   (* let columns = Map.make () *)
 
   let init_content () =
+    Console.log [ "NEW ARRAY" ];
     let content = Array.make () in
     Map.set v ~key:"content" (`Array content);
     content
 
-  let content =
+  let _content =
     match Map.get v ~key:"content" with
-    | Some (`Array v) -> v
+    | Some (`Array v) ->
+        Console.log [ "REUSE ARRAY" ];
+        v
     | Some _ -> assert false
     | None -> init_content ()
 end
 
 module Lwd_map = struct
-  type 'a binding = { key : string; value : 'a }
+  type 'a binding = { key : string; value : 'a option Lwd.var }
 
   type 'a t = {
     table : 'a binding Lwd_table.t;
@@ -45,22 +72,41 @@ module Lwd_map = struct
     { table; map }
 
   let set t key value =
-    match Hashtbl.find_opt t.map key with
-    | Some row -> Lwd_table.set row { key; value }
-    | None ->
-        let row = Lwd_table.append ~set:{ key; value } t.table in
-        Hashtbl.replace t.map key row
+    let row =
+      match Hashtbl.find_opt t.map key with
+      | Some row_var -> row_var
+      | None ->
+          let row = Lwd_table.append t.table in
+          Hashtbl.replace t.map key row;
+          row
+    in
+    match Lwd_table.get row with
+    | Some { key = _; value = var } -> Lwd.set var (Some value)
+    | None -> Lwd_table.set row { key; value = Lwd.var (Some value) }
 
-  let _get t k =
-    Option.bind (Hashtbl.find_opt t.map k) Lwd_table.get
-    |> Option.map (fun b -> b.value)
+  let get t key =
+    let row =
+      match Hashtbl.find_opt t.map key with
+      | Some row -> row
+      | None ->
+          (* If there is no such binding we get ready to react to its creation *)
+          let row =
+            Lwd_table.append ~set:{ key; value = Lwd.var None } t.table
+          in
+          Hashtbl.replace t.map key row;
+          row
+    in
+    (* Rwos should always be set. An unbound row contains the value None *)
+    let { key = _; value } = Lwd_table.get row |> Option.get in
+    Lwd.get value
 
   let _delete t k =
     match Hashtbl.find_opt t.map k with
     | None -> ()
     | Some row ->
-        Lwd_table.remove row;
-        Hashtbl.remove t.map k
+        (* Rows should always be set. An unbound row contains the value None *)
+        let { key = _; value } = Lwd_table.get row |> Option.get in
+        Lwd.set value None
 end
 
 module Indexed_table = struct
@@ -96,11 +142,9 @@ module Indexed_table = struct
     let new_index = V.create () in
     let apply_one = function
       | Yjs.Array.Retain i ->
-          Console.debug [ "[apply delta] Retain"; i ];
           blit_append old_index !cursor i new_index;
           cursor := !cursor + i
       | Yjs.Array.Delete i ->
-          Console.debug [ "[apply delta] Delete"; i ];
           let last = V.get_last new_index in
           for _i = 1 to i do
             (* We remove the [i] next rows *)
@@ -110,7 +154,6 @@ module Indexed_table = struct
           done;
           cursor := !cursor + i
       | Insert a ->
-          Console.debug [ "[apply delta] Insert"; a ];
           (* Three cases:
               1. Insertion at the beginning of an empty table
               2. Insertion at the beginning, before the first row
@@ -119,7 +162,6 @@ module Indexed_table = struct
             match first t with
             | None ->
                 (* Case 1: the table is empty *)
-                Console.debug [ "Insert in empty table" ];
                 Array.iter
                   (fun value ->
                     let set = map value in
@@ -131,14 +173,12 @@ module Indexed_table = struct
                   Array.map
                     (fun value ->
                       let set = map value in
-                      Console.debug [ "Insert before first element"; set ];
                       Lwd_table.before first_row ~set)
                     a
                 in
                 V.append_array new_index rows
-          else (
+          else
             (* Case 3 *)
-            Console.debug [ "Insert after some element" ];
             let last = ref (V.get_last new_index) in
             let rows =
               Array.map
@@ -149,7 +189,7 @@ module Indexed_table = struct
                   row)
                 a
             in
-            V.append_array new_index rows)
+            V.append_array new_index rows
     in
     Array.iter apply_one delta;
     let remaining = V.length old_index - !cursor in
@@ -170,6 +210,7 @@ let rec lwd_of_yjs_map map =
 
   (* Observe changes *)
   let on_event (e : Map.Event.t) =
+    Console.debug [ "On_change"; e ];
     let changes = Map.Event.keys_changes e in
     StringMap.iter
       (fun key -> function
@@ -219,6 +260,7 @@ and lwd_of_yjs_array arr =
   Yjs.Array.iter ~f arr;
   (* Observe changes *)
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
+    Console.debug [ "On_change"; e ];
     let delta = (Yjs.Event.changes e).delta in
     Console.debug [ ("Delta:", delta) ];
     Indexed_table.apply_delta ~map:lwd_of_yjs_value lwd_table delta
@@ -231,31 +273,46 @@ and lwd_of_yjs_value = function
   | `Jv jv -> `Jv jv
   | `Array jv -> `Array jv
 
-let yjs_table = lwd_of_yjs_array Data_table.content
+let yjs_v = lwd_of_yjs_map Data_table.v
+
+let content =
+  let open Lwd_infix in
+  let$ content = Lwd_map.get yjs_v "content" in
+  match content with
+  | Some (`Array v) -> (Some v, lwd_of_yjs_array v)
+  | _ -> (None, Indexed_table.make ())
 
 let reduce_row map =
   Lwd_table.map_reduce
-    (fun _row v ->
+    (fun _row { Lwd_map.key; value } ->
       let elt =
-        match v with
-        | { Lwd_map.key; value = `Jv jv } ->
-            Console.log [ key; ": jv"; jv ];
-            Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]
-        | { key; value = `Map map } ->
-            Console.log [ key; ": map"; map ];
-            Elwd.div [ `P (El.txt' "array") ]
-        | { key; value = `Array jv } ->
-            Console.log [ key; ": array"; jv ];
-            Elwd.div [ `P (El.txt' "array") ]
+        let value =
+          let open Lwd_infix in
+          let$ value = Lwd.get value in
+          Option.map
+            (function
+              | `Jv jv ->
+                  Console.log [ key; ": jv"; jv ];
+                  Lwd_seq.element @@ El.txt' (Jv.to_string jv)
+              | `Map map ->
+                  Console.log [ key; ": map"; map ];
+                  Lwd_seq.element @@ El.txt' "array"
+              | `Array jv ->
+                  Console.log [ key; ": array"; jv ];
+                  Lwd_seq.element @@ El.txt' "array")
+            value
+          |> Option.value ~default:Lwd_seq.empty
+        in
+        Elwd.div [ `S value ]
       in
       Lwd_seq.element elt)
     Lwd_seq.monoid map
 
-let data_source =
+let data_source (content : _ Indexed_table.t) =
   Virtual_bis.
     {
       total_items = Lwd.pure 0;
-      source_rows = yjs_table.table;
+      source_rows = content.table;
       render =
         (fun _ data ->
           match data with
@@ -270,17 +327,6 @@ let data_source =
               Console.log [ "Value: array"; jv ];
               Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
     }
-
-let add_row i id v =
-  let row = Yjs.Map.make () in
-  Yjs.Map.set row ~key:"0" (`Jv (Jv.of_string id));
-  Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
-  Yjs.Array.insert Data_table.content i [| `Map row |]
-
-(* let () =
-   for i = 0 to 50 do
-     add_row i (string_of_int i) (Printf.sprintf "Ligne %i" i)
-   done *)
 
 module Connect_form = struct
   open Brr_lwd_ui.Forms.Form
@@ -316,18 +362,28 @@ module Connect_form = struct
          ])
 end
 
+let add_row content i id v =
+  let row = Yjs.Map.make () in
+  Yjs.Map.set row ~key:"0" (`Jv (Jv.of_string id));
+  Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
+  Console.debug [ "Inserting row"; v ];
+  Yjs.Array.insert content i [| `Map row |]
+
 let ui_form () =
   let open Brr_lwd_ui.Forms.Form in
-  create
-    (module Connect_form)
-    (fun t ->
-      Console.log [ "Form submitted:"; t ];
-      match t with
-      (* FIXME: validation already happened, it's redundant to have to match *)
-      | { index = Ok index; id = Ok id; value = Ok value } ->
-          Console.log [ "Form submitted:"; index; id; value ];
-          add_row index id value
-      | _ -> ())
+  Lwd.bind content ~f:(fun (yjs_array, _content) ->
+      create
+        (module Connect_form)
+        (fun t ->
+          Console.log [ "Form submitted:"; t ];
+          match t with
+          (* FIXME: validation already happened, it's redundant to have to match *)
+          | { index = Ok index; id = Ok id; value = Ok value } ->
+              Console.log [ "Form submitted:"; index; id; value ];
+              Option.iter
+                (fun content -> add_row content index id value)
+                yjs_array
+          | _ -> ()))
 
 let app =
   let table =
@@ -340,8 +396,11 @@ let app =
     }
   in
   let table = { table; row_height = Em 5. } in
-  Jv.set (Window.to_jv G.window) "yjstbl" (Jv.repr Data_table.content);
-  let table = Virtual_bis.make ~ui_table:table data_source in
+  let table =
+    (* Todo: Is this bind necessary ?*)
+    Lwd.bind content ~f:(fun (_, content) ->
+        Virtual_bis.make ~ui_table:table (data_source content))
+  in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [
