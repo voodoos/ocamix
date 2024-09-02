@@ -1,8 +1,7 @@
 module StringMap = Map.Make (String)
 
-let yjs = Jv.get Jv.global "yjs"
-let array_class = Jv.get yjs "Array"
-let map_class = Jv.get yjs "Map"
+let array_class = Jv.get Global.yjs "Array"
+let map_class = Jv.get Global.yjs "Map"
 
 type observer = Jv.t
 
@@ -196,7 +195,7 @@ end = struct
 end
 
 module Doc = struct
-  let global = Jv.get yjs "Doc"
+  let global = Jv.get Global.yjs "Doc"
 
   type t = Jv.t
 
