@@ -9,6 +9,7 @@ let provider =
   Yjs.Webrtc_provider.make ~room_name:"testroom5267564"
     ~signaling:[ "ws://localhost:4444" ] yjs_doc
 
+let _provider = Yjs.Indexeddb_persistence.make ~doc_name:"zedoc" yjs_doc
 let () = Jv.set (Window.to_jv G.window) "yjsdoc" (Jv.repr yjs_doc)
 let () = Jv.set (Window.to_jv G.window) "yjsprovider" (Jv.repr provider)
 
@@ -40,22 +41,16 @@ let _ =
 module Data_table = struct
   open Yjs
 
-  let v = Doc.get_map yjs_doc "data_table"
-  (* let columns = Map.make () *)
-
-  let init_content () =
+  let init_content v =
     Console.log [ "NEW ARRAY" ];
     let content = Array.make () in
     Map.set v ~key:"content" (`Array content);
     content
 
-  let _content =
-    match Map.get v ~key:"content" with
-    | Some (`Array v) ->
-        Console.log [ "REUSE ARRAY" ];
-        v
-    | Some _ -> assert false
-    | None -> init_content ()
+  let make () =
+    let v = Map.make () in
+    let content = init_content v in
+    (v, content)
 end
 
 module Lwd_map = struct
@@ -216,7 +211,8 @@ let rec lwd_of_yjs_map map =
       (fun key -> function
         | {
             Map.Event.action = Add | Update;
-            new_value = Some new_value;
+            new_value =
+              Some new_value (* TODO: might be a nested array or map *);
             old_value;
           } ->
             Console.debug
@@ -252,7 +248,7 @@ and lwd_of_yjs_array arr =
           `Map (lwd_of_yjs_map map)
       | `Array jv ->
           Console.debug [ "Value: array"; jv; "index:"; index ];
-          `Array jv
+          `Array (lwd_of_yjs_array jv)
     in
     Indexed_table.append ~set:value lwd_table |> ignore
   in
@@ -271,44 +267,46 @@ and lwd_of_yjs_array arr =
 and lwd_of_yjs_value = function
   | `Map map -> `Map (lwd_of_yjs_map map)
   | `Jv jv -> `Jv jv
-  | `Array jv -> `Array jv
+  | `Array jv -> `Array (lwd_of_yjs_array jv)
 
-let yjs_v = lwd_of_yjs_map Data_table.v
+let lwd_of_yjs_page =
+  let items = Yjs.Doc.get_array yjs_doc "" in
+  lwd_of_yjs_array items
 
-let content =
+let content yjs_data_table =
   let open Lwd_infix in
-  let$ content = Lwd_map.get yjs_v "content" in
+  let$ content = Lwd_map.get yjs_data_table "content" in
   match content with
   | Some (`Array v) -> (Some v, lwd_of_yjs_array v)
   | _ -> (None, Indexed_table.make ())
 
-let reduce_row map =
-  Lwd_table.map_reduce
-    (fun _row { Lwd_map.key; value } ->
-      let elt =
-        let value =
-          let open Lwd_infix in
-          let$ value = Lwd.get value in
-          Option.map
-            (function
-              | `Jv jv ->
-                  Console.log [ key; ": jv"; jv ];
-                  Lwd_seq.element @@ El.txt' (Jv.to_string jv)
-              | `Map map ->
-                  Console.log [ key; ": map"; map ];
-                  Lwd_seq.element @@ El.txt' "array"
-              | `Array jv ->
-                  Console.log [ key; ": array"; jv ];
-                  Lwd_seq.element @@ El.txt' "array")
-            value
-          |> Option.value ~default:Lwd_seq.empty
-        in
-        Elwd.div [ `S value ]
-      in
-      Lwd_seq.element elt)
-    Lwd_seq.monoid map
-
 let data_source (content : _ Indexed_table.t) =
+  let reduce_row map =
+    Lwd_table.map_reduce
+      (fun _row { Lwd_map.key; value } ->
+        let elt =
+          let value =
+            let open Lwd_infix in
+            let$ value = Lwd.get value in
+            Option.map
+              (function
+                | `Jv jv ->
+                    Console.log [ key; ": jv"; jv ];
+                    Lwd_seq.element @@ El.txt' (Jv.to_string jv)
+                | `Map map ->
+                    Console.log [ key; ": map"; map ];
+                    Lwd_seq.element @@ El.txt' "array"
+                | `Array jv ->
+                    Console.log [ key; ": array"; jv ];
+                    Lwd_seq.element @@ El.txt' "array")
+              value
+            |> Option.value ~default:Lwd_seq.empty
+          in
+          Elwd.div [ `S value ]
+        in
+        Lwd_seq.element elt)
+      Lwd_seq.monoid map
+  in
   Virtual_bis.
     {
       total_items = Lwd.pure 0;
@@ -328,39 +326,19 @@ let data_source (content : _ Indexed_table.t) =
               Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
     }
 
-module Connect_form = struct
-  open Brr_lwd_ui.Forms.Form
-
-  type t = {
-    index : int Field.validation;
-    id : string Field.validation;
-    value : string Field.validation;
+let table () =
+  {
+    table =
+      {
+        columns =
+          [|
+            Columns.v "a" "5em" [ `P (El.txt' "id") ];
+            Columns.v "a" "1fr"
+              [ `P (El.txt' "some well-though-of column name") ];
+          |];
+      };
+    row_height = Em 5.;
   }
-
-  let default = { index = Empty; id = Empty; value = Empty }
-
-  let fields =
-    Lwd.return
-      (Lwd_seq.of_list
-         [
-           field
-             (Lwd.pure @@ Field.text_input ~required:true (Some "0"))
-             (fun t v ->
-               let index =
-                 Field.map_validation
-                   ~f:(fun v -> int_of_string_opt v |> Option.value ~default:0)
-                   v
-               in
-               { t with index });
-           field
-             (Lwd.pure @@ Field.text_input ~required:true (Some "demo"))
-             (fun t v -> { t with id = v });
-           field
-             (Lwd.pure @@ Field.text_input ~required:false None)
-             (fun t v -> { t with value = v });
-           field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t);
-         ])
-end
 
 let add_row content i id v =
   let row = Yjs.Map.make () in
@@ -369,44 +347,103 @@ let add_row content i id v =
   Console.debug [ "Inserting row"; v ];
   Yjs.Array.insert content i [| `Map row |]
 
-let ui_form () =
+let new_table_row_form yjs_array =
   let open Brr_lwd_ui.Forms.Form in
-  Lwd.bind content ~f:(fun (yjs_array, _content) ->
-      create
-        (module Connect_form)
-        (fun t ->
-          Console.log [ "Form submitted:"; t ];
-          match t with
-          (* FIXME: validation already happened, it's redundant to have to match *)
-          | { index = Ok index; id = Ok id; value = Ok value } ->
-              Console.log [ "Form submitted:"; index; id; value ];
-              Option.iter
-                (fun content -> add_row content index id value)
-                yjs_array
-          | _ -> ()))
+  let module Connect_form = struct
+    open Brr_lwd_ui.Forms.Form
+
+    type t = {
+      index : int Field.validation;
+      id : string Field.validation;
+      value : string Field.validation;
+    }
+
+    let default = { index = Empty; id = Empty; value = Empty }
+
+    let fields =
+      Lwd.return
+        (Lwd_seq.of_list
+           [
+             field
+               (Lwd.pure @@ Field.text_input ~required:true (Some "0"))
+               (fun t v ->
+                 let index =
+                   Field.map_validation
+                     ~f:(fun v ->
+                       int_of_string_opt v |> Option.value ~default:0)
+                     v
+                 in
+                 { t with index });
+             field
+               (Lwd.pure @@ Field.text_input ~required:true (Some "demo"))
+               (fun t v -> { t with id = v });
+             field
+               (Lwd.pure @@ Field.text_input ~required:false None)
+               (fun t v -> { t with value = v });
+             field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t);
+           ])
+  end in
+  create
+    (module Connect_form)
+    (fun t ->
+      Console.log [ "Form submitted:"; t ];
+      match t with
+      (* FIXME: validation already happened, it's redundant to have to match *)
+      | { index = Ok index; id = Ok id; value = Ok value } ->
+          Console.log [ "Form submitted:"; index; id; value ];
+          Option.iter (fun content -> add_row content index id value) yjs_array
+      | _ -> ())
+
+let render_page =
+  Lwd_table.map_reduce
+    (fun _row -> function
+      | `Map data_table ->
+          let open Lwd_infix in
+          let div =
+            let$* v, content = content data_table in
+            let data_source = data_source content in
+            let form = new_table_row_form v in
+            let table = Virtual_bis.make ~ui_table:(table ()) data_source in
+            Elwd.div
+              ~at:Attrs.O.(v (`P (C "flex")))
+              [
+                `R form;
+                `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
+              ]
+          in
+          Lwd_seq.element div
+      | _ -> assert false)
+    Lwd_seq.monoid lwd_of_yjs_page.table
+
+let new_table_form =
+  let open Brr_lwd_ui.Forms.Form in
+  create
+    (module struct
+      open Brr_lwd_ui.Forms.Form
+
+      type t = unit
+
+      let default = ()
+
+      let fields =
+        Lwd.return
+          (Lwd_seq.of_list
+             [
+               field
+                 (Lwd.pure @@ Field.submit (`P "Add table"))
+                 (fun () _v -> ());
+             ])
+    end)
+    (fun () ->
+      let v, _content = Data_table.make () in
+      let page_array = Yjs.Doc.get_array yjs_doc "" in
+      Yjs.Array.push page_array [| `Map v |];
+      Console.log [ "Create new table:" ])
 
 let app =
-  let table =
-    {
-      columns =
-        [|
-          Columns.v "a" "5em" [ `P (El.txt' "id") ];
-          Columns.v "a" "1fr" [ `P (El.txt' "some well-though-of column name") ];
-        |];
-    }
-  in
-  let table = { table; row_height = Em 5. } in
-  let table =
-    (* Todo: Is this bind necessary ?*)
-    Lwd.bind content ~f:(fun (_, content) ->
-        Virtual_bis.make ~ui_table:table (data_source content))
-  in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
-    [
-      `R (ui_form ());
-      `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
-    ]
+    [ `R new_table_form; `S (Lwd_seq.lift render_page) ]
 
 let _ =
   let on_load _ =
