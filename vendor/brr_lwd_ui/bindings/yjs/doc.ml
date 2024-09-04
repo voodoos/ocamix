@@ -25,6 +25,7 @@ module rec Array : sig
   external of_jv : Jv.t -> t = "%identity"
   val make : unit -> t
   val insert : t -> int -> value array -> unit
+  val push : t -> value array -> unit
   val iter : t -> f:(index:int -> value -> t -> unit) -> unit
   val observe : t -> (change Event.t -> unit) -> observer
 end = struct
@@ -60,6 +61,14 @@ end = struct
         v
     in
     ignore (Jv.call t "insert" [| Jv.of_int i; content |])
+
+  let push t v =
+    let content =
+      Jv.of_array
+        (function `Jv jv -> jv | `Map m -> Map.to_jv m | `Array a -> a)
+        v
+    in
+    ignore (Jv.call t "push" [| content |])
 
   let iter t ~f =
     let f =

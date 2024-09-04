@@ -18,6 +18,7 @@ module rec Array : sig
   val to_jv : t -> Jv.t
   val make : unit -> t
   val insert : t -> int -> value array -> unit
+  val push : t -> value array -> unit
   val iter : t -> f:(index:int -> value -> t -> unit) -> unit
   val observe : t -> (change Event.t -> unit) -> observer
 end
