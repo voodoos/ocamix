@@ -37,7 +37,8 @@ let _ =
 (* A data table is stored using multiple YJS shared types:
     - A Map storing general metadata
     - A Map storing column information columns uid -> name, type, etc
-    - An Array storing entries in the table. Each element of the array is a Map from column uid to value. *)
+    - An Array storing entries in the table. Each element of the array is a Map from column uid to value. (todo: the implementation does not respect that schema)
+*)
 module Data_table = struct
   open Yjs
 
@@ -192,7 +193,7 @@ module Indexed_table = struct
     t.index <- new_index
 end
 
-let rec lwd_of_yjs_map map =
+let lwd_of_yjs_map map =
   let open Yjs in
   let lwd_map = Lwd_map.make () in
   ignore
@@ -230,49 +231,37 @@ let rec lwd_of_yjs_map map =
   ignore @@ Map.observe map on_event;
   lwd_map
 
-and lwd_of_yjs_array arr =
+let lwd_of_yjs_array ~f arr =
   let lwd_table = Indexed_table.make () in
-  let f ~index value _array =
-    let value =
-      match value with
-      | `Jv jv ->
-          Console.debug [ "Value: jv"; jv; "index:"; index ];
-          `Jv jv
-      | `Map map ->
-          Console.debug [ "Value: map"; map; "index:"; index ];
-          `Map (lwd_of_yjs_map map)
-      | `Array jv ->
-          Console.debug [ "Value: array"; jv; "index:"; index ];
-          `Array (lwd_of_yjs_array jv)
-    in
-    Indexed_table.append ~set:value lwd_table |> ignore
-  in
   (* Load initial value (maybe we could also rely on the delta here) *)
-  Yjs.Array.iter ~f arr;
+  Yjs.Array.iter
+    ~f:(fun ~index:_ value _array ->
+      let set = f value in
+      Indexed_table.append ~set lwd_table |> ignore)
+    arr;
   (* Observe changes *)
   let on_event (e : Yjs.Array.change Yjs.Event.t) =
-    Console.debug [ "On_change"; e ];
     let delta = (Yjs.Event.changes e).delta in
-    Console.debug [ ("Delta:", delta) ];
-    Indexed_table.apply_delta ~map:lwd_of_yjs_value lwd_table delta
+    Indexed_table.apply_delta ~map:f lwd_table delta
   in
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
-and lwd_of_yjs_value = function
-  | `Map map -> `Map (lwd_of_yjs_map map)
-  | `Jv jv -> `Jv jv
-  | `Array jv -> `Array (lwd_of_yjs_array jv)
-
 let lwd_of_yjs_page =
   let items = Yjs.Doc.get_array yjs_doc "" in
-  lwd_of_yjs_array items
+  let f value =
+    match value with `Map map -> `Map (lwd_of_yjs_map map) | _ -> assert false
+  in
+  lwd_of_yjs_array ~f items
 
 let content yjs_data_table =
   let open Lwd_infix in
   let$ content = Lwd_map.get yjs_data_table "content" in
+  let f value =
+    match value with `Map map -> `Map (lwd_of_yjs_map map) | _ -> assert false
+  in
   match content with
-  | Some (`Array v) -> (Some v, lwd_of_yjs_array v)
+  | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
   | _ -> (None, Indexed_table.make ())
 
 let data_source (content : _ Indexed_table.t) =
@@ -309,16 +298,10 @@ let data_source (content : _ Indexed_table.t) =
       render =
         (fun _ data ->
           match data with
-          | `Jv jv ->
-              Console.log [ "Value: jv"; jv ];
-              Lwd.pure
-                (Lwd_seq.element (Elwd.div [ `P (El.txt' (Jv.to_string jv)) ]))
           | `Map map ->
               Console.log [ "Value: map"; map ];
               reduce_row map.Lwd_map.table
-          | `Array jv ->
-              Console.log [ "Value: array"; jv ];
-              Lwd.pure (Lwd_seq.element (Elwd.div [ `P (El.txt' "array") ])));
+          | `Array _ | `Jv _ -> assert false);
     }
 
 let table () =
