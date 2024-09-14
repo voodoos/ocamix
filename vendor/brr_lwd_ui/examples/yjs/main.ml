@@ -189,12 +189,7 @@ module Indexed_table = struct
     Array.iter apply_one delta;
     let remaining = V.length old_index - !cursor in
     if remaining > 0 then blit_append old_index !cursor remaining new_index;
-    t.index <- new_index;
-    Console.debug
-      [
-        "[apply delta] New index:";
-        Jv.of_array Jv.repr @@ Array.map Lwd_table.get @@ V.to_array t.index;
-      ]
+    t.index <- new_index
 end
 
 let rec lwd_of_yjs_map map =
