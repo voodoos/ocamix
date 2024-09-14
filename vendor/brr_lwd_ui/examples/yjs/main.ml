@@ -7,7 +7,7 @@ let yjs_doc = Yjs.Doc.make ()
 
 let provider =
   Yjs.Webrtc_provider.make ~room_name:"testroom5267564"
-    ~signaling:[ "ws://localhost:4444" ] yjs_doc
+    ~signaling:[ "wss://p2p.u31.fr" ] yjs_doc
 
 let _provider = Yjs.Indexeddb_persistence.make ~doc_name:"zedoc" yjs_doc
 let () = Jv.set (Window.to_jv G.window) "yjsdoc" (Jv.repr yjs_doc)
