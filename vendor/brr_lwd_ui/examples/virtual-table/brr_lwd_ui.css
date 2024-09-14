@@ -4,7 +4,9 @@ html {
     box-sizing: border-box;
 }
 
-*, *:before, *:after {
+*,
+*:before,
+*:after {
     box-sizing: inherit;
 }
 
@@ -77,7 +79,8 @@ html {
     border-bottom: 1px solid black;
 
     :has(> &) {
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: hidden;
     }
 
     & .lwdui-lazy-table-content,
@@ -88,9 +91,10 @@ html {
         grid-column: 1/-1;
     }
 
-    & .lwdui-lazy-table-content-wrapper{
+    & .lwdui-lazy-table-content-wrapper {
         height: 100%;
-        overflow: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
     }
 
     & .lwdui-virtual-table-row {
