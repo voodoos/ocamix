@@ -2,6 +2,7 @@ open Brr
 open Brr_lwd
 open Brr_lwd_ui
 open Brr_lwd_ui.Table
+open Lwd_infix
 
 let yjs_doc = Yjs.Doc.make ()
 
@@ -49,8 +50,10 @@ module Data_table = struct
     content
 
   let make () =
+    (* TODO: YJS USE TRANSACTIONS *)
     let v = Map.make () in
     let content = init_content v in
+    Map.set v ~key:"kind" (`Jv (Jv.of_string "table"));
     (v, content)
 end
 
@@ -95,6 +98,12 @@ module Lwd_map = struct
     (* Rwos should always be set. An unbound row contains the value None *)
     let { key = _; value } = Lwd_table.get row |> Option.get in
     Lwd.get value
+
+  let get_string t key =
+    Lwd.map (get t key) ~f:(function
+      | None -> None
+      | Some (`Jv jv) -> Some (Jv.to_string jv)
+      | Some _ -> assert false)
 
   let _delete t k =
     match Hashtbl.find_opt t.map k with
@@ -251,28 +260,38 @@ let lwd_of_yjs_array ~f arr =
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
+type page_item_data =
+  | Table of Yjs.Array.t option * Yjs.Map.value Lwd_map.t Indexed_table.t
+
+type page_item = { id : string; data : page_item_data } [@@warning "-69"]
+
 let lwd_of_yjs_page =
-  let items = Yjs.Doc.get_array yjs_doc "page_content" in
+  let page_content = Yjs.Doc.get_array yjs_doc "page_content" in
   let f value =
     match value with
-    | `Map map -> `Map (lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map)
+    | `Map map ->
+        let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
+        let id = "" in
+        let$ yjs, data =
+          Lwd.bind (Lwd_map.get_string item "kind") ~f:(function
+            | Some "table" -> (
+                let$ content = Lwd_map.get item "content" in
+                let f value =
+                  match value with
+                  | `Map map -> lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map
+                  | _ -> assert false
+                in
+                match content with
+                | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
+                | _ -> (None, Indexed_table.make ()))
+            | _ -> assert false)
+        in
+        { id; data = Table (yjs, data) }
     | _ -> assert false
   in
-  lwd_of_yjs_array ~f items
+  lwd_of_yjs_array ~f page_content
 
-let content yjs_data_table =
-  let open Lwd_infix in
-  let$ content = Lwd_map.get yjs_data_table "content" in
-  let f value =
-    match value with
-    | `Map map -> `Map (lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map)
-    | _ -> assert false
-  in
-  match content with
-  | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
-  | _ -> (None, Indexed_table.make ())
-
-let data_source (content : _ Indexed_table.t) =
+let data_source (content : Yjs.Map.value Lwd_map.t Indexed_table.t) =
   let reduce_row map =
     Lwd_table.map_reduce
       (fun _row { Lwd_map.key; value } ->
@@ -304,12 +323,9 @@ let data_source (content : _ Indexed_table.t) =
       total_items = Lwd.pure 0;
       source_rows = content.table;
       render =
-        (fun _ data ->
-          match data with
-          | `Map map ->
-              Console.log [ "Value: map"; map ];
-              reduce_row map.Lwd_map.table
-          | `Array _ | `Jv _ -> assert false);
+        (fun _ map ->
+          Console.log [ "Value: map"; map ];
+          reduce_row map.Lwd_map.table);
     }
 
 let table () =
@@ -382,11 +398,12 @@ let new_table_row_form yjs_array =
 
 let render_page =
   Lwd_table.map_reduce
-    (fun _row -> function
-      | `Map data_table ->
-          let open Lwd_infix in
-          let div =
-            let$* v, content = content data_table in
+    (fun _row data ->
+      let open Lwd_infix in
+      let div =
+        let$* content = data in
+        match content.data with
+        | Table (v, content) ->
             let data_source = data_source content in
             let form = new_table_row_form v in
             let table = Virtual_bis.make ~ui_table:(table ()) data_source in
@@ -396,9 +413,8 @@ let render_page =
                 `R form;
                 `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
               ]
-          in
-          Lwd_seq.element div
-      | _ -> assert false)
+      in
+      Lwd_seq.element div)
     Lwd_seq.monoid lwd_of_yjs_page.table
 
 let new_table_form =
