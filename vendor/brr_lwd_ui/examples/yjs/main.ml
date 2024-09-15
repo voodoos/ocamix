@@ -249,9 +249,10 @@ let lwd_of_yjs_array ~f arr =
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
+type cell = String of string
+
 type page_item_data =
-  | Table of
-      Yjs.Array.t option * Yjs.Array.value Indexed_table.t Indexed_table.t
+  | Table of Yjs.Array.t option * cell Indexed_table.t Indexed_table.t
 
 type page_item = { id : string; data : page_item_data } [@@warning "-69"]
 
@@ -271,7 +272,13 @@ let lwd_of_yjs_page =
                   match value with
                   | `Array columns ->
                       (* Each row is an array of columns *)
-                      lwd_of_yjs_array ~f:(fun v -> v) columns
+                      lwd_of_yjs_array
+                        ~f:(function
+                          | `Jv jv ->
+                              (* todo there are more to life than strings *)
+                              String (Jv.to_string jv)
+                          | _ -> assert false)
+                        columns
                   | _ -> assert false
                 in
                 match content with
@@ -284,23 +291,16 @@ let lwd_of_yjs_page =
   in
   lwd_of_yjs_array ~f page_content
 
-let table_data_source
-    (content : Yjs.Array.value Indexed_table.t Indexed_table.t) =
+let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
   let reduce_row tbl =
     Lwd_table.map_reduce
       (fun _row value ->
         let elt =
           let value =
             match value with
-            | `Jv jv ->
-                Console.log [ ": jv"; jv ];
-                Lwd_seq.element @@ El.txt' (Jv.to_string jv)
-            | `Map map ->
-                Console.log [ ": map"; map ];
-                Lwd_seq.element @@ El.txt' "array"
-            | `Array jv ->
-                Console.log [ ": array"; jv ];
-                Lwd_seq.element @@ El.txt' "array"
+            | String s ->
+                Console.log [ ": string"; s ];
+                Lwd_seq.element @@ El.txt' s
           in
           Elwd.div [ `S (Lwd.pure value) ]
         in
