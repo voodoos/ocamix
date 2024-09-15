@@ -193,11 +193,14 @@ module Indexed_table = struct
     t.index <- new_index
 end
 
-let lwd_of_yjs_map map =
+let lwd_of_yjs_map (type value) ~(f : key:string -> Yjs.Map.value -> value) map
+    =
   let open Yjs in
-  let lwd_map = Lwd_map.make () in
+  let lwd_map : value Lwd_map.t = Lwd_map.make () in
   ignore
-    (Map.fold_entries map ~f:(fun k v () -> Lwd_map.set lwd_map k v) ~init:());
+    (Map.fold_entries map
+       ~f:(fun key v () -> Lwd_map.set lwd_map key (f ~key v))
+       ~init:());
 
   (* Observe changes *)
   let on_event (e : Map.Event.t) =
@@ -221,6 +224,7 @@ let lwd_of_yjs_map map =
                 "Old value:";
                 old_value;
               ];
+            let new_value = f ~key new_value in
             Lwd_map.set lwd_map key new_value
         | { Map.Event.action = Delete; old_value; _ } ->
             Console.debug
@@ -248,9 +252,11 @@ let lwd_of_yjs_array ~f arr =
   lwd_table
 
 let lwd_of_yjs_page =
-  let items = Yjs.Doc.get_array yjs_doc "" in
+  let items = Yjs.Doc.get_array yjs_doc "page_content" in
   let f value =
-    match value with `Map map -> `Map (lwd_of_yjs_map map) | _ -> assert false
+    match value with
+    | `Map map -> `Map (lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map)
+    | _ -> assert false
   in
   lwd_of_yjs_array ~f items
 
@@ -258,7 +264,9 @@ let content yjs_data_table =
   let open Lwd_infix in
   let$ content = Lwd_map.get yjs_data_table "content" in
   let f value =
-    match value with `Map map -> `Map (lwd_of_yjs_map map) | _ -> assert false
+    match value with
+    | `Map map -> `Map (lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map)
+    | _ -> assert false
   in
   match content with
   | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
@@ -414,7 +422,7 @@ let new_table_form =
     end)
     (fun () ->
       let v, _content = Data_table.make () in
-      let page_array = Yjs.Doc.get_array yjs_doc "" in
+      let page_array = Yjs.Doc.get_array yjs_doc "page_content" in
       Yjs.Array.push page_array [| `Map v |];
       Console.log [ "Create new table:" ])
 
