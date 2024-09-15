@@ -219,20 +219,9 @@ let lwd_of_yjs_map (type value) ~(f : key:string -> Yjs.Map.value -> value) map
       (fun key -> function
         | {
             Map.Event.action = Add | Update;
-            new_value =
-              Some new_value (* TODO: might be a nested array or map *);
-            old_value;
+            new_value = Some new_value;
+            old_value = _;
           } ->
-            Console.debug
-              [
-                "Key:";
-                key;
-                "Action: add/update";
-                "New value";
-                new_value;
-                "Old value:";
-                old_value;
-              ];
             let new_value = f ~key new_value in
             Lwd_map.set lwd_map key new_value
         | { Map.Event.action = Delete; old_value; _ } ->
