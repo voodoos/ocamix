@@ -37,8 +37,8 @@ let _ =
 
 (* A data table is stored using multiple YJS shared types:
     - A Map storing general metadata
-    - A Map storing column information columns uid -> name, type, etc
-    - An Array storing entries in the table. Each element of the array is a Map from column uid to value. (todo: the implementation does not respect that schema)
+    - A Array storing column information: id, name, type, etc
+    - An Array storing entries in the table. Each element of the array is a Array  of columns. (todo: the implementation does not respect that schema)
 *)
 module Data_table = struct
   open Yjs
@@ -261,7 +261,8 @@ let lwd_of_yjs_array ~f arr =
   lwd_table
 
 type page_item_data =
-  | Table of Yjs.Array.t option * Yjs.Map.value Lwd_map.t Indexed_table.t
+  | Table of
+      Yjs.Array.t option * Yjs.Array.value Indexed_table.t Indexed_table.t
 
 type page_item = { id : string; data : page_item_data } [@@warning "-69"]
 
@@ -275,10 +276,13 @@ let lwd_of_yjs_page =
         let$ yjs, data =
           Lwd.bind (Lwd_map.get_string item "kind") ~f:(function
             | Some "table" -> (
+                (* let$ columns = Lwd_map.get item "columns" in *)
                 let$ content = Lwd_map.get item "content" in
                 let f value =
                   match value with
-                  | `Map map -> lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map
+                  | `Array columns ->
+                      (* Each row is an array of columns *)
+                      lwd_of_yjs_array ~f:(fun v -> v) columns
                   | _ -> assert false
                 in
                 match content with
@@ -291,32 +295,28 @@ let lwd_of_yjs_page =
   in
   lwd_of_yjs_array ~f page_content
 
-let data_source (content : Yjs.Map.value Lwd_map.t Indexed_table.t) =
-  let reduce_row map =
+let table_data_source
+    (content : Yjs.Array.value Indexed_table.t Indexed_table.t) =
+  let reduce_row tbl =
     Lwd_table.map_reduce
-      (fun _row { Lwd_map.key; value } ->
+      (fun _row value ->
         let elt =
           let value =
-            let open Lwd_infix in
-            let$ value = Lwd.get value in
-            Option.map
-              (function
-                | `Jv jv ->
-                    Console.log [ key; ": jv"; jv ];
-                    Lwd_seq.element @@ El.txt' (Jv.to_string jv)
-                | `Map map ->
-                    Console.log [ key; ": map"; map ];
-                    Lwd_seq.element @@ El.txt' "array"
-                | `Array jv ->
-                    Console.log [ key; ": array"; jv ];
-                    Lwd_seq.element @@ El.txt' "array")
-              value
-            |> Option.value ~default:Lwd_seq.empty
+            match value with
+            | `Jv jv ->
+                Console.log [ ": jv"; jv ];
+                Lwd_seq.element @@ El.txt' (Jv.to_string jv)
+            | `Map map ->
+                Console.log [ ": map"; map ];
+                Lwd_seq.element @@ El.txt' "array"
+            | `Array jv ->
+                Console.log [ ": array"; jv ];
+                Lwd_seq.element @@ El.txt' "array"
           in
-          Elwd.div [ `S value ]
+          Elwd.div [ `S (Lwd.pure value) ]
         in
         Lwd_seq.element elt)
-      Lwd_seq.monoid map
+      Lwd_seq.monoid tbl
   in
   Virtual_bis.
     {
@@ -325,7 +325,7 @@ let data_source (content : Yjs.Map.value Lwd_map.t Indexed_table.t) =
       render =
         (fun _ map ->
           Console.log [ "Value: map"; map ];
-          reduce_row map.Lwd_map.table);
+          reduce_row map.table);
     }
 
 let table () =
@@ -343,11 +343,12 @@ let table () =
   }
 
 let add_row content i id v =
-  let row = Yjs.Map.make () in
-  Yjs.Map.set row ~key:"0" (`Jv (Jv.of_string id));
-  Yjs.Map.set row ~key:"1" (`Jv (Jv.of_string v));
+  let open Yjs in
+  let row = Yjs.Array.make () in
+  Array.push row [| `Jv (Jv.of_string id) |];
+  Array.push row [| `Jv (Jv.of_string v) |];
   Console.debug [ "Inserting row"; v ];
-  Yjs.Array.insert content i [| `Map row |]
+  Yjs.Array.insert content i [| `Array row |]
 
 let new_table_row_form yjs_array =
   let open Brr_lwd_ui.Forms.Form in
@@ -404,7 +405,7 @@ let render_page =
         let$* content = data in
         match content.data with
         | Table (v, content) ->
-            let data_source = data_source content in
+            let data_source = table_data_source content in
             let form = new_table_row_form v in
             let table = Virtual_bis.make ~ui_table:(table ()) data_source in
             Elwd.div
