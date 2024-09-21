@@ -249,7 +249,8 @@ let lwd_of_yjs_array ~f arr =
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
-type cell = String of string
+type cell_data = String of string
+type cell = Yjs.Map.t * cell_data Lwd.t
 
 type page_item_data =
   | Table of Yjs.Array.t option * cell Indexed_table.t Indexed_table.t
@@ -274,9 +275,17 @@ let lwd_of_yjs_page =
                       (* Each row is an array of columns *)
                       lwd_of_yjs_array
                         ~f:(function
-                          | `Jv jv ->
-                              (* todo there are more to life than strings *)
-                              String (Jv.to_string jv)
+                          | `Map cell -> (
+                              (* Each cell is a map *)
+                              let cell_lwd =
+                                lwd_of_yjs_map ~f:(fun ~key:_ v -> v) cell
+                              in
+                              ( cell,
+                                let$ content = Lwd_map.get cell_lwd "content" in
+                                (* todo there are more to life than strings *)
+                                match content with
+                                | Some (`Jv s) -> String (Jv.to_string s)
+                                | _ -> String "" ))
                           | _ -> assert false)
                         columns
                   | _ -> assert false
@@ -294,15 +303,77 @@ let lwd_of_yjs_page =
 let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
   let reduce_row tbl =
     Lwd_table.map_reduce
-      (fun _row value ->
+      (fun _row (cell_map, value) ->
         let elt =
+          let current_value = Lwd.var "" in
+          let snapshot_value = Lwd.var "" in
           let value =
+            let$ value = value in
             match value with
             | String s ->
                 Console.log [ ": string"; s ];
-                Lwd_seq.element @@ El.txt' s
+                Lwd.set current_value s;
+                El.txt' s
           in
-          Elwd.div [ `S (Lwd.pure value) ]
+          let edit_active = Lwd.var false in
+          let edit_btn =
+            let at = Attrs.O.(v (`P (C "cell-edit-btn"))) in
+            let on_click =
+              Elwd.handler Ev.click (fun _ ->
+                  Lwd.set snapshot_value @@ Lwd.peek current_value;
+                  Lwd.set edit_active true)
+            in
+            let ev = [ `P on_click ] in
+            Elwd.div ~at ~ev [ `P (El.txt' "✏️") ]
+          in
+          let edit_overlay =
+            let visible =
+              Lwd.map (Lwd.get edit_active) ~f:(function
+                | true -> Attrs.O.A (At.class' (Jstr.v "visible"))
+                | false -> A At.void)
+            in
+            let make_inline_form initial_value =
+              let open Brr_lwd_ui.Forms.Form in
+              let module Inline_edit = struct
+                type t = { value : string Field.validation }
+
+                let default = { value = Empty }
+
+                let fields =
+                  Lwd.return
+                    (Lwd_seq.of_list
+                       [
+                         field
+                           (Lwd.map initial_value ~f:(fun initial_value ->
+                                Field.text_input ~required:false
+                                  (Some initial_value)))
+                           (fun _t v -> { value = v });
+                         field
+                           (Lwd.pure @@ Field.submit (`P "Update"))
+                           (fun t _v -> t);
+                       ])
+              end in
+              create
+                (module Inline_edit)
+                (fun t ->
+                  Console.log [ "Form submitted:"; t ];
+                  match t with
+                  (* FIXME: validation already happened, it's redundant to have to match *)
+                  | { value = Ok value } ->
+                      let current_value = Lwd.peek current_value in
+                      if current_value <> value then (
+                        Console.log [ current_value; " -> "; value ];
+                        Yjs.Map.set cell_map ~key:"content"
+                          (`Jv (Jv.of_string value)));
+                      Lwd.set edit_active false
+                  | _ -> ())
+            in
+            let form = make_inline_form (Lwd.get snapshot_value) in
+            let at = Attrs.O.(`R visible @:: v (`P (C "cell-edit-overlay"))) in
+            Elwd.div ~at [ `R form ]
+          in
+          let at = Attrs.O.(v (`P (C "cell"))) in
+          Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
         in
         Lwd_seq.element elt)
       Lwd_seq.monoid tbl
@@ -334,8 +405,12 @@ let table () =
 let add_row content i id v =
   let open Yjs in
   let row = Yjs.Array.make () in
-  Array.push row [| `Jv (Jv.of_string id) |];
-  Array.push row [| `Jv (Jv.of_string v) |];
+  let cell1 = Yjs.Map.make () in
+  Yjs.Map.set cell1 ~key:"content" (`Jv (Jv.of_string id));
+  let cell2 = Yjs.Map.make () in
+  Yjs.Map.set cell2 ~key:"content" (`Jv (Jv.of_string v));
+  Array.push row [| `Map cell1 |];
+  Array.push row [| `Map cell2 |];
   Console.debug [ "Inserting row"; v ];
   Yjs.Array.insert content i [| `Array row |]
 
