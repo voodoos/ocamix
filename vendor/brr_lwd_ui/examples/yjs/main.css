@@ -1,0 +1,43 @@
+
+.flex {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+.flex .table {
+    flex-grow: 1;
+}
+
+.flex .flex {
+    margin-top: 2rem;
+    max-height: 33vh;
+    flex-grow: 1;
+}
+
+/* ZE Table */
+
+.cell {
+    position: relative;
+}
+
+.cell-edit-btn {
+    position: absolute;
+    right: 0;
+}
+
+.cell-edit-overlay {
+    display: none;
+
+    &.visible {
+        display: block;
+    }
+
+    position: absolute;
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    height: 100%;
+
+    background-color: aquamarine;
+}
