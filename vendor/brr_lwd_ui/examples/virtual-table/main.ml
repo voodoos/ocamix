@@ -5,7 +5,7 @@ open Brr_lwd_ui.Table
 
 let data =
   {
-    Virtual.total_items = Lwd.pure 93_300;
+    Virtual.total_items = Lwd.pure 300;
     fetch =
       Lwd.pure (fun i ->
           (* Console.log [ "Loading"; Jv.of_array Jv.of_int i ]; *)
@@ -26,7 +26,10 @@ let app =
     }
   in
   let table = { table; row_height = Em 5. } in
-  let table = Virtual.make ~ui_table:table data in
+  let scroll_target = Lwd.var 0 in
+  let table =
+    Virtual.make ~ui_table:table ~scroll_target:(Lwd.get scroll_target) data
+  in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
     [

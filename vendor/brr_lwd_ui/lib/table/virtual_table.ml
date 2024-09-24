@@ -289,7 +289,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
               in
               Some (Controlled_scroll.Pos (i * row_height)))
         in
-        Controlled_scroll.make ~at ~ev ~on_create ~scroll_target rows
+        Controlled_scroll.make ~at ~ev ~scroll_target
+          (Elwd.div ~at ~ev ~on_create [ `R rows ])
     | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
     |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
   in
