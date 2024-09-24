@@ -32,8 +32,23 @@ module Orderred_items = struct
   end
 
   let name = "items_by_date_added"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+
+  let to_jv t =
+    let obj =
+      Jv.obj
+        [|
+          ("id", Jv.of_int t.id);
+          ("item", Jv.of_option ~none:(Jv.of_string "") Jv.of_string t.item);
+        |]
+    in
+    obj
+
+  let of_jv j =
+    {
+      id = Jv.get j "id" |> Jv.to_int;
+      item = Jv.get j "item" |> Jv.to_option Jv.to_string;
+    }
+
   let get_key t = t.id
 end
 
