@@ -83,7 +83,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
     { Table.table = { columns = columns () }; row_height = Em 4. }
   in
   let data_source =
-    let total_items = view.item_count in
+    let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
     let render = Lwd.pure (render ranged) in
     { Table.Virtual.total_items; fetch; render }
