@@ -1,3 +1,5 @@
+open Std
+module J = Json
 open Brr
 
 type method' = Get | Post
@@ -65,10 +67,10 @@ module Item = struct
 
   let image_blur_hash_of_yojson y =
     let assoc = Yojson.Safe.Util.to_assoc y in
-    List.map (fun (key, v) -> (key, Yojson.Safe.Util.to_string v)) assoc
+    List.map ~f:(fun (key, v) -> (key, Yojson.Safe.Util.to_string v)) assoc
 
   let yojson_of_image_blur_hash i : Yojson.Safe.t =
-    let assoc = List.map (fun (key, v) -> (key, `String v)) i in
+    let assoc = List.map ~f:(fun (key, v) -> (key, `String v)) i in
     `Assoc assoc
 
   type image_blur_hashes = {
@@ -205,7 +207,9 @@ module Item = struct
     image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
     type_ : type_str; [@key "Type"]
     collection_type : string option;
-        [@default None] [@yojson_drop_default ( = )] [@key "CollectionType"]
+        [@default None]
+        [@yojson_drop_default Equal.poly]
+        [@key "CollectionType"]
   }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 end
@@ -214,7 +218,8 @@ module Items = struct
   type path_params = unit
 
   type params = {
-    ids : string list; [@default []] [@yojson_drop_default ( = )] [@key "ids"]
+    ids : string list;
+        [@default []] [@yojson_drop_default Equal.poly] [@key "ids"]
     parent_id : string option; [@yojson.option] [@key "parentId"]
     user_id : string; [@key "userId"]
     fields : Item.field list;
@@ -316,14 +321,14 @@ let request (type pp p r) ~base_url ?token ?headers
        and type response = r) (params : p) (path_params : pp) : r Fut.or_error =
   let open Brr_io.Fetch in
   let base_uri = Uri.v (Jstr.v base_url) in
-  let base_path_segments = Result.get_ok @@ Uri.path_segments base_uri in
-  let endpoint_path_segments = List.map Jstr.v (Q.endpoint path_params) in
+  let base_path_segments = Result.get_exn @@ Uri.path_segments base_uri in
+  let endpoint_path_segments = List.map ~f:Jstr.v (Q.endpoint path_params) in
   let path_segments =
-    if base_path_segments = [ Jstr.empty ] then endpoint_path_segments
+    if Equal.poly base_path_segments [ Jstr.empty ] then endpoint_path_segments
     else List.concat [ base_path_segments; endpoint_path_segments ]
   in
   let uri = Uri.with_path_segments base_uri path_segments in
-  let uri = Result.get_ok uri in
+  let uri = Result.get_exn uri in
   let authorization = authorization ?token () in
   let headers =
     Headers.of_assoc ?init:headers
@@ -338,22 +343,21 @@ let request (type pp p r) ~base_url ?token ?headers
     match Q.method' with
     | Get ->
         let params =
-          params |> Q.yojson_of_params |> Yojson.Safe.to_string |> Jstr.v
-          |> Json.decode |> Result.get_ok |> Uri.Params.of_obj
+          params |> Q.yojson_of_params |> J.to_string |> Jstr.v |> Json.decode
+          |> Result.get_exn |> Uri.Params.of_obj
         in
         let uri_with_params = Uri.with_query_params uri params in
         (Request.init ~headers ~method' (), Uri.to_jstr uri_with_params)
     | Post ->
         let body =
-          params |> Q.yojson_of_params |> Yojson.Safe.to_string |> Jstr.v
-          |> Body.of_jstr
+          params |> Q.yojson_of_params |> J.to_string |> Jstr.v |> Body.of_jstr
         in
         (Request.init ~headers ~method' ~body (), Uri.to_jstr uri)
   in
   let open Fut.Result_syntax in
   let* res = request @@ Request.v ~init url in
   let+ json = Response.as_body res |> Body.text in
-  let yojson = Yojson.Safe.from_string (Jstr.to_string json) in
+  let yojson = J.from_string (Jstr.to_string json) in
   try Q.response_of_yojson yojson
   with e ->
     Console.log [ "An error occured while decoding response: "; json ];

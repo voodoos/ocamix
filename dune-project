@@ -27,6 +27,8 @@
   yojson
   ;jsonxt
   ppx_yojson_conv
+  json-data-encoding
+  json-data-encoding-browser
   uuidm
   base64
   hector))
