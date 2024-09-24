@@ -25,8 +25,8 @@
   lwd
   brr-lwd
   yojson
-  ;jsonxt
   ppx_yojson_conv
+  ezjsonm
   json-data-encoding
   json-data-encoding-browser
   uuidm
