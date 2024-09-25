@@ -257,8 +257,37 @@ type page_item_data =
 
 type page_item = { id : string; data : page_item_data } [@@warning "-69"]
 
+let is_map m =
+  Lwd.map m ~f:(fun m -> match m with Some (`Map m) -> m | _ -> assert false)
+
 let lwd_of_yjs_page =
   let page_content = Yjs.Doc.get_array yjs_doc "page_content" in
+  let lwd_of_yjs_table item =
+    let _columns = Lwd_map.get item "columns" |> is_map in
+    let$ content = Lwd_map.get item "content" in
+    let f value =
+      match value with
+      | `Array columns ->
+          (* Each row is an array of columns *)
+          lwd_of_yjs_array
+            ~f:(function
+              | `Map cell -> (
+                  (* Each cell is a map *)
+                  let cell_lwd = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) cell in
+                  ( cell,
+                    let$ content = Lwd_map.get cell_lwd "content" in
+                    (* todo there are more to life than strings *)
+                    match content with
+                    | Some (`Jv s) -> String (Jv.to_string s)
+                    | _ -> String "" ))
+              | _ -> assert false)
+            columns
+      | _ -> assert false
+    in
+    match content with
+    | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
+    | _ -> (None, Indexed_table.make ())
+  in
   let f value =
     match value with
     | `Map map ->
@@ -266,33 +295,7 @@ let lwd_of_yjs_page =
         let id = "" in
         let$ yjs, data =
           Lwd.bind (Lwd_map.get_string item "kind") ~f:(function
-            | Some "table" -> (
-                (* let$ columns = Lwd_map.get item "columns" in *)
-                let$ content = Lwd_map.get item "content" in
-                let f value =
-                  match value with
-                  | `Array columns ->
-                      (* Each row is an array of columns *)
-                      lwd_of_yjs_array
-                        ~f:(function
-                          | `Map cell -> (
-                              (* Each cell is a map *)
-                              let cell_lwd =
-                                lwd_of_yjs_map ~f:(fun ~key:_ v -> v) cell
-                              in
-                              ( cell,
-                                let$ content = Lwd_map.get cell_lwd "content" in
-                                (* todo there are more to life than strings *)
-                                match content with
-                                | Some (`Jv s) -> String (Jv.to_string s)
-                                | _ -> String "" ))
-                          | _ -> assert false)
-                        columns
-                  | _ -> assert false
-                in
-                match content with
-                | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
-                | _ -> (None, Indexed_table.make ()))
+            | Some "table" -> lwd_of_yjs_table item
             | _ -> assert false)
         in
         { id; data = Table (yjs, data) }
