@@ -249,59 +249,144 @@ let lwd_of_yjs_array ~f arr =
   ignore @@ Yjs.Array.observe arr on_event;
   lwd_table
 
-type cell_data = String of string
-type cell = Yjs.Map.t * cell_data Lwd.t
+(**
 
-type page_item_data =
-  | Table of Yjs.Array.t option * cell Indexed_table.t Indexed_table.t
+  cell ::= data option
 
-type page_item = { id : string; data : page_item_data } [@@warning "-69"]
+  row ::= ("id" : string) -> cell
 
-let is_map m =
+  column-info ::=
+    {
+      "id" : string
+      "kind" : "string" | ...
+      "name" : string }
+
+  table ::=
+    {
+      "columns" : column-info[]
+      "rows" : row[]
+    }
+
+  data ::=
+    {
+      "kind" : "table" | "text"
+      "content" : table | string
+    }
+
+  section ::=
+    {
+      "name" : string
+      "data" : data
+    }
+
+  page ::= section[]
+*)
+
+(* type cell_data = String of string *)
+
+type cell = data
+and row = cell Lwd.t Lwd_seq.t
+and data = String of string | Table of Yjs.Array.t * row Lwd.t Indexed_table.t
+
+type column_info = { id : string; kind : string Lwd.t; name : string Lwd.t }
+
+type page_item = { id : string; name : string option Lwd.t; data : data }
+[@@warning "-69"]
+
+let is_some_map m =
   Lwd.map m ~f:(fun m -> match m with Some (`Map m) -> m | _ -> assert false)
 
+let is_some_array m =
+  Lwd.map m ~f:(fun m ->
+      match m with Some (`Array a) -> a | _ -> assert false)
+
+module Keys = struct
+  let id = "id"
+  let page_content = "page_content"
+  let columns = "columns"
+  let rows = "rows"
+  let content = "content"
+  let kind = "kind"
+  let name = "name"
+  let data = "data"
+end
+
 let lwd_of_yjs_page =
-  let page_content = Yjs.Doc.get_array yjs_doc "page_content" in
-  let lwd_of_yjs_table item =
-    let _columns = Lwd_map.get item "columns" |> is_map in
-    let$ content = Lwd_map.get item "content" in
-    let f value =
-      match value with
-      | `Array columns ->
-          (* Each row is an array of columns *)
-          lwd_of_yjs_array
-            ~f:(function
-              | `Map cell -> (
-                  (* Each cell is a map *)
-                  let cell_lwd = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) cell in
-                  ( cell,
-                    let$ content = Lwd_map.get cell_lwd "content" in
-                    (* todo there are more to life than strings *)
-                    match content with
-                    | Some (`Jv s) -> String (Jv.to_string s)
-                    | _ -> String "" ))
-              | _ -> assert false)
-            columns
+  let sections = Yjs.Doc.get_array yjs_doc Keys.page_content in
+  let rec lwd_of_cell value = lwd_of_data value
+  and lwd_of_column_info = function
+    | `Map column_infos ->
+        let id =
+          match Yjs.Map.get column_infos ~key:Keys.id with
+          | Some (`Jv jv) -> Jv.to_string jv
+          | _ -> assert false
+        in
+        let lwd_map = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) column_infos in
+        let kind =
+          Lwd_map.get_string lwd_map Keys.kind |> Lwd.map ~f:Option.get
+        in
+        let name =
+          Lwd_map.get_string lwd_map Keys.name |> Lwd.map ~f:Option.get
+        in
+        { id; kind; name }
+    | _ -> assert false
+  and lwd_of_yjs_table ~source table =
+    let columns =
+      match Yjs.Map.get source ~key:Keys.columns with
+      | Some (`Array columns) -> lwd_of_yjs_array columns ~f:lwd_of_column_info
       | _ -> assert false
     in
-    match content with
-    | Some (`Array v) -> (Some v, lwd_of_yjs_array ~f v)
-    | _ -> (None, Indexed_table.make ())
+    let$ rows = Lwd_map.get table "rows" in
+    let f value =
+      match value with
+      | `Map cells ->
+          (* each row is a map of cells *)
+          let get_cell_by_id key =
+            match Yjs.Map.get ~key cells with
+            | Some (`Map map) -> lwd_of_cell map
+            | _ -> assert false
+          in
+          Lwd_table.map_reduce
+            (fun _ ({ id; _ } : column_info) ->
+              let cell = get_cell_by_id id in
+              Lwd_seq.element cell)
+            Lwd_seq.monoid columns.table
+      | _ -> assert false
+    in
+    match rows with
+    | Some (`Array v) -> (v, lwd_of_yjs_array ~f v)
+    | _ -> assert false
+  and lwd_of_data map =
+    let lwd_of_yjs_string data =
+      let$ content = Lwd_map.get data Keys.content in
+      (* todo there are more to life than strings *)
+      match content with
+      | Some (`Jv s) -> String (Jv.to_string s)
+      | _ -> String ""
+    in
+    let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
+    Lwd.bind (Lwd_map.get_string item Keys.kind) ~f:(function
+      | Some "string" -> lwd_of_yjs_string item
+      | Some "table" ->
+          let$ yjs, data = lwd_of_yjs_table ~source:map item in
+          Table (yjs, data)
+      | _ -> assert false)
   in
-  let f value =
+  let lwd_of_section value =
     match value with
     | `Map map ->
         let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
         let id = "" in
-        let$ yjs, data =
-          Lwd.bind (Lwd_map.get_string item "kind") ~f:(function
-            | Some "table" -> lwd_of_yjs_table item
+        let name = Lwd_map.get_string item Keys.name in
+        let$ data =
+          Lwd.bind (Lwd_map.get item Keys.data) ~f:(function
+            | Some (`Map data) -> lwd_of_data data
             | _ -> assert false)
         in
-        { id; data = Table (yjs, data) }
+        { id; name; data }
     | _ -> assert false
   in
-  lwd_of_yjs_array ~f page_content
+  lwd_of_yjs_array ~f:lwd_of_section sections
 
 let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
   let reduce_row tbl =
@@ -317,6 +402,7 @@ let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
                 Console.log [ ": string"; s ];
                 Lwd.set current_value s;
                 El.txt' s
+            | _ -> assert false
           in
           let edit_active = Lwd.var false in
           let edit_btn =
