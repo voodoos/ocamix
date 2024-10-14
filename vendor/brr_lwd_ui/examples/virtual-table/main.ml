@@ -19,10 +19,12 @@ let app =
   let table =
     {
       columns =
-        [|
-          Columns.v "a" "5em" [ `P (El.txt' "id") ];
-          Columns.v "a" "1fr" [ `P (El.txt' "square") ];
-        |];
+        Lwd.pure
+        @@ Lwd_seq.of_array
+             [|
+               Columns.v "a" "5em" [ `P (El.txt' "id") ];
+               Columns.v "a" "1fr" [ `P (El.txt' "square") ];
+             |];
     }
   in
   let table = { table; row_height = Em 5. } in

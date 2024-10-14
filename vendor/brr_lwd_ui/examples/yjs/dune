@@ -11,7 +11,8 @@
   brr-lwd
   brr-lwd-ui
   brr-lwd-ui.bindings.yjs
-  hector))
+  hector
+  uuidm))
 
 (alias
  (name examples)
