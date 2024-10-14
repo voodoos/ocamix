@@ -288,8 +288,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let table =
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
     let grid_style = Schema.style ui_table in
-    let s = At.style (Jstr.v @@ grid_style) in
-    let at = `P s :: at in
+    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
+    let at = `R s :: at in
     Elwd.div ~at [ `R table_header; `R wrapper ]
   in
   table

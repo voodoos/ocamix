@@ -9,12 +9,14 @@ module Api = DS.Api
 
 (** Columns declaration *)
 let columns () =
-  Table.Columns.
-    [|
-      v "Order" "5rem" @@ [ `P (El.txt' "#") ];
-      v "Cover" "5rem" @@ [ `P (El.txt' "Cover") ];
-      v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
-    |]
+  Lwd.pure
+  @@ Lwd_seq.of_array
+       Table.Columns.
+         [|
+           v "Order" "5rem" @@ [ `P (El.txt' "#") ];
+           v "Cover" "5rem" @@ [ `P (El.txt' "Cover") ];
+           v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
+         |]
 
 let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
   let ranged =
