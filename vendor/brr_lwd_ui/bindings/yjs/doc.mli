@@ -65,4 +65,8 @@ module Doc : sig
   val make : unit -> t
   val get_array : t -> string -> Array.t
   val get_map : t -> string -> Map.t
+
+  val transact : t -> (unit -> unit) -> unit
+  (** Bundles multiple operations into one transaction. Observer calls and the
+      update event will be called only once per transaction. *)
 end

@@ -218,4 +218,8 @@ module Doc = struct
     Jv.call t "getMap" [| Jv.of_string name |] |> Map.of_jv
 
   let make () = Jv.new' global [||]
+
+  let transact t f =
+    let callback = Jv.callback ~arity:1 f in
+    Jv.call t "transact" [| callback |] |> ignore
 end
