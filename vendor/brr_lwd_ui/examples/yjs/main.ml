@@ -284,21 +284,15 @@ let lwd_of_yjs_array ~f arr =
 
 (* type cell_data = String of string *)
 
-type cell = data
-and row = cell Lwd.t Lwd_seq.t
-and data = String of string | Table of Yjs.Array.t * row Lwd.t Indexed_table.t
+type cell = { src : Yjs.Map.t; data : data Lwd.t }
+and row = cell Lwd_seq.t Lwd.t
+and data = String of string | Table of Yjs.Array.t * row Indexed_table.t
 
 type column_info = { id : string; kind : string Lwd.t; name : string Lwd.t }
+[@@warning "-69"]
 
 type page_item = { id : string; name : string option Lwd.t; data : data }
 [@@warning "-69"]
-
-let is_some_map m =
-  Lwd.map m ~f:(fun m -> match m with Some (`Map m) -> m | _ -> assert false)
-
-let is_some_array m =
-  Lwd.map m ~f:(fun m ->
-      match m with Some (`Array a) -> a | _ -> assert false)
 
 module Keys = struct
   let id = "id"
@@ -313,7 +307,7 @@ end
 
 let lwd_of_yjs_page =
   let sections = Yjs.Doc.get_array yjs_doc Keys.page_content in
-  let rec lwd_of_cell value = lwd_of_data value
+  let rec lwd_of_cell src = { src; data = lwd_of_data src }
   and lwd_of_column_info = function
     | `Map column_infos ->
         let id =
@@ -330,13 +324,13 @@ let lwd_of_yjs_page =
         in
         { id; kind; name }
     | _ -> assert false
-  and lwd_of_yjs_table ~source table =
+  and lwd_of_table table =
     let columns =
-      match Yjs.Map.get source ~key:Keys.columns with
+      match Yjs.Map.get table ~key:Keys.columns with
       | Some (`Array columns) -> lwd_of_yjs_array columns ~f:lwd_of_column_info
       | _ -> assert false
     in
-    let$ rows = Lwd_map.get table "rows" in
+    let rows = Yjs.Map.get table ~key:Keys.rows in
     let f value =
       match value with
       | `Map cells ->
@@ -357,20 +351,15 @@ let lwd_of_yjs_page =
     | Some (`Array v) -> (v, lwd_of_yjs_array ~f v)
     | _ -> assert false
   and lwd_of_data map =
-    let lwd_of_yjs_string data =
-      let$ content = Lwd_map.get data Keys.content in
-      (* todo there are more to life than strings *)
-      match content with
-      | Some (`Jv s) -> String (Jv.to_string s)
-      | _ -> String ""
-    in
     let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
-    Lwd.bind (Lwd_map.get_string item Keys.kind) ~f:(function
-      | Some "string" -> lwd_of_yjs_string item
-      | Some "table" ->
-          let$ yjs, data = lwd_of_yjs_table ~source:map item in
-          Table (yjs, data)
-      | _ -> assert false)
+    Lwd.map2 (Lwd_map.get_string item Keys.kind) (Lwd_map.get item Keys.content)
+      ~f:(fun k c ->
+        match (k, c) with
+        | Some "string", Some (`Jv s) -> String (Jv.to_string s)
+        | Some "table", Some (`Map v) ->
+            let yjs, data = lwd_of_table v in
+            Table (yjs, data)
+        | _ -> assert false)
   in
   let lwd_of_section value =
     match value with
@@ -379,25 +368,25 @@ let lwd_of_yjs_page =
         let id = "" in
         let name = Lwd_map.get_string item Keys.name in
         let$ data =
-          Lwd.bind (Lwd_map.get item Keys.data) ~f:(function
-            | Some (`Map data) -> lwd_of_data data
-            | _ -> assert false)
+          match Yjs.Map.get map ~key:Keys.data with
+          | Some (`Map data) -> lwd_of_data data
+          | _ -> assert false
         in
         { id; name; data }
     | _ -> assert false
   in
   lwd_of_yjs_array ~f:lwd_of_section sections
 
-let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
-  let reduce_row tbl =
-    Lwd_table.map_reduce
-      (fun _row (cell_map, value) ->
+let table_data_source (content : row Indexed_table.t) =
+  let reduce_row (row : row) =
+    Lwd_seq.fold_monoid
+      (fun { src; data } ->
         let elt =
           let current_value = Lwd.var "" in
           let snapshot_value = Lwd.var "" in
           let value =
-            let$ value = value in
-            match value with
+            let$ data = data in
+            match data with
             | String s ->
                 Console.log [ ": string"; s ];
                 Lwd.set current_value s;
@@ -452,7 +441,7 @@ let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
                       let current_value = Lwd.peek current_value in
                       if current_value <> value then (
                         Console.log [ current_value; " -> "; value ];
-                        Yjs.Map.set cell_map ~key:"content"
+                        Yjs.Map.set src ~key:Keys.content
                           (`Jv (Jv.of_string value)));
                       Lwd.set edit_active false
                   | _ -> ())
@@ -465,31 +454,14 @@ let table_data_source (content : cell Indexed_table.t Indexed_table.t) =
           Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
         in
         Lwd_seq.element elt)
-      Lwd_seq.monoid tbl
+      Lwd_seq.monoid row
   in
   Virtual_bis.
     {
       total_items = Lwd.pure 0;
       source_rows = content.table;
-      render =
-        (fun _ map ->
-          Console.log [ "Value: map"; map ];
-          reduce_row map.table);
+      render = (fun _ row -> reduce_row row);
     }
-
-let table () =
-  {
-    table =
-      {
-        columns =
-          [|
-            Columns.v "a" "5em" [ `P (El.txt' "id") ];
-            Columns.v "a" "1fr"
-              [ `P (El.txt' "some well-though-of column name") ];
-          |];
-      };
-    row_height = Em 5.;
-  }
 
 let add_row content i id v =
   let open Yjs in
@@ -547,26 +519,41 @@ let new_table_row_form yjs_array =
       (* FIXME: validation already happened, it's redundant to have to match *)
       | { index = Ok index; id = Ok id; value = Ok value } ->
           Console.log [ "Form submitted:"; index; id; value ];
-          Option.iter (fun content -> add_row content index id value) yjs_array
+          add_row yjs_array index id value
       | _ -> ())
+
+let ui_table () =
+  {
+    table =
+      {
+        columns =
+          [|
+            Columns.v "a" "5em" [ `P (El.txt' "id") ];
+            Columns.v "a" "1fr"
+              [ `P (El.txt' "some well-though-of column name") ];
+          |];
+      };
+    row_height = Em 5.;
+  }
+
+let render_page_item ({ data; _ } : page_item) =
+  match data with
+  | Table (source, table) ->
+      let data_source = table_data_source table in
+      let form = new_table_row_form source in
+      let table = Virtual_bis.make ~ui_table:(ui_table ()) data_source in
+      Elwd.div
+        ~at:Attrs.O.(v (`P (C "flex")))
+        [ `R form; `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]) ]
+  | _ -> failwith "not implemented"
 
 let render_page =
   Lwd_table.map_reduce
     (fun _row data ->
       let open Lwd_infix in
       let div =
-        let$* content = data in
-        match content.data with
-        | Table (v, content) ->
-            let data_source = table_data_source content in
-            let form = new_table_row_form v in
-            let table = Virtual_bis.make ~ui_table:(table ()) data_source in
-            Elwd.div
-              ~at:Attrs.O.(v (`P (C "flex")))
-              [
-                `R form;
-                `R (Elwd.div ~at:Attrs.O.(v (`P (C "table"))) [ `R table ]);
-              ]
+        let$* data = data in
+        render_page_item data
       in
       Lwd_seq.element div)
     Lwd_seq.monoid lwd_of_yjs_page.table
@@ -592,7 +579,7 @@ let new_table_form =
     end)
     (fun () ->
       let v, _content = Data_table.make () in
-      let page_array = Yjs.Doc.get_array yjs_doc "page_content" in
+      let page_array = Yjs.Doc.get_array yjs_doc Keys.page_content in
       Yjs.Array.push page_array [| `Map v |];
       Console.log [ "Create new table:" ])
 
