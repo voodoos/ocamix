@@ -50,6 +50,8 @@ let make_input ~(value : Jv.t -> 'a) ?validate ?d ?(at = []) ?ev
   in
   let validate = Option.value validate ~default:(fun v -> Ok v) in
   let on_change, value =
+    (* TODO this does not work very well: sometime the event don't fire and some
+       input is missing. *)
     make_handler ~value ~value_change_event default_value
   in
   let ev = `P on_change :: Option.to_list ev in
