@@ -2,10 +2,11 @@ module type Queries = sig
   type 'a query
   (** Use a GADT to describe queries that have different parameters and return
       value. For example:
-      {[ type 'a query =
-           | Next_int : int -> int query
-           | Previous_letters : char -> char list query ]}
-  *)
+      {[
+        type 'a query =
+          | Next_int : int -> int query
+          | Previous_letters : char -> char list query
+      ]} *)
 
   type 'a event
   (** Events that can be listened to *)
@@ -31,7 +32,7 @@ module Make : functor (Q : Queries) -> sig
     (** Send one query to the worker and return a future with the answer. *)
 
     val listen : 'a event -> f:('a -> unit) -> listener
-    (** It returns a [listener] handle that can be used to cancel the 
+    (** It returns a [listener] handle that can be used to cancel the
         subscription later-on (TODO). *)
   end
 
@@ -41,12 +42,11 @@ module Make : functor (Q : Queries) -> sig
   end
 
   val dispatch_event : 'a event -> 'a -> unit
-  (** [dispactch_event] should be used from inside the worker to send events
-      to the client. *)
+  (** [dispactch_event] should be used from inside the worker to send events to
+      the client. *)
 
   (** Use [Make_worker] to generate the body of the worker. The generative
       functor given in parameter contian the program t be executed, and should
-      provide an [on_query] function to answer all messages defined by the API.
-  *)
+      provide an [on_query] function to answer all messages defined by the API. *)
   module Make_worker : functor (_ : Worker_impl) -> sig end
 end

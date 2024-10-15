@@ -61,13 +61,12 @@ module Make (Key : Map.OrderedType) : S with type key = Key.t = struct
     let q2 = RA_queue.create () in
     { q1; q2; size }
 
-  (** [evict_one t] first tries to evict the last element of [t.q2].
-    If that last element has been visited, it is moved to the head of [t.q1].
-    Loop until an element is evicted or [t.q2] is empty.
-    If [t.q2] is empty we perform the same process by inversing the roles of
-    [t.q2] and [t.q1].
+  (** [evict_one t] first tries to evict the last element of [t.q2]. If that
+      last element has been visited, it is moved to the head of [t.q1]. Loop
+      until an element is evicted or [t.q2] is empty. If [t.q2] is empty we
+      perform the same process by inversing the roles of [t.q2] and [t.q1].
 
-    /!\ This function will loop if both queues are empty. *)
+      /!\ This function will loop if both queues are empty. *)
   let rec evict_one ~on_evict t = evict_q2 ~on_evict t
 
   and evict_q2 ~on_evict t =

@@ -31,10 +31,10 @@ end
 
 val set_action_handler : t -> Action.t -> (unit -> unit) -> unit
 (** Sets a handler for a media session action. These actions let a web app
-  receive notifications when the user engages a device's built-in physical or
-  onscreen media controls, such as play, stop, or seek buttons.
+    receive notifications when the user engages a device's built-in physical or
+    onscreen media controls, such as play, stop, or seek buttons.
 
-   https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/setActionHandler#callback  *)
+    https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/setActionHandler#callback *)
 
 val set_position_state :
   ?duration:float -> ?playback_rate:float -> ?position:float -> t -> unit

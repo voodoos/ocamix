@@ -12,8 +12,8 @@ module type Form = sig
 end
 
 val field : 'a Field.t Lwd.t -> ('b, 'a) form_setter -> 'b form_field Lwd.t
-(** Attach a new field to a form with a function that sets the form's state
-    with values from that field. *)
+(** Attach a new field to a form with a function that sets the form's state with
+    values from that field. *)
 
 val create :
   ?d:Brr.El.document ->

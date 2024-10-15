@@ -1,5 +1,5 @@
-(** A simple bounded cache with an eviction mechanism using 2 FIFOs.
-    Inspired by SIEVE. Unproven. Untested. *)
+(** A simple bounded cache with an eviction mechanism using 2 FIFOs. Inspired by
+    SIEVE. Unproven. Untested. *)
 
 module type S = sig
   type key

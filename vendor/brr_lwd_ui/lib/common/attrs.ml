@@ -33,7 +33,8 @@ open Brr
 open Brr_lwd
 
 type t = { classes : Classes.t; attrs : At.t Elwd.col }
-(** Classes attributes are handled separately but are eventually translated to At.t *)
+(** Classes attributes are handled separately but are eventually translated to
+    At.t *)
 
 let empty = { classes = Classes.empty; attrs = [] }
 

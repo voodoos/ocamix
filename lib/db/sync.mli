@@ -1,5 +1,4 @@
-(**
-    This module provide utilities to synchronize he local (Indexed_db) database
+(** This module provide utilities to synchronize he local (Indexed_db) database
     with the remote source.
 
     The syncing mechanism makes the assumption that the source can provide a
@@ -25,12 +24,10 @@
     thus changing all following items' index in the reference query.
 
     TODO: inconsistency is not handled yet: the simplest workaround would be to
-          simply re-synchronize the complete database.
+    simply re-synchronize the complete database.
 
     TODO: we only keep track of added / removed items, but items details can
-          change (like changes in metadata, genrs, etc)
-
-*)
+    change (like changes in metadata, genrs, etc) *)
 
 type status =
   | Unknown
@@ -57,4 +54,4 @@ val check_and_sync :
   Brrer.Brr_io.Indexed_db.Database.t ->
   (unit, Jv.Error.t) Fut.result
 (** [check_and_sync] cheks that the current db is consistent with the source and
-  makes appropriate updates if necessary *)
+    makes appropriate updates if necessary *)
