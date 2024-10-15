@@ -16,13 +16,13 @@ let logger = Logger.for_section "virtual table"
 type 'a row_data = {
   content : 'a option;
   source_row : 'a Lwd_table.row;
-  render : int -> 'a -> Elwd.t Lwd.t Lwd_seq.t Lwd.t;
+  render : 'a Lwd_table.row -> 'a -> Elwd.t Lwd.t Lwd_seq.t Lwd.t;
 }
 
 type ('data, 'error) data_source = {
   total_items : int Lwd.t;
   source_rows : 'data Lwd_table.t;
-  render : int -> 'data -> Elwd.t Lwd.t Lwd_seq.t Lwd.t;
+  render : 'data Lwd_table.row -> 'data -> Elwd.t Lwd.t Lwd_seq.t Lwd.t;
 }
 
 (* The virtual table is a complex reactive component. Primarily, it reacts to
@@ -202,12 +202,12 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
   in
-  let render { content; source_row = _; render } =
+  let render { content; source_row; render } =
     let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
     let style = `P (At.style (Jstr.v height)) in
     match content with
     | Some data ->
-        let rendered_row = Lwd_seq.lift @@ render 0 data in
+        let rendered_row = Lwd_seq.lift @@ render source_row data in
         (0, Lwd_seq.element @@ Elwd.div ~at:(style :: at) [ `S rendered_row ], 0)
     | None -> (1, Lwd_seq.empty, 0)
   in

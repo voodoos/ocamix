@@ -447,7 +447,7 @@ let lwd_of_yjs_page =
   in
   lwd_of_yjs_array ~f:lwd_of_section sections
 
-let table_data_source (content : row Indexed_table.t) =
+let table_data_source source_rows (content : row Indexed_table.t) =
   let reduce_row (row : row) =
     Lwd_seq.fold_monoid
       (fun { src; data } ->
@@ -526,12 +526,25 @@ let table_data_source (content : row Indexed_table.t) =
         Lwd_seq.element elt)
       Lwd_seq.monoid row.cells
   in
-  Virtual_bis.
-    {
-      total_items = Lwd.pure 0;
-      source_rows = content.table;
-      render = (fun _ row -> reduce_row row);
-    }
+  let render lwd_table_row row =
+    let$ cells = reduce_row row in
+    let actions =
+      let on_delete_row _ =
+        let i =
+          (* TODO Virtual_table_bis should use an indexed table and take care of this *)
+          Hector.Poly.find (( == ) lwd_table_row) content.index
+        in
+        Console.log [ "DELETE ROW"; i ];
+        Yjs.Array.delete source_rows i 1
+      in
+      Elwd.button
+        ~ev:[ `P (Elwd.handler Ev.click on_delete_row) ]
+        ~at:[ `P (At.class' (Jstr.of_string "row-actions")) ]
+        [ `P (El.txt' "❌") ]
+    in
+    Lwd_seq.concat cells @@ Lwd_seq.element actions
+  in
+  Virtual_bis.{ total_items = Lwd.pure 0; source_rows = content.table; render }
 
 let new_table_column_form columns rows =
   let open Brr_lwd_ui.Forms.Form in
@@ -612,13 +625,46 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
       in
       Yjs.Array.push rows [| `Map cells |])
 
-let ui_table names =
+let ui_table ~columns_src ~rows_src names =
   {
     table =
       {
         columns =
           Lwd_seq.map
-            (fun n -> Columns.v "a" "1fr" [ `R (Lwd.map n ~f:El.txt') ])
+            (fun ({ name; id; _ } : column_info) ->
+              let label = Lwd.map name ~f:El.txt' in
+              let delete =
+                let on_click _ =
+                  let findi id =
+                    let exception Found of int in
+                    try
+                      (* TODO this should be done elsewhere (in Schema ?) *)
+                      Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
+                          match v with
+                          | `Map m -> (
+                              Console.log [ "MAP" ];
+                              match
+                                Yjs.Map.get m ~key:S.Data.Table.Column_info.id
+                              with
+                              | Some (`Jv s)
+                                when Console.log [ "S"; Jv.to_string s; id ];
+                                     String.equal id (Jv.to_string s) ->
+                                  raise (Found index)
+                              | _ -> ())
+                          | _ -> ());
+                      raise Not_found
+                    with Found i -> i
+                  in
+                  Yjs.Doc.transact yjs_doc (fun () ->
+                      Yjs.Array.delete columns_src (findi id) 1;
+                      Yjs.Array.iter rows_src ~f:(fun ~index:_ v _ ->
+                          match v with `Map m -> Yjs.Map.delete m id | _ -> ()))
+                in
+                Elwd.button
+                  ~ev:[ `P (Elwd.handler Ev.click on_click) ]
+                  [ `P (El.txt' "❌") ]
+              in
+              Columns.v "a" "1fr" [ `R label; `R delete ])
             names;
       };
     row_height = Em 5.;
@@ -627,16 +673,17 @@ let ui_table names =
 let render_page_item ({ data; _ } : page_item) =
   match data with
   | Table { columns_src; rows_src; columns; table } ->
-      let data_source = table_data_source table in
+      let data_source = table_data_source rows_src table in
       let form = new_table_row_form columns rows_src in
       let column_form = new_table_column_form columns_src rows_src in
       let table =
         let columns =
           Lwd_table.map_reduce
-            (fun _ ({ name; _ } : column_info) -> Lwd_seq.element name)
+            (fun _ column_info -> Lwd_seq.element column_info)
             Lwd_seq.monoid columns.table
         in
-        Virtual_bis.make ~ui_table:(ui_table columns) data_source
+        let ui_table = ui_table ~columns_src ~rows_src columns in
+        Virtual_bis.make ~ui_table data_source
       in
       Elwd.div
         ~at:Attrs.O.(v (`P (C "flex")))
