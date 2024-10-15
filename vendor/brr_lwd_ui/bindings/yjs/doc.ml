@@ -25,6 +25,7 @@ module rec Array : sig
   external of_jv : Jv.t -> t = "%identity"
   val make : unit -> t
   val insert : t -> int -> value array -> unit
+  val delete : t -> int -> int -> unit
   val push : t -> value array -> unit
   val iter : t -> f:(index:int -> value -> t -> unit) -> unit
   val observe : t -> (change Event.t -> unit) -> observer
@@ -61,6 +62,9 @@ end = struct
         v
     in
     ignore (Jv.call t "insert" [| Jv.of_int i; content |])
+
+  let delete t index lenght =
+    ignore (Jv.call t "delete" [| Jv.of_int index; Jv.of_int lenght |])
 
   let push t v =
     let content =
