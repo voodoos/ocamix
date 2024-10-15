@@ -130,15 +130,23 @@ module Indexed_table = struct
           blit_append old_index !cursor i new_index;
           cursor := !cursor + i
       | Yjs.Array.Delete i ->
-          let last = V.get_last new_index in
+          let next =
+            ref
+            @@
+            if !cursor = 0 then Lwd_table.first t.table
+            else Lwd_table.next (V.get_last new_index)
+          in
+
           for _i = 1 to i do
             (* We remove the [i] next rows *)
-            match Lwd_table.next last with
+            match !next with
             | None -> assert false
-            | Some _row -> Lwd_table.remove last
+            | Some row ->
+                next := Lwd_table.next row;
+                Lwd_table.remove row
           done;
           cursor := !cursor + i
-      | Insert a ->
+      | Yjs.Array.Insert a ->
           (* Three cases:
               1. Insertion at the beginning of an empty table
               2. Insertion at the beginning, before the first row
