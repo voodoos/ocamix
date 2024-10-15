@@ -1,6 +1,7 @@
 (executables
  (names main)
  (libraries js_of_ocaml-lwt lwd tyxml_lwd)
+ (enabled_if false)
  (modes byte)
  (preprocess
   (pps js_of_ocaml-ppx)))
