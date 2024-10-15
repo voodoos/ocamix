@@ -404,9 +404,6 @@ let lwd_of_yjs_page =
           let get_cell_by_id key =
             match Yjs.Map.get ~key cell_map with
             | Some (`Map map) -> lwd_of_cell map
-            (* | None ->
-               S.Data.
-               { src = } *)
             | _ -> assert false
           in
           let cells =
