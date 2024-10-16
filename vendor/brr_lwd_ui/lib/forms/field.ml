@@ -67,13 +67,13 @@ let text_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
   in
   let value = Jv.to_string in
   make_input ~value ?validate ?d ~at ?ev ?required ?pattern
-    ~value_change_event:Ev.keyup ~type':"text" default_value
+    ~value_change_event:Ev.input ~type':"text" default_value
 
 let password_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
     _value =
   let at = at |> A.add_opt At.Name.placeholder placeholder in
   let value = Jv.to_string in
-  make_input ~value ~value_change_event:Ev.keyup ?validate ?d ~at ?ev ?required
+  make_input ~value ~value_change_event:Ev.input ?validate ?d ~at ?ev ?required
     ?pattern ~type':"password" None
 
 let submit ?d ?(at = []) ?ev text =
