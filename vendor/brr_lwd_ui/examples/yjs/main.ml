@@ -458,81 +458,78 @@ let lwd_of_yjs_page =
   in
   lwd_of_yjs_array ~f:lwd_of_section sections
 
+let render_string_cell ~src (value : string Lwd.t) =
+  let current_value = Lwd.var "" in
+  let snapshot_value = Lwd.var "" in
+  let value =
+    let$ s = value in
+    Lwd.set current_value s;
+    El.txt' s
+  in
+  let edit_active = Lwd.var false in
+  let edit_btn =
+    let at = Attrs.O.(v (`P (C "cell-edit-btn"))) in
+    let on_click =
+      Elwd.handler Ev.click (fun _ ->
+          Lwd.set snapshot_value @@ Lwd.peek current_value;
+          Lwd.set edit_active true)
+    in
+    let ev = [ `P on_click ] in
+    Elwd.div ~at ~ev [ `P (El.txt' "✏️") ]
+  in
+  let edit_overlay =
+    let visible =
+      Lwd.map (Lwd.get edit_active) ~f:(function
+        | true -> Attrs.O.A (At.class' (Jstr.v "visible"))
+        | false -> A At.void)
+    in
+    let make_inline_form initial_value =
+      let open Brr_lwd_ui.Forms.Form in
+      let module Inline_edit = struct
+        type t = { value : string Field.validation }
+
+        let default = { value = Empty }
+
+        let fields =
+          Lwd.return
+            (Lwd_seq.of_list
+               [
+                 field
+                   (Lwd.map initial_value ~f:(fun initial_value ->
+                        Field.text_input ~required:false (Some initial_value)))
+                   (fun _t v -> { value = v });
+                 field (Lwd.pure @@ Field.submit (`P "Update")) (fun t _v -> t);
+               ])
+      end in
+      create
+        (module Inline_edit)
+        (fun t ->
+          Console.log [ "Form submitted:"; t ];
+          match t with
+          (* FIXME: validation already happened, it's redundant to have to match *)
+          | { value = Ok value } ->
+              let current_value = Lwd.peek current_value in
+              if current_value <> value then (
+                Console.log [ current_value; " -> "; value ];
+                Yjs.Map.set src ~key:S.Data.content (`Jv (Jv.of_string value)));
+              Lwd.set edit_active false
+          | _ -> ())
+    in
+    let form = make_inline_form (Lwd.get snapshot_value) in
+    let at = Attrs.O.(`R visible @:: v (`P (C "cell-edit-overlay"))) in
+    Elwd.div ~at [ `R form ]
+  in
+  let at = Attrs.O.(v (`P (C "cell"))) in
+  Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
+
 let table_data_source source_rows (content : row Indexed_table.t) =
   let reduce_row (row : row) =
     Lwd_seq.fold_monoid
       (fun { src; data } ->
         let elt =
-          let current_value = Lwd.var "" in
-          let snapshot_value = Lwd.var "" in
-          let value =
-            match data with
-            | String s ->
-                Console.log [ ": string"; s ];
-                let$ s = s in
-                Lwd.set current_value s;
-                El.txt' s
-            | _ -> assert false
-          in
-          let edit_active = Lwd.var false in
-          let edit_btn =
-            let at = Attrs.O.(v (`P (C "cell-edit-btn"))) in
-            let on_click =
-              Elwd.handler Ev.click (fun _ ->
-                  Lwd.set snapshot_value @@ Lwd.peek current_value;
-                  Lwd.set edit_active true)
-            in
-            let ev = [ `P on_click ] in
-            Elwd.div ~at ~ev [ `P (El.txt' "✏️") ]
-          in
-          let edit_overlay =
-            let visible =
-              Lwd.map (Lwd.get edit_active) ~f:(function
-                | true -> Attrs.O.A (At.class' (Jstr.v "visible"))
-                | false -> A At.void)
-            in
-            let make_inline_form initial_value =
-              let open Brr_lwd_ui.Forms.Form in
-              let module Inline_edit = struct
-                type t = { value : string Field.validation }
-
-                let default = { value = Empty }
-
-                let fields =
-                  Lwd.return
-                    (Lwd_seq.of_list
-                       [
-                         field
-                           (Lwd.map initial_value ~f:(fun initial_value ->
-                                Field.text_input ~required:false
-                                  (Some initial_value)))
-                           (fun _t v -> { value = v });
-                         field
-                           (Lwd.pure @@ Field.submit (`P "Update"))
-                           (fun t _v -> t);
-                       ])
-              end in
-              create
-                (module Inline_edit)
-                (fun t ->
-                  Console.log [ "Form submitted:"; t ];
-                  match t with
-                  (* FIXME: validation already happened, it's redundant to have to match *)
-                  | { value = Ok value } ->
-                      let current_value = Lwd.peek current_value in
-                      if current_value <> value then (
-                        Console.log [ current_value; " -> "; value ];
-                        Yjs.Map.set src ~key:S.Data.content
-                          (`Jv (Jv.of_string value)));
-                      Lwd.set edit_active false
-                  | _ -> ())
-            in
-            let form = make_inline_form (Lwd.get snapshot_value) in
-            let at = Attrs.O.(`R visible @:: v (`P (C "cell-edit-overlay"))) in
-            Elwd.div ~at [ `R form ]
-          in
-          let at = Attrs.O.(v (`P (C "cell"))) in
-          Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
+          match data with
+          | String value -> render_string_cell ~src value
+          | _ -> assert false
         in
         Lwd_seq.element elt)
       Lwd_seq.monoid row.cells
