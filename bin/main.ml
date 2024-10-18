@@ -80,7 +80,7 @@ let app =
     in
     make { name = "view-order"; default = "desc"; label = [] } options
   in
-  let f_sort_order = Lwd.pair f_sort.value f_order.value in
+  let f_sort_order = Lwd.pair (Lwd.get f_sort.value) (Lwd.get f_order.value) in
   let filters, f_value =
     let f_libraries =
       let open Field_checkboxes in
@@ -110,7 +110,8 @@ let app =
   let main_view =
     let previous_value = ref None in
     let request =
-      Ui_utils.map3 f_value f_search.value f_sort_order ~f:(fun l t (s, _o) ->
+      Ui_utils.map3 f_value (Lwd.get f_search.value) f_sort_order
+        ~f:(fun l t (s, _o) ->
           let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
           Console.log
             [

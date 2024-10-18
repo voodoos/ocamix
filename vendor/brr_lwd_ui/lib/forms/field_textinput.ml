@@ -6,7 +6,7 @@ open! Brr_lwd
 type 'a reactive_field = {
   field : Elwd.t Lwd.t;
   label : Elwd.t Lwd.t;
-  value : 'a Lwd.t;
+  value : 'a Lwd.var;
 }
 
 let name ~id base_name =
@@ -16,7 +16,7 @@ let name ~id base_name =
 let make ?(at = []) ?(ev = []) (desc : string option Field.desc) =
   let id = name ~id:true desc.name in
   let name = name ~id:false desc.name in
-  let var = Persistent.var ~key:id desc.default in
+  let value = Persistent.var ~key:id desc.default in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
   let field =
     let at =
@@ -26,17 +26,17 @@ let make ?(at = []) ?(ev = []) (desc : string option Field.desc) =
       |> add At.Name.type' (`P "text")
     in
     let at =
-      match Lwd.peek var with
+      match Lwd.peek value with
       | Some v -> `P (At.value @@ Jstr.v v) :: at
       | None -> at
     in
     let on_change =
       Elwd.handler Ev.keyup (fun ev ->
           let t = Ev.target ev |> Ev.target_to_jv in
-          let value = Jv.get t "value" in
-          Lwd.set var (Some (Jv.to_string value)))
+          let value' = Jv.get t "value" in
+          Lwd.set value (Some (Jv.to_string value')))
     in
     let ev = `P on_change :: ev in
     Elwd.input ~at ~ev ()
   in
-  { field; label; value = Lwd.get var }
+  { field; label; value }

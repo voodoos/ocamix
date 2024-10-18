@@ -7,7 +7,7 @@ type label = Elwd.t Elwd.col
 type 'value desc = Check of 'value * label * checked
 (* TODO | Group of label * 'value desc list *)
 
-type 'value t = { name : string; desc : 'value desc Lwd_seq.t Lwd.t }
+type 'value group = { name : string; desc : 'value desc Lwd_seq.t Lwd.t }
 type 'a reactive_field = { field : Elwd.t Lwd.t; value : 'a Lwd.t }
 
 let name ~g ~n ~id base_name =
