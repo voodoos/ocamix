@@ -354,11 +354,11 @@ end
 type column_info = { id : string; kind : string Lwd.t; name : string Lwd.t }
 [@@warning "-69"]
 
-type cell = { src : Yjs.Map.t; data : data Lwd.t }
+type cell = { src : Yjs.Map.t; data : data }
 and row = { map : Yjs.Map.t; cells : cell Lwd_seq.t Lwd.t } [@@warning "-69"]
 
 and data =
-  | String of string
+  | String of string Lwd.t
   | Table of {
       columns_src : Yjs.Array.t;
       rows_src : Yjs.Array.t;
@@ -424,20 +424,31 @@ let lwd_of_yjs_page =
     | _ -> assert false
   and lwd_of_data map =
     let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
-    Lwd.map2 (Lwd_map.get_string item S.Data.kind)
-      (Lwd_map.get item S.Data.content) ~f:(fun k c ->
-        match (k, c) with
-        | Some "string", Some (`Jv s) -> String (Jv.to_string s)
-        | Some "table", Some (`Map v) -> lwd_of_table v
+    let kind =
+      match Yjs.Map.get ~key:S.Data.kind map with
+      | Some (`Jv s) -> Jv.to_string s
+      | _ -> assert false
+    in
+    match kind with
+    | "string" ->
+        String
+          (Lwd.map (Lwd_map.get item S.Data.content) ~f:(function
+            | Some (`Jv s) -> Jv.to_string s
+            | _ -> assert false))
+    | "table" -> (
+        match Yjs.Map.get ~key:S.Data.content map with
+        | Some (`Map v) -> lwd_of_table v
         | _ -> assert false)
+    | _ -> assert false
   in
+
   let lwd_of_section value =
     match value with
     | `Map map ->
         let item = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) map in
         let id = "" in
         let name = Lwd_map.get_string item S.Section.name in
-        let$ data =
+        let data =
           match Yjs.Map.get map ~key:S.Section.data with
           | Some (`Map data) -> lwd_of_data data
           | _ -> assert false
@@ -455,10 +466,10 @@ let table_data_source source_rows (content : row Indexed_table.t) =
           let current_value = Lwd.var "" in
           let snapshot_value = Lwd.var "" in
           let value =
-            let$ data = data in
             match data with
             | String s ->
                 Console.log [ ": string"; s ];
+                let$ s = s in
                 Lwd.set current_value s;
                 El.txt' s
             | _ -> assert false
@@ -697,11 +708,7 @@ let render_page_item ({ data; _ } : page_item) =
 let render_page =
   Lwd_table.map_reduce
     (fun _row data ->
-      let open Lwd_infix in
-      let div =
-        let$* data = data in
-        render_page_item data
-      in
+      let div = render_page_item data in
       Lwd_seq.element div)
     Lwd_seq.monoid lwd_of_yjs_page.table
 
