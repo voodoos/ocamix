@@ -314,6 +314,12 @@ module S (*Schema*) = struct
       let make value = make `Bool (`Jv (Jv.of_bool value))
     end
 
+    module Richtext = struct
+      let make initial_content =
+        let text = Yjs.Text.make ?initial_content () in
+        make `Richtext (`Text text)
+    end
+
     module Table = struct
       let kind_v = "table"
       let columns = "columns"
@@ -475,6 +481,10 @@ let lwd_of_yjs_page =
           (Lwd.map (Lwd_map.get item S.Data.content) ~f:(function
             | Some (`Jv s) -> Jv.to_bool s
             | _ -> assert false))
+    | "text" -> (
+        match Yjs.Map.get ~key:S.Data.content map with
+        | Some (`Text t) -> Richtext t
+        | _ -> assert false)
     | "table" -> (
         match Yjs.Map.get ~key:S.Data.content map with
         | Some (`Map v) -> lwd_of_table v
@@ -582,7 +592,14 @@ let render_bool_cell ~src (value : bool Lwd.t) =
   (* TODO the whole reactivity scheme here is not very satisfying... *)
   let$* value = value in
   let field, _value = make_single ~on_change "" "" [] value in
-  Elwd.div ~at:[] [ `R field ]
+  let at = Attrs.O.(v (`P (C "cell"))) in
+  Elwd.div ~at [ `R field ]
+
+let render_richtext_cell ~src:_ (_value : Yjs.Text.t) =
+  let container = El.div [] in
+  let _editor = Quill.(make ~container @@ config ~theme:Bubble ()) in
+  let at = Attrs.O.(v (`P (C "cell"))) in
+  Elwd.div ~at [ `P container ]
 
 let table_data_source source_rows (content : row Indexed_table.t) =
   let reduce_row (row : row) =
@@ -592,6 +609,7 @@ let table_data_source source_rows (content : row Indexed_table.t) =
           match data with
           | String value -> render_string_cell ~src value
           | Bool value -> render_bool_cell ~src value
+          | Richtext text -> render_richtext_cell ~src text
           | _ -> assert false
         in
         Lwd_seq.element elt)
@@ -642,7 +660,11 @@ let new_table_column_form columns rows =
                     { name = "kind"; default = "string"; label = [] }
                     (Lwd.pure
                     @@ Lwd_seq.of_list
-                         [ ("string", "String"); ("bool", "Checkbox") ])
+                         [
+                           ("string", "String");
+                           ("bool", "Checkbox");
+                           ("text", "Richtext");
+                         ])
                 in
                 Lwd.pure { Field.elt; value; validate = (fun v -> Ok v) })
                (fun t kind ->
@@ -667,6 +689,7 @@ let new_table_column_form columns rows =
                 match kind with
                 | `String -> fun () -> S.Data.String.make ""
                 | `Bool -> fun () -> S.Data.Bool.make false
+                | `Richtext -> fun () -> S.Data.Richtext.make None
                 | _ -> assert false
               in
               Yjs.Array.iter
@@ -686,7 +709,10 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
   let module Row_form = struct
     open Brr_lwd_ui.Forms.Form
 
-    type t = [ `String of string | `Bool of bool ] Field.validation Map.t
+    type t =
+      [ `String of string | `Bool of bool | `Richtext of string ]
+      Field.validation
+      Map.t
 
     let default = Map.empty
 
@@ -717,6 +743,13 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
                        v
                    in
                    Map.add id v t)
+           | `Richtext ->
+               field
+                 (Lwd.map name ~f:(fun name ->
+                      Field.text_input ~placeholder:name ~required:true None))
+                 (fun t v ->
+                   let v = Field.map_validation ~f:(fun v -> `Richtext v) v in
+                   Map.add id v t)
            | _ -> assert false)
           |> Lwd_seq.element)
         Lwd_seq.monoid columns.table
@@ -733,9 +766,9 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
           (fun key v acc ->
             match v with
             | Field.Ok (`String v) -> (key, S.Data.String.make v) :: acc
-            | Field.Ok (`Bool v) ->
-                Console.log [ "New row cell: "; Jv.of_bool v ];
-                (key, S.Data.Bool.make v) :: acc
+            | Field.Ok (`Bool v) -> (key, S.Data.Bool.make v) :: acc
+            | Field.Ok (`Richtext v) ->
+                (key, S.Data.Richtext.make (Some v)) :: acc
             | _ -> assert false)
           t []
         |> S.Data.Table.Row.make
@@ -759,13 +792,11 @@ let ui_table ~columns_src ~rows_src names =
                       Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
                           match v with
                           | `Map m -> (
-                              Console.log [ "MAP" ];
                               match
                                 Yjs.Map.get m ~key:S.Data.Table.Column_info.id
                               with
                               | Some (`Jv s)
-                                when Console.log [ "S"; Jv.to_string s; id ];
-                                     String.equal id (Jv.to_string s) ->
+                                when String.equal id (Jv.to_string s) ->
                                   raise (Found index)
                               | _ -> ())
                           | _ -> ());
@@ -856,9 +887,6 @@ let _ =
       @@ fun _ -> ignore @@ Lwd.quick_sample app
     in
     El.append_children (Document.body G.document) [ Lwd.quick_sample app ];
-    let container = El.div [] in
-    let _ = Quill.make ~container (Quill.make_config ~theme:Bubble ()) in
-    El.append_children (Document.body G.document) [ container ];
     Lwd.set_on_invalidate app on_invalidate
   in
   Ev.listen Ev.dom_content_loaded on_load (Window.as_target G.window)

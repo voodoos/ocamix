@@ -1,5 +1,5 @@
 body {
-  margin: 0;
+    margin: 0;
 }
 
 .flex {
@@ -8,6 +8,7 @@ body {
     /* height: 100vh; */
     padding: 1rem;
 }
+
 .flex .table {
     flex-grow: 1;
 }
@@ -57,7 +58,8 @@ body {
     position: relative;
 }
 
-.lwdui-lazy-table .lwdui-virtual-table-row>div, .cell-edit-overlay {
+.lwdui-lazy-table .lwdui-virtual-table-row>div,
+.cell-edit-overlay {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -67,4 +69,13 @@ body {
 .inline-row-form {
     display: flex;
     flex-direction: row;
+}
+
+.lwdui-virtual-table-row .cell:has(.ql-container) {
+    padding: 0;
+}
+
+.lwdui-virtual-table-row .ql-container {
+    width: 100%;
+    height: 100%;
 }
