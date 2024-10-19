@@ -13,7 +13,7 @@ type 'a desc = { name : string; default : 'a; label : label }
    - A function that retieves the value of the element *)
 type 'a t = {
   elt : Elwd.t Lwd.t;
-  value : 'a option Lwd.var;
+  value : 'a Lwd.var;
   validate : 'a -> 'a validation;
 }
 
@@ -33,7 +33,7 @@ let make_handler ~(value : Jv.t -> 'a) ~(value_change_event : _ Ev.type')
     Elwd.handler value_change_event (fun ev ->
         let t = Ev.target ev |> Ev.target_to_jv in
         let v = Jv.get t "value" in
-        Lwd.set var (Some (value v)))
+        Lwd.set var (value v))
   in
   (on_change, var)
 
@@ -65,19 +65,20 @@ let text_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
     |> A.add_opt At.Name.placeholder placeholder
     |> A.add_opt At.Name.value default_value
   in
+  let default_value = Option.get_or ~default:"" default_value in
   let value = Jv.to_string in
   make_input ~value ?validate ?d ~at ?ev ?required ?pattern
     ~value_change_event:Ev.input ~type':"text" default_value
 
 let password_input ?validate ?d ?(at = []) ?ev ?required ?pattern ?placeholder
-    _value =
+    () =
   let at = at |> A.add_opt At.Name.placeholder placeholder in
   let value = Jv.to_string in
   make_input ~value ~value_change_event:Ev.input ?validate ?d ~at ?ev ?required
-    ?pattern ~type':"password" None
+    ?pattern ~type':"password" ""
 
 let submit ?d ?(at = []) ?ev text =
   let at = A.add At.Name.value text at in
   (* TODO this should be more precise. Submit inputs are different. *)
   make_input ~value:ignore ~value_change_event:Ev.change ?d ~at ?ev
-    ~type':"submit" None
+    ~type':"submit" ()

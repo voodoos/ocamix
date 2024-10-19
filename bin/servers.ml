@@ -71,7 +71,7 @@ module Connect_form = struct
     in
     let password_field =
       field
-        (Lwd.pure @@ Field.password_input ~required:false None)
+        (Lwd.pure @@ Field.password_input ~required:false ())
         (fun t v -> { t with password = v })
     in
     let submit =

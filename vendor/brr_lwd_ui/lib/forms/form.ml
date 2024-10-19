@@ -24,11 +24,7 @@ let create ?d ?at ?ev (type t) (module Form : Form with type t = t) on_submit :
     |> Lwd_seq.fold_monoid
          (fun (F (field, mapper)) ->
            ( Lwd_seq.element field.elt,
-             let value () =
-               match Lwd.peek field.value with
-               | None -> Field.Empty
-               | Some v -> field.validate v
-             in
+             let value () = Lwd.peek field.value |> field.validate in
              fun t -> mapper t @@ value () ))
          ( (Lwd_seq.empty, Fun.id),
            fun (elts, f) (elts', f') ->

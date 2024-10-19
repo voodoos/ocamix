@@ -14,34 +14,38 @@ let name ~g ~n ~id base_name =
   if id then Printf.sprintf "%s-%i-%i-id" base_name g n
   else Printf.sprintf "%s-%i-%i" base_name g n
 
-let make t =
-  let make_check ~g ~n value label checked =
-    let id = name ~g ~n ~id:true t.name in
-    let name = name ~g ~n ~id:false t.name in
-    let result checked = if checked then Some value else None in
-    let var = Persistent.var ~key:id (result checked) in
-    let lbl = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] label in
-    let at =
-      let open Attrs in
-      add At.Name.id (`P id) []
-      |> add At.Name.name (`P name)
-      |> add At.Name.type' (`P "checkbox")
-    in
-    let checked =
-      Lwd.map (Lwd.get var) ~f:(function
-        | Some _ -> At.checked
-        | None -> At.void)
-    in
-    let at = `R checked :: at in
-    let on_change =
-      Elwd.handler Ev.change (fun ev ->
-          let t = Ev.target ev |> Ev.target_to_jv in
-          let checked = Jv.get t "checked" in
-          Lwd.set var (result (Jv.to_bool checked)))
-    in
-    let ev = [ `P on_change ] in
-    (Elwd.(div [ `R (input ~at ~ev ()); `R lbl ]), Lwd.get var)
+let make_single ?persist ?(ev = []) ?(on_change = fun _ -> ()) name value label
+    checked =
+  let id = Format.sprintf "%s-id" name in
+  let result checked = if checked then Some value else None in
+  let var =
+    match persist with
+    | Some true -> Persistent.var ~key:id (result checked)
+    | Some false | None -> Lwd.var (result checked)
   in
+  let lbl = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] label in
+  let at =
+    let open Attrs in
+    add At.Name.id (`P id) []
+    |> add At.Name.name (`P name)
+    |> add At.Name.type' (`P "checkbox")
+  in
+  let checked =
+    Lwd.map (Lwd.get var) ~f:(function Some _ -> At.checked | None -> At.void)
+  in
+  let at = `R checked :: at in
+  let on_change =
+    Elwd.handler Ev.change (fun ev ->
+        let t = Ev.target ev |> Ev.target_to_jv in
+        let checked = Jv.get t "checked" in
+        let result = result (Jv.to_bool checked) in
+        on_change result;
+        Lwd.set var result)
+  in
+  let ev = `P on_change :: ev in
+  (Elwd.(div [ `R (input ~at ~ev ()); `R lbl ]), var)
+
+let make ?(persist = true) t =
   (* <fieldset><legend> *)
   (* <fieldset><legend> *)
   let make_all ~g desc =
@@ -49,7 +53,8 @@ let make t =
     Lwd_seq.map
       (function
         | Check (v, l, c) ->
-            let elt, value = make_check ~g ~n:!n v l c in
+            let name = name ~g ~n:!n ~id:false t.name in
+            let elt, value = make_single ~persist name v l c in
             incr n;
             (elt, value))
       desc
@@ -57,7 +62,9 @@ let make t =
   let all = make_all ~g:0 t.desc in
   let elts = Lwd_seq.map (fun (elt, _) -> elt) all in
   let value =
-    Lwd_seq.fold_monoid (fun (_, v) -> Lwd_seq.element v) Lwd_seq.monoid all
+    Lwd_seq.fold_monoid
+      (fun (_, v) -> Lwd_seq.element (Lwd.get v))
+      Lwd_seq.monoid all
     |> Lwd_seq.lift |> Lwd_seq.filter_map Fun.id
   in
   { field = Elwd.div [ `S (Lwd_seq.lift elts) ]; value }

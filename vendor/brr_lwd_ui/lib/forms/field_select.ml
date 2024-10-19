@@ -12,10 +12,14 @@ type 'a reactive_field = {
 let name ~id base_name =
   if id then Printf.sprintf "%s--id" base_name else base_name
 
-let make ?(at = []) ?(ev = []) (desc : string Field.desc) options =
+let make ?(persist = true) ?(at = []) ?(ev = []) (desc : string Field.desc)
+    options =
   let id = name ~id:true desc.name in
   let name = name ~id:false desc.name in
-  let value = Persistent.var ~key:id desc.default in
+  let value =
+    if persist then Persistent.var ~key:id desc.default
+    else Lwd.var desc.default
+  in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
   let field =
     let at =
