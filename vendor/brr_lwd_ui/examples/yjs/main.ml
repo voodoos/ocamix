@@ -595,9 +595,10 @@ let render_bool_cell ~src (value : bool Lwd.t) =
   let at = Attrs.O.(v (`P (C "cell"))) in
   Elwd.div ~at [ `R field ]
 
-let render_richtext_cell ~src:_ (_value : Yjs.Text.t) =
+let render_richtext_cell ~src:_ (value : Yjs.Text.t) =
   let container = El.div [] in
-  let _editor = Quill.(make ~container @@ config ~theme:Bubble ()) in
+  let editor = Quill.(make ~container @@ config ~theme:Bubble ()) in
+  let _ = (* TODO is there some cleanup to do ? *) Y_quill.make value editor in
   let at = Attrs.O.(v (`P (C "cell"))) in
   Elwd.div ~at [ `P container ]
 

@@ -12,6 +12,7 @@
   brr-lwd-ui
   brr-lwd-ui.bindings.yjs
   brr-lwd-ui.bindings.quill
+  brr-lwd-ui.bindings.y-quill
   hector
   uuidm))
 
