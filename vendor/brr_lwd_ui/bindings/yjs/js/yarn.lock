@@ -198,6 +198,13 @@ lib0@^0.2.42, lib0@^0.2.74, lib0@^0.2.85, lib0@^0.2.86:
   dependencies:
     isomorphic.js "^0.2.4"
 
+lib0@^0.2.93:
+  version "0.2.98"
+  resolved "https://registry.yarnpkg.com/lib0/-/lib0-0.2.98.tgz#fe55203b8586512c1837248d5f309d7dfd566f5d"
+  integrity sha512-XteTiNO0qEXqqweWx+b21p/fBnNHUA1NwAtJNJek1oPrewEZs2uiT4gWivHKr9GqCjDPAhchz0UQO8NwU3bBNA==
+  dependencies:
+    isomorphic.js "^0.2.4"
+
 ms@2.1.2:
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.2.tgz#d09d1f357b443f493382a8eb3ccd183872ae6009"
@@ -272,6 +279,14 @@ y-protocols@^1.0.6:
   integrity sha512-vHRF2L6iT3rwj1jub/K5tYcTT/mEYDUppgNPXwp8fmLpui9f7Yeq3OEtTLVF012j39QnV+KEQpNqoN7CWU7Y9Q==
   dependencies:
     lib0 "^0.2.85"
+
+y-quill@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/y-quill/-/y-quill-1.0.0.tgz#c68f41a2a4a4e23159e8df7750ba01957f685183"
+  integrity sha512-WpYBXsFXdofGuaAVyvKpZ3rg+TklWtKtpemUziY044NLhnwud0D+QTX2mdGKMrLON+BshKQeT77FbXa68ZJbcA==
+  dependencies:
+    lib0 "^0.2.93"
+    y-protocols "^1.0.6"
 
 y-webrtc@^10.3.0:
   version "10.3.0"

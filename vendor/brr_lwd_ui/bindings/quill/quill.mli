@@ -1,5 +1,6 @@
 type t
 
+val to_jv : t -> Jv.t
 val register : path:string -> Jv.t -> unit
 
 type config

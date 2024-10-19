@@ -1,5 +1,7 @@
 type t = Jv.t
 
+external to_jv : t -> Jv.t = "%identity"
+
 let quill = Global.quill
 
 let register ~path v =
