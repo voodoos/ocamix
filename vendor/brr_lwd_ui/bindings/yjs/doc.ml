@@ -1,5 +1,6 @@
 module StringMap = Map.Make (String)
 
+let text_class = Jv.get Global.yjs "Text"
 let array_class = Jv.get Global.yjs "Array"
 let map_class = Jv.get Global.yjs "Map"
 
@@ -16,9 +17,25 @@ module Event = struct
     { delta = Jv.to_array change_of_jv @@ Jv.get changes_jv "delta" }
 end
 
+module Text = struct
+  type t = Jv.t
+
+  external to_jv : t -> Jv.t = "%identity"
+  external of_jv : Jv.t -> t = "%identity"
+
+  let make ?initial_content () =
+    let args =
+      match initial_content with None -> [||] | Some s -> [| Jv.of_string s |]
+    in
+    Jv.new' text_class args
+end
+
 module rec Array : sig
   type t
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
+
   type change = Retain of int | Insert of value array | Delete of int
 
   external to_jv : t -> Jv.t = "%identity"
@@ -31,12 +48,16 @@ module rec Array : sig
   val observe : t -> (change Event.t -> unit) -> observer
 end = struct
   type t = Jv.t
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
+
   type change = Retain of int | Insert of value array | Delete of int
 
   let value_of_jv jv =
     if Jv.instanceof jv ~cons:array_class then `Array (Array.of_jv jv)
     else if Jv.instanceof jv ~cons:map_class then `Map (Map.of_jv jv)
+    else if Jv.instanceof jv ~cons:text_class then `Text (Text.of_jv jv)
     else `Jv jv
 
   let change_of_jv jv =
@@ -58,7 +79,11 @@ end = struct
   let insert t i v =
     let content =
       Jv.of_array
-        (function `Jv jv -> jv | `Map m -> Map.to_jv m | `Array a -> a)
+        (function
+          | `Jv jv -> jv
+          | `Text m -> Text.to_jv m
+          | `Map m -> Map.to_jv m
+          | `Array a -> a)
         v
     in
     ignore (Jv.call t "insert" [| Jv.of_int i; content |])
@@ -69,7 +94,11 @@ end = struct
   let push t v =
     let content =
       Jv.of_array
-        (function `Jv jv -> jv | `Map m -> Map.to_jv m | `Array a -> a)
+        (function
+          | `Jv jv -> jv
+          | `Text m -> Text.to_jv m
+          | `Map m -> Map.to_jv m
+          | `Array a -> a)
         v
     in
     ignore (Jv.call t "push" [| content |])
@@ -97,7 +126,8 @@ and Map : sig
   external of_jv : Jv.t -> t = "%identity"
   val make : unit -> t
 
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
 
   module Event : sig
     type t
@@ -130,11 +160,13 @@ end = struct
   external to_jv : t -> Jv.t = "%identity"
   external of_jv : Jv.t -> t = "%identity"
 
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
 
   let value_of_jv jv =
     if Jv.instanceof jv ~cons:array_class then `Array (Array.of_jv jv)
     else if Jv.instanceof jv ~cons:map_class then `Map (Map.of_jv jv)
+    else if Jv.instanceof jv ~cons:text_class then `Text (Text.of_jv jv)
     else `Jv jv
 
   let make () = Jv.new' map_class [||]
@@ -187,7 +219,11 @@ end = struct
 
   let set (t : t) ~key value =
     let value =
-      match value with `Jv jv -> jv | `Map m -> m | `Array a -> Array.to_jv a
+      match value with
+      | `Jv jv -> jv
+      | `Text t -> Text.to_jv t
+      | `Map m -> m
+      | `Array a -> Array.to_jv a
     in
     ignore (Jv.call t "set" [| Jv.of_string key; value |])
 
@@ -214,6 +250,9 @@ module Doc = struct
 
   external of_jv : Jv.t -> t = "%identity"
   external to_jv : t -> Jv.t = "%identity"
+
+  let get_text t name : Text.t =
+    Jv.call t "getText" [| Jv.of_string name |] |> Text.of_jv
 
   let get_array t name : Array.t =
     Jv.call t "getArray" [| Jv.of_string name |] |> Array.of_jv

@@ -9,9 +9,20 @@ module Event : sig
   val changes : 'change t -> 'change changes
 end
 
+module Text : sig
+  type t
+
+  val of_jv : Jv.t -> t
+  val to_jv : t -> Jv.t
+  val make : ?initial_content:string -> unit -> t
+end
+
 module rec Array : sig
   type t
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
+
   type change = Retain of int | Insert of value array | Delete of int
 
   val of_jv : Jv.t -> t
@@ -26,7 +37,9 @@ end
 
 and Map : sig
   type t
-  type value = [ `Jv of Jv.t | `Map of Map.t | `Array of Array.t ]
+
+  type value =
+    [ `Jv of Jv.t | `Text of Text.t | `Map of Map.t | `Array of Array.t ]
 
   module Event : sig
     type t
@@ -64,6 +77,7 @@ module Doc : sig
   val of_jv : Jv.t -> t
   val to_jv : t -> Jv.t
   val make : unit -> t
+  val get_text : t -> string -> Text.t
   val get_array : t -> string -> Array.t
   val get_map : t -> string -> Map.t
 
