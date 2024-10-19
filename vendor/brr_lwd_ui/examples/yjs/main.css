@@ -63,3 +63,8 @@ body {
     justify-content: space-between;
     padding: 1rem;
 }
+
+.inline-row-form {
+    display: flex;
+    flex-direction: row;
+}
