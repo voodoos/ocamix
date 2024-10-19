@@ -1,0 +1,6 @@
+(library
+ (name quill)
+ (js_of_ocaml
+  (javascript_files js/bundle.js))
+ (public_name brr-lwd-ui.bindings.quill)
+ (libraries brr))

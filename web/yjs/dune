@@ -2,5 +2,4 @@
  (alias default)
  (mode
   (promote (until-clean)))
- (files
-  ../../vendor/brr_lwd_ui/examples/yjs/{main.bc.js,index.html,main.css,brr_lwd_ui.css}))
+ (files ../../vendor/brr_lwd_ui/examples/yjs/{main.bc.js,index.html,*.css}))

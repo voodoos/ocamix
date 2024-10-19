@@ -11,6 +11,7 @@
   brr-lwd
   brr-lwd-ui
   brr-lwd-ui.bindings.yjs
+  brr-lwd-ui.bindings.quill
   hector
   uuidm))
 
@@ -23,3 +24,12 @@
   (promote (until-clean)))
  (alias examples)
  (files ../../css/brr_lwd_ui.css))
+
+(rule
+ (mode
+  (promote (until-clean)))
+ (alias examples)
+ (action
+  (progn
+   (copy %{lib:brr-lwd-ui:css/quill.core.css} quill.core.css)
+   (copy %{lib:brr-lwd-ui:css/quill.bubble.css} quill.bubble.css))))

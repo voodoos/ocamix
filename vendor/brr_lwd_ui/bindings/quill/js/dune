@@ -1,0 +1,18 @@
+(rule
+ (deps
+  quill.js
+  package.json
+  yarn.lock
+  (source_tree node_modules))
+ (targets bundle.js)
+ (action
+  (progn
+   (run yarn)
+   (run yarn build))))
+
+(install
+ (files
+  (glob_files
+   (node_modules/quill/dist/quill.*.css with_prefix css)))
+ (section lib)
+ (package brr-lwd-ui))

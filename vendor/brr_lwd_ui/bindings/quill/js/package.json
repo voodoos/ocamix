@@ -1,0 +1,18 @@
+{
+  "name": "ocaml-quill",
+  "version": "0.0.1",
+  "description": "Brr bindings for the Quill library",
+  "repository": "git@github.com:voodoos/ocamix.git",
+  "author": "Ulysse Gérard <thevoodoos@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "yarn exec -- node_modules/esbuild/bin/esbuild quill.js --bundle --minify --sourcemap  --outfile=bundle.js "
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.5"
+  },
+  "dependencies": {
+    "quill": "^2.0.2",
+    "quill-cursors": "^4.0.3"
+  }
+}
