@@ -277,7 +277,26 @@ module S (*Schema*) = struct
     let kind = "kind"
     let content = "content"
 
+    type kind = [ `String | `Bool | `Table ]
+
+    let kind_to_string = function
+      | `String -> "string"
+      | `Bool -> "bool"
+      | `Table -> "table"
+
+    let kind_of_string = function
+      | "string" -> `String
+      | "bool" -> `Bool
+      | "table" -> `Table
+      | _ -> assert false
+
+    let kind_to_name = function
+      | `String -> "String"
+      | `Bool -> "Checkbox"
+      | `Table -> "Table"
+
     let make kind_ content_ =
+      let kind_ = kind_to_string kind_ in
       let v = Map.make () in
       Yjs.Doc.transact yjs_doc (fun () ->
           Map.set v ~key:kind (`Jv (Jv.of_string kind_));
@@ -285,8 +304,11 @@ module S (*Schema*) = struct
       v
 
     module String = struct
-      let kind_v = "string"
-      let make value = make kind_v (`Jv (Jv.of_string value))
+      let make value = make `String (`Jv (Jv.of_string value))
+    end
+
+    module Bool = struct
+      let make value = make `Bool (`Jv (Jv.of_bool value))
     end
 
     module Table = struct
@@ -299,14 +321,15 @@ module S (*Schema*) = struct
         let kind = "kind"
         let name = "name"
 
-        let make name_ =
-          (* TODO kind *)
+        let make ~kind:kind_ name_ =
+          let kind_ = kind_to_string kind_ in
           let id_ = new_uuid_v4 () |> Uuidm.to_string in
           (* TODO check uniqueness ? *)
           let v = Map.make () in
+          Console.log [ "New column kind:"; kind ];
           Yjs.Doc.transact yjs_doc (fun () ->
               Map.set v ~key:id (`Jv (Jv.of_string id_));
-              Map.set v ~key:kind (`Jv (Jv.of_string "string"));
+              Map.set v ~key:kind (`Jv (Jv.of_string kind_));
               Map.set v ~key:name (`Jv (Jv.of_string name_)));
           (id_, v)
       end
@@ -328,7 +351,7 @@ module S (*Schema*) = struct
             let rows_ = Array.make () in
             Map.set v ~key:columns (`Array columns_);
             Map.set v ~key:rows (`Array rows_));
-        make kind_v (`Map v)
+        make `Table (`Map v)
     end
   end
 
@@ -351,7 +374,11 @@ module S (*Schema*) = struct
 end
 [@@warning "-32"]
 
-type column_info = { id : string; kind : string Lwd.t; name : string Lwd.t }
+type column_info = {
+  id : string;
+  kind : S.Data.kind Lwd.t;
+  name : string Lwd.t;
+}
 [@@warning "-69"]
 
 type cell = { src : Yjs.Map.t; data : data }
@@ -359,6 +386,7 @@ and row = { map : Yjs.Map.t; cells : cell Lwd_seq.t Lwd.t } [@@warning "-69"]
 
 and data =
   | String of string Lwd.t
+  | Bool of bool Lwd.t
   | Table of {
       columns_src : Yjs.Array.t;
       rows_src : Yjs.Array.t;
@@ -382,7 +410,10 @@ let lwd_of_yjs_page =
         let lwd_map = lwd_of_yjs_map ~f:(fun ~key:_ v -> v) column_infos in
         let kind =
           Lwd_map.get_string lwd_map S.Data.Table.Column_info.kind
-          |> Lwd.map ~f:Option.get
+          |> Lwd.map ~f:(fun v ->
+                 Console.log [ "GET"; id; v ];
+                 Option.get v)
+          |> Lwd.map ~f:S.Data.kind_of_string
         in
         let name =
           Lwd_map.get_string lwd_map S.Data.Table.Column_info.name
@@ -434,6 +465,11 @@ let lwd_of_yjs_page =
         String
           (Lwd.map (Lwd_map.get item S.Data.content) ~f:(function
             | Some (`Jv s) -> Jv.to_string s
+            | _ -> assert false))
+    | "bool" ->
+        Bool
+          (Lwd.map (Lwd_map.get item S.Data.content) ~f:(function
+            | Some (`Jv s) -> Jv.to_bool s
             | _ -> assert false))
     | "table" -> (
         match Yjs.Map.get ~key:S.Data.content map with
@@ -522,6 +558,28 @@ let render_string_cell ~src (value : string Lwd.t) =
   let at = Attrs.O.(v (`P (C "cell"))) in
   Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
 
+let render_bool_cell ~src (value : bool Lwd.t) =
+  let current_value = Lwd.var false in
+  let do_if_new new_value f =
+    if not (Bool.equal new_value @@ Lwd.peek current_value) then f new_value
+  in
+  let value =
+    let$ s = value in
+    Lwd.set current_value s;
+    s
+  in
+  let open Forms.Field_checkboxes in
+  let on_change v =
+    let v = match v with Some _ -> true | None -> false in
+    do_if_new v (fun value ->
+        Lwd.set current_value value;
+        Yjs.Map.set src ~key:S.Data.content (`Jv (Jv.of_bool value)))
+  in
+  (* TODO the whole reactivity scheme here is not very satisfying... *)
+  let$* value = value in
+  let field, _value = make_single ~on_change "" "" [] value in
+  Elwd.div ~at:[] [ `R field ]
+
 let table_data_source source_rows (content : row Indexed_table.t) =
   let reduce_row (row : row) =
     Lwd_seq.fold_monoid
@@ -529,6 +587,7 @@ let table_data_source source_rows (content : row Indexed_table.t) =
         let elt =
           match data with
           | String value -> render_string_cell ~src value
+          | Bool value -> render_bool_cell ~src value
           | _ -> assert false
         in
         Lwd_seq.element elt)
@@ -559,9 +618,12 @@ let new_table_column_form columns rows =
   let module Connect_form = struct
     open Brr_lwd_ui.Forms.Form
 
-    type t = { name : string Field.validation }
+    type t = {
+      name : string Field.validation;
+      kind : S.Data.kind Field.validation;
+    }
 
-    let default = { name = Empty }
+    let default = { name = Empty; kind = Empty }
 
     let fields =
       Lwd.return
@@ -569,7 +631,21 @@ let new_table_column_form columns rows =
            [
              field
                (Lwd.pure @@ Field.text_input ~required:true (Some "demo"))
-               (fun _t v -> { name = v });
+               (fun t v -> { t with name = v });
+             field
+               (let { Forms.Field_select.field = elt; label = _; value } =
+                  Forms.Field_select.make ~persist:false
+                    { name = "kind"; default = "string"; label = [] }
+                    (Lwd.pure
+                    @@ Lwd_seq.of_list
+                         [ ("string", "String"); ("bool", "Checkbox") ])
+                in
+                Lwd.pure { Field.elt; value; validate = (fun v -> Ok v) })
+               (fun t kind ->
+                 let kind =
+                   Forms.Field.map_validation ~f:S.Data.kind_of_string kind
+                 in
+                 { t with kind });
              field (Lwd.pure @@ Field.submit (`P "Add column")) (fun t _v -> t);
            ])
   end in
@@ -579,15 +655,21 @@ let new_table_column_form columns rows =
       Console.log [ "Form submitted:"; t ];
       match t with
       (* FIXME: validation already happened, it's redundant to have to match *)
-      | { name = Ok name } ->
+      | { name = Ok name; kind = Ok kind } ->
           Console.log [ "Form valid:"; name ];
           Yjs.Doc.transact yjs_doc (fun () ->
-              let key, column_info = S.Data.Table.Column_info.make name in
+              let key, column_info = S.Data.Table.Column_info.make ~kind name in
+              let new_cell =
+                match kind with
+                | `String -> fun () -> S.Data.String.make ""
+                | `Bool -> fun () -> S.Data.Bool.make false
+                | _ -> assert false
+              in
               Yjs.Array.iter
                 ~f:(fun ~index:_ row _ ->
                   match row with
                   | `Map row ->
-                      let cell = S.Data.String.make "" in
+                      let cell = new_cell () in
                       Yjs.Map.set row ~key (`Map cell)
                   | _ -> assert false)
                 rows;
@@ -600,19 +682,38 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
   let module Row_form = struct
     open Brr_lwd_ui.Forms.Form
 
-    type t = string Field.validation Map.t
+    type t = [ `String of string | `Bool of bool ] Field.validation Map.t
 
     let default = Map.empty
 
     let fields =
       Lwd_table.map_reduce
-        (fun _ { id; kind = _; name } ->
-          field
-            (Lwd.map name ~f:(fun name ->
-                 Field.text_input ~placeholder:name ~required:true None))
-            (fun t v ->
-              Console.log [ "Add map with id "; id ];
-              Map.add id v t)
+        (fun _ { id; kind; name } ->
+          (let$* kind = kind in
+           match kind with
+           | `String ->
+               field
+                 (Lwd.map name ~f:(fun name ->
+                      Field.text_input ~placeholder:name ~required:true None))
+                 (fun t v ->
+                   Console.log [ "Add map with id "; id ];
+                   let v = Field.map_validation ~f:(fun v -> `String v) v in
+                   Map.add id v t)
+           | `Bool ->
+               field
+                 (Lwd.map name ~f:(fun _name ->
+                      let elt, value =
+                        Forms.Field_checkboxes.make_single "" "" [] false
+                      in
+                      { Field.elt; value; validate = (fun v -> Ok v) }))
+                 (fun t v ->
+                   let v =
+                     Field.map_validation
+                       ~f:(function Some _ -> `Bool true | _ -> `Bool false)
+                       v
+                   in
+                   Map.add id v t)
+           | _ -> assert false)
           |> Lwd_seq.element)
         Lwd_seq.monoid columns.table
       |> Lwd.map ~f:(fun seq ->
@@ -626,7 +727,10 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
         Map.fold
           (fun key v acc ->
             match v with
-            | Field.Ok v -> (key, S.Data.String.make v) :: acc
+            | Field.Ok (`String v) -> (key, S.Data.String.make v) :: acc
+            | Field.Ok (`Bool v) ->
+                Console.log [ "New row cell: "; Jv.of_bool v ];
+                (key, S.Data.Bool.make v) :: acc
             | _ -> assert false)
           t []
         |> S.Data.Table.Row.make
