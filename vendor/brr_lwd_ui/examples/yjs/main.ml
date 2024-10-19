@@ -277,22 +277,25 @@ module S (*Schema*) = struct
     let kind = "kind"
     let content = "content"
 
-    type kind = [ `String | `Bool | `Table ]
+    type kind = [ `String | `Bool | `Richtext | `Table ]
 
     let kind_to_string = function
       | `String -> "string"
       | `Bool -> "bool"
+      | `Richtext -> "text"
       | `Table -> "table"
 
     let kind_of_string = function
       | "string" -> `String
       | "bool" -> `Bool
+      | "text" -> `Richtext
       | "table" -> `Table
       | _ -> assert false
 
     let kind_to_name = function
       | `String -> "String"
       | `Bool -> "Checkbox"
+      | `Richtext -> "Richtext"
       | `Table -> "Table"
 
     let make kind_ content_ =
@@ -387,6 +390,7 @@ and row = { map : Yjs.Map.t; cells : cell Lwd_seq.t Lwd.t } [@@warning "-69"]
 and data =
   | String of string Lwd.t
   | Bool of bool Lwd.t
+  | Richtext of Yjs.Text.t
   | Table of {
       columns_src : Yjs.Array.t;
       rows_src : Yjs.Array.t;
@@ -721,6 +725,7 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
              @@ field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t))
   end in
   create
+    ~at:[ `P (At.class' (Jstr.v "inline-row-form")) ]
     (module Row_form)
     (fun t ->
       let cells =
@@ -851,6 +856,9 @@ let _ =
       @@ fun _ -> ignore @@ Lwd.quick_sample app
     in
     El.append_children (Document.body G.document) [ Lwd.quick_sample app ];
+    let container = El.div [] in
+    let _ = Quill.make ~container (Quill.make_config ~theme:Bubble ()) in
+    El.append_children (Document.body G.document) [ container ];
     Lwd.set_on_invalidate app on_invalidate
   in
   Ev.listen Ev.dom_content_loaded on_load (Window.as_target G.window)
