@@ -42,6 +42,7 @@ jobs:
 
       - name: Remove .gitignore file
         run: |
+          rm -f web/.gitignore
           rm -f web/yjs/.gitignore
 
       - name: Deploy 🚀
