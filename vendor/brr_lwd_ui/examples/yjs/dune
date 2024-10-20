@@ -16,13 +16,14 @@
   uuidm))
 
 (rule
+ (deps package.json yarn.lock)
  (targets node_modules)
  (action
   (progn
    (run yarn))))
 
 (rule
- (deps main.bc.js package.json yarn.lock node_modules)
+ (deps main.bc.js node_modules)
  (targets bundle.js bundle.js.map)
  (mode
   (promote (until-clean)))
