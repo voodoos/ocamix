@@ -24,7 +24,7 @@
 
 (rule
  (deps main.bc.js node_modules)
- (targets bundle.js bundle.js.map)
+ (targets bundle.css bundle.js bundle.js.map)
  (mode
   (promote (until-clean)))
  (action
