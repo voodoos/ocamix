@@ -16,18 +16,18 @@
   uuidm))
 
 (rule
- (deps
-  main.bc.js
-  package.json
-  yarn.lock
-  (source_tree node_modules))
+ (targets node_modules)
+ (action
+  (progn
+   (run yarn))))
+
+(rule
+ (deps main.bc.js package.json yarn.lock node_modules)
  (targets bundle.js bundle.js.map)
  (mode
   (promote (until-clean)))
  (action
-  (progn
-   (run yarn)
-   (run yarn build))))
+  (run yarn build)))
 
 (alias
  (name examples)
