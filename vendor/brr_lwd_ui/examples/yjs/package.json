@@ -1,0 +1,20 @@
+{
+  "name": "yjs-example",
+  "version": "dev",
+  "main": "bundle.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "yarn exec -- node_modules/esbuild/bin/esbuild main.bc.js --external:fs --external:constants --external:child_process --external:tty --bundle  --minify-syntax --minify-whitespace --sourcemap  --outfile=bundle.js "
+  },
+  "dependencies": {
+    "quill": "^2.0.2",
+    "quill-cursors": "^4.0.3",
+    "y-indexeddb": "^9.0.12",
+    "y-quill": "^1.0.0",
+    "y-webrtc": "^10.3.0",
+    "yjs": "^13.6.20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

@@ -1,2 +1,3 @@
 *.css
+bundle.js*
 !main.css

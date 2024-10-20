@@ -1,9 +1,3 @@
-import * as Y from 'yjs'
-import { WebrtcProvider } from 'y-webrtc'
-import { IndexeddbPersistence } from 'y-indexeddb'
-import { QuillBinding } from 'y-quill'
-
-window.yjs = Y
-window.WebrtcProvider = WebrtcProvider
-window.IndexeddbPersistence = IndexeddbPersistence
-window.QuillBinding = QuillBinding
+window.yjs = require('yjs')
+window.WebrtcProvider = require('y-webrtc').WebrtcProvider
+window.IndexeddbPersistence = require('y-indexeddb').IndexeddbPersistence
