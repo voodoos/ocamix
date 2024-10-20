@@ -598,12 +598,17 @@ let render_bool_cell ~src (value : bool Lwd.t) =
 
 let render_richtext_cell ~src:_ (value : Yjs.Text.t) =
   let container = El.div [] in
-  let editor =
-    Quill.(make ~container @@ config ~theme:Bubble ~cursors:true ())
-  in
-  let _ = (* TODO is there some cleanup to do ? *) Y_quill.make value editor in
   let at = Attrs.O.(v (`P (C "cell"))) in
-  Elwd.div ~at [ `P container ]
+  (* For Quill's toolbar to show we need to wrap the element in a container
+     before instantiating the editor. *)
+  let elt = Elwd.div ~at [ `P container ] in
+  let _editor =
+    let open Quill in
+    let toolbar = Array [ Bold; Italic; Underline ] in
+    make ~container @@ config ~theme:Snow ~cursors:true ~toolbar ()
+    |> (* TODO is there some cleanup to do ? *) Y_quill.make value
+  in
+  elt
 
 let table_data_source source_rows (content : row Indexed_table.t) =
   let reduce_row (row : row) =

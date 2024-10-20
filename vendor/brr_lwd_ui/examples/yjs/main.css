@@ -79,3 +79,16 @@ body {
     width: 100%;
     height: 100%;
 }
+
+.lwdui-virtual-table-row .ql-toolbar {
+    border: 0;
+    padding: 0;
+    height: 100%;
+
+    & .ql-formats {
+        display: flex;
+        flex-direction: column;
+        margin-right: 0
+        ;
+    }
+}
