@@ -7,6 +7,7 @@ open Lwd_infix
 let random_state = Random.State.make_self_init ()
 let new_uuid_v4 () = Uuidm.v4_gen random_state ()
 let yjs_doc = Yjs.Doc.make ()
+let _ = Quill.register ~path:"modules/cursors" Quill.cursors
 
 let provider =
   Yjs.Webrtc_provider.make ~room_name:"testroom5267564"
@@ -597,7 +598,9 @@ let render_bool_cell ~src (value : bool Lwd.t) =
 
 let render_richtext_cell ~src:_ (value : Yjs.Text.t) =
   let container = El.div [] in
-  let editor = Quill.(make ~container @@ config ~theme:Bubble ()) in
+  let editor =
+    Quill.(make ~container @@ config ~theme:Bubble ~cursors:true ())
+  in
   let _ = (* TODO is there some cleanup to do ? *) Y_quill.make value editor in
   let at = Attrs.O.(v (`P (C "cell"))) in
   Elwd.div ~at [ `P container ]
