@@ -40,6 +40,10 @@ jobs:
         run: |
           opam exec -- dune build --profile=release @default
 
+      - name: Remove .gitignore file
+        run: |
+          rm -f web/yjs/.gitignore
+
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
