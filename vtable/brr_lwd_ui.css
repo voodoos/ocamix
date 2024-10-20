@@ -1,0 +1,138 @@
+/* Reset box-sizing */
+
+html {
+    box-sizing: border-box;
+}
+
+*,
+*:before,
+*:after {
+    box-sizing: inherit;
+}
+
+/* Utility classes */
+.display-none {
+    display: none;
+}
+
+/* Style */
+
+.on {
+    background-color: red;
+}
+
+/* Ham menu */
+.hover-menu {
+    /* Required for absolute positioning of child */
+    /* position: relative; */
+}
+
+
+.hover-menu menu {
+    visibility: collapse;
+    position: absolute;
+    translate: -50%;
+    opacity: 0;
+    transition: all 125ms;
+}
+
+
+.hover-menu:hover menu,
+.hover-menu.active menu {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Draggable table */
+/* todo: borders should be in theme */
+.draggable-table {
+    display: inline-grid;
+}
+
+.draggable-table>div {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1/-1;
+}
+
+.draggable-table .hover-top {
+    box-shadow: 0px 200px 15px -200px rgba(255, 200, 0, 1) inset;
+}
+
+.draggable-table .hover-bottom {
+    box-shadow: 0px -200px 15px -200px rgba(255, 200, 0, 1) inset;
+}
+
+/* Virtual table */
+
+.lwdui-lazy-table {
+    display: inline-grid;
+    position: relative;
+    width: 100%;
+    height: 100%;
+
+    align-content: start;
+
+
+    border-top: 1px solid black;
+    border-left: 1px solid black;
+    border-bottom: 1px solid black;
+
+    :has(> &) {
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    & .lwdui-lazy-table-content,
+    & .lwdui-lazy-table-content-wrapper,
+    & .lwdui-virtual-table-row {
+        display: grid;
+        grid-template-columns: subgrid;
+        grid-column: 1/-1;
+    }
+
+    & .lwdui-lazy-table-content-wrapper {
+        height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scroll-behavior: smooth;
+    }
+
+    & .lwdui-virtual-table-row {
+        padding: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        border-bottom: 1px solid black;
+
+        &>div {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+            border-right: 1px solid black;
+        }
+
+        &>.row_spacer {
+            padding: 0;
+        }
+    }
+}
+
+.lwdui-controlled-scroll-wrapper {
+    position: relative;
+    overflow: hidden;
+
+    & .lwdui-controlled-scroll-controls {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+
+        transition: opacity 0.3s, visibility 0.3s;
+    }
+
+    &.locked .lwdui-controlled-scroll-controls {
+        visibility: hidden;
+        opacity: 0;
+    }
+}
