@@ -143,7 +143,7 @@ let _servers =
     "relay.webwormhole.io:3478";
   ]
 
-let make ~room_name ?signaling yjs_doc =
+let make ~room_name ?signaling ?awareness yjs_doc =
   let signaling =
     Option.map (fun v -> ("signaling", Jv.of_list Jv.of_string v)) signaling
   in
@@ -169,8 +169,12 @@ let make ~room_name ?signaling yjs_doc =
           |] )
   in
   let () = Brr.Console.log [ peer_opts ] in
+  let awareness =
+    Option.map (fun a -> ("awareness", Awareness.to_jv a)) awareness
+  in
   let options =
-    [ signaling; peer_opts ] |> List.filter_map Fun.id |> Array.of_list
+    [ signaling; peer_opts; awareness ]
+    |> List.filter_map Fun.id |> Array.of_list
   in
   Jv.new' web_rpc_provider
     [| Jv.of_string room_name; Doc.Doc.to_jv yjs_doc; Jv.obj options |]

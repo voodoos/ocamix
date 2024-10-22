@@ -7,10 +7,11 @@ open Lwd_infix
 let random_state = Random.State.make_self_init ()
 let new_uuid_v4 () = Uuidm.v4_gen random_state ()
 let yjs_doc = Yjs.Doc.make ()
+let awareness = Yjs.Awareness.make yjs_doc
 let _ = Quill.register ~path:"modules/cursors" Quill.cursors
 
 let provider =
-  Yjs.Webrtc_provider.make ~room_name:"testroom5267564"
+  Yjs.Webrtc_provider.make ~room_name:"testroom5267564" ~awareness
     ~signaling:[ "wss://p2p.u31.fr" ] yjs_doc
 
 let _provider = Yjs.Indexeddb_persistence.make ~doc_name:"zedoc" yjs_doc
@@ -606,7 +607,7 @@ let render_richtext_cell ~src:_ (value : Yjs.Text.t) =
     let open Quill in
     let toolbar = Array [ Bold; Italic; Underline ] in
     make ~container @@ config ~theme:Snow ~cursors:true ~toolbar ()
-    |> (* TODO is there some cleanup to do ? *) Y_quill.make value
+    |> (* TODO is there some cleanup to do ? *) Y_quill.make ~awareness value
   in
   elt
 

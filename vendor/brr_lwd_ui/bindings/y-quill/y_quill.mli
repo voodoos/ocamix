@@ -1,3 +1,3 @@
 type t
 
-val make : Yjs.Text.t -> Quill.t -> t
+val make : ?awareness:Yjs.Awareness.t -> Yjs.Text.t -> Quill.t -> t
