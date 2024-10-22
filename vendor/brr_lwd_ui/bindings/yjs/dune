@@ -1,6 +1,6 @@
 (library
  (name yjs)
  (js_of_ocaml
-  (javascript_files js/yjs.js))
+  (javascript_files yjs.js))
  (public_name brr-lwd-ui.bindings.yjs)
  (libraries brr))

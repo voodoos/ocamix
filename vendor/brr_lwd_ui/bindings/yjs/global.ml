@@ -1,2 +1,3 @@
-let yjs = Jv.get Jv.global "yjs"
-let awareness_protocol = Jv.get Jv.global "awarenessProtocol"
+external get_yjs : unit -> Jv.t = "get_yjs"
+
+let yjs = get_yjs ()

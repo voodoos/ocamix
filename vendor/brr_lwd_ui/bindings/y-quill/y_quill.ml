@@ -1,6 +1,8 @@
 type t = Jv.t
 
-let quill_binding = Global.quill_binding
+external get_y_quill : unit -> Jv.t = "get_y_quill"
+
+let quill_binding = Jv.get (get_y_quill ()) "QuillBinding"
 
 let make ?awareness text editor =
   let awareness = Option.map Yjs.Awareness.to_jv awareness in

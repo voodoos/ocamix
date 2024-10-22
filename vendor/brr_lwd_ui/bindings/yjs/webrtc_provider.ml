@@ -1,6 +1,8 @@
 type t = Jv.t
 
-let web_rpc_provider = Jv.get Jv.global "WebrtcProvider"
+external get_web_rtc_provider : unit -> Jv.t = "get_web_rtc_provider"
+
+let web_rtc_provider = get_web_rtc_provider ()
 
 let _servers =
   [
@@ -176,5 +178,5 @@ let make ~room_name ?signaling ?awareness yjs_doc =
     [ signaling; peer_opts; awareness ]
     |> List.filter_map Fun.id |> Array.of_list
   in
-  Jv.new' web_rpc_provider
+  Jv.new' web_rtc_provider
     [| Jv.of_string room_name; Doc.Doc.to_jv yjs_doc; Jv.obj options |]
