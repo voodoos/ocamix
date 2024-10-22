@@ -575,25 +575,32 @@ let render_string_cell ~src (value : string Lwd.t) =
   Elwd.div ~at [ `R value; `R edit_btn; `R edit_overlay ]
 
 let render_bool_cell ~src (value : bool Lwd.t) =
-  let current_value = Lwd.var false in
-  let do_if_new new_value f =
-    if not (Bool.equal new_value @@ Lwd.peek current_value) then f new_value
+  let input_el = Utils.Forward_ref.make () in
+  let on_change ev =
+    let t = Ev.target ev |> Ev.target_to_jv in
+    let checked = Jv.get t "checked" in
+    Yjs.Map.set src ~key:S.Data.content (`Jv checked)
   in
-  let value =
-    let$ s = value in
-    Lwd.set current_value s;
-    s
+  let at =
+    let type' = At.type' @@ Jstr.v "checkbox" in
+    let checked =
+      Lwd.map value ~f:(fun v ->
+          let () =
+            let el = Utils.Forward_ref.get_exn input_el |> El.to_jv in
+            Jv.set el "checked" @@ Jv.of_bool v
+          in
+          match v with true -> At.checked | false -> At.void)
+    in
+    [ `P type'; `R checked ]
   in
-  let open Forms.Field_checkboxes in
-  let on_change v =
-    let v = match v with Some _ -> true | None -> false in
-    do_if_new v (fun value ->
-        Lwd.set current_value value;
-        Yjs.Map.set src ~key:S.Data.content (`Jv (Jv.of_bool value)))
+  let ev = [ `P (Elwd.handler Ev.click on_change) ] in
+  let field =
+    Elwd.(
+      div
+        [
+          `R (input ~at ~ev ~on_create:(Utils.Forward_ref.set_exn input_el) ());
+        ])
   in
-  (* TODO the whole reactivity scheme here is not very satisfying... *)
-  let$* value = value in
-  let field, _value = make_single ~on_change "" "" [] value in
   let at = Attrs.O.(v (`P (C "cell"))) in
   Elwd.div ~at [ `R field ]
 
