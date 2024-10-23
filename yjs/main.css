@@ -92,3 +92,27 @@ body {
         ;
     }
 }
+
+.p2p_status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-evenly;
+    width: 3rem;
+
+    border-radius: 2rem;
+    & .p2p_status_icon {
+        font-size: 2.5rem;
+        line-height: 2.1rem;
+        height: 2rem;
+
+        &.red {
+            color: red;
+        }
+        &.orange {
+            color: orange;
+        }
+        &.green {
+            color: green;
+        }
+    }
+}
