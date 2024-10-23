@@ -180,3 +180,56 @@ let make ~room_name ?signaling ?awareness yjs_doc =
   in
   Jv.new' web_rtc_provider
     [| Jv.of_string room_name; Doc.Doc.to_jv yjs_doc; Jv.obj options |]
+
+type status = { connected : bool }
+type synced = { synced : bool }
+
+type peers = {
+  added : string list;
+  removed : string list;
+  webrtc_peers : string list;
+  bc_peers : string list;
+}
+
+type 'a event =
+  | Status : status event
+  | Synced : synced event
+  | Peers : peers event
+
+let on (type a) t (event : a event) ~(f : a -> unit) =
+  match event with
+  | Status ->
+      ignore
+      @@ Jv.call t "on"
+           [|
+             Jv.of_string "status";
+             Jv.callback ~arity:1 (fun status ->
+                 f { connected = Jv.get status "connected" |> Jv.to_bool });
+           |]
+  | Synced ->
+      ignore
+      @@ Jv.call t "on"
+           [|
+             Jv.of_string "synced";
+             Jv.callback ~arity:1 (fun synced ->
+                 f { synced = Jv.get synced "synced" |> Jv.to_bool });
+           |]
+  | Peers ->
+      ignore
+      @@ Jv.call t "on"
+           [|
+             Jv.of_string "peers";
+             Jv.callback ~arity:1 (fun peers ->
+                 let get_array key =
+                   Jv.get peers key |> Jv.to_list Jv.to_string
+                 in
+                 let peers =
+                   {
+                     added = get_array "added";
+                     removed = get_array "removed";
+                     webrtc_peers = get_array "webrtcPeers";
+                     bc_peers = get_array "bcPeers";
+                   }
+                 in
+                 f peers);
+           |]
