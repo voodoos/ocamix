@@ -9,35 +9,94 @@ let new_uuid_v4 () = Uuidm.v4_gen random_state ()
 let yjs_doc = Yjs.Doc.make ()
 let awareness = Yjs.Awareness.make yjs_doc
 let _ = Quill.register ~path:"modules/cursors" Quill.cursors
+let () = Yjs.Awareness.set_user_info awareness ~name:"Narines" ()
 
-let provider =
+let webrtc_provider =
   Yjs.Webrtc_provider.make ~room_name:"testroom5267564" ~awareness
     ~signaling:[ "wss://p2p.u31.fr" ] yjs_doc
 
 let _provider = Yjs.Indexeddb_persistence.make ~doc_name:"zedoc" yjs_doc
 let () = Jv.set (Window.to_jv G.window) "yjsdoc" (Jv.repr yjs_doc)
-let () = Jv.set (Window.to_jv G.window) "yjsprovider" (Jv.repr provider)
+let () = Jv.set (Window.to_jv G.window) "yjsprovider" (Jv.repr webrtc_provider)
 
-let _ =
-  Jv.call (Jv.repr provider) "on"
-    [|
-      Jv.of_string "synced";
-      Jv.callback ~arity:1 (fun _ -> Console.log [ "SYNCED!" ]);
-    |]
+type p2p_status = {
+  peers : int Lwd.var;
+  connected : bool Lwd.var;
+  synced : bool Lwd.var;
+}
+[@@warning "-69"]
 
-let _ =
-  Jv.call (Jv.repr provider) "on"
-    [|
-      Jv.of_string "status";
-      Jv.callback ~arity:1 (fun e -> Console.log [ "STATUS"; e ]);
-    |]
+let p2p_status =
+  let peers = Lwd.var 0 in
+  let connected = Lwd.var false in
+  let synced = Lwd.var false in
+  let _ =
+    Yjs.Webrtc_provider.on webrtc_provider Status ~f:(fun { connected = v } ->
+        Console.debug [ "Received connected"; Jv.of_bool v ];
 
-let _ =
-  Jv.call (Jv.repr provider) "on"
-    [|
-      Jv.of_string "peers";
-      Jv.callback ~arity:1 (fun e -> Console.log [ "PEERS"; e ]);
-    |]
+        Lwd.set connected v)
+  in
+  let _ =
+    Yjs.Webrtc_provider.on webrtc_provider Synced ~f:(fun { synced = v } ->
+        Console.debug [ "Received synced"; Jv.of_bool v ];
+        Lwd.set synced v)
+  in
+  let _ =
+    let l = List.length in
+    let debounce_adds = ref [] in
+    Yjs.Webrtc_provider.on webrtc_provider Peers ~f:(fun peers' ->
+        Console.debug [ "Received peers"; peers' ];
+        (* For unknown reason, disconnecting peers appear added once more when
+           they are webrtc peers. That might be a bug in y-webrtc *)
+        let is_webrtc_peer p =
+          List.exists (String.equal p) peers'.webrtc_peers
+        in
+        let remove_from_debounce p =
+          let result = ref None in
+          debounce_adds :=
+            List.filter
+              (fun p' ->
+                if String.equal p p' then (
+                  result := Some p;
+                  true)
+                else false)
+              !debounce_adds;
+          !result
+        in
+        let adds =
+          List.fold_left
+            (fun acc p ->
+              match remove_from_debounce p with
+              | None ->
+                  if is_webrtc_peer p then debounce_adds := p :: !debounce_adds;
+                  acc + 1
+              | Some _ -> acc)
+            0 peers'.added
+        in
+        Lwd.peek peers + adds - l peers'.removed |> Lwd.set peers)
+  in
+  { peers; connected; synced }
+
+let p2p_status_ui =
+  let open Attrs.O in
+  let color =
+    Lwd.map2 (Lwd.get p2p_status.connected) (Lwd.get p2p_status.synced)
+      ~f:(fun c s ->
+        Attrs.O.C
+          (match (c, s) with
+          | true, true -> "green"
+          | true, false -> "orange"
+          | false, _ -> "red"))
+  in
+  let icon =
+    let at = `P (C "p2p_status_icon") @:: v (`R color) in
+    Elwd.div ~at [ `P (El.txt' "♼") ]
+  in
+
+  let counter =
+    Lwd.map (Lwd.get p2p_status.peers) ~f:(fun i -> El.txt' (string_of_int i))
+  in
+  Elwd.div ~at:(v (`P (C "p2p_status"))) [ `R icon; `R counter ]
 
 module Lwd_map = struct
   type 'a binding = { key : string; value : 'a option Lwd.var }
@@ -894,7 +953,7 @@ let new_table_form =
 let app =
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
-    [ `R new_table_form; `S (Lwd_seq.lift render_page) ]
+    [ `R p2p_status_ui; `R new_table_form; `S (Lwd_seq.lift render_page) ]
 
 let _ =
   let on_load _ =
