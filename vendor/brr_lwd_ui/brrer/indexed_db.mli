@@ -18,6 +18,8 @@ module Key_range : sig
     ?upper_open:bool ->
     unit ->
     t
+
+  val only : Jv.t -> t
 end
 
 module Events : sig

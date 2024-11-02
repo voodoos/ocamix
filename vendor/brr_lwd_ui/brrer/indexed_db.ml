@@ -13,10 +13,13 @@ module Key_range = struct
 
   external of_jv : Jv.t -> 'a = "%identity"
 
+  let g = Jv.get Jv.global "IDBKeyRange"
+
   let bound ~lower ~upper ?(lower_open = false) ?(upper_open = false) () =
-    let c = Jv.get Jv.global "IDBKeyRange" in
-    Jv.call c "bound"
+    Jv.call g "bound"
       [| lower; upper; Jv.of_bool lower_open; Jv.of_bool upper_open |]
+
+  let only value = Jv.call g "only" [| value |]
 end
 
 module Events = struct
