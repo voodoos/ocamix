@@ -1,9 +1,7 @@
 open Brr
 
 module Key_path : sig
-  type t = Id of string | S of t array
-
-  val to_jv : t -> Jv.t
+  type t = Empty | Identifier of string | Identifiers of string array
 end
 
 module Key_range : sig
@@ -60,6 +58,8 @@ module type Key = sig
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
 end
+
+module Auto_increment : Key with type t = int
 
 module type Store_content_intf = sig
   type t

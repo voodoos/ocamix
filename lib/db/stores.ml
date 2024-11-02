@@ -28,7 +28,7 @@ module Orderred_items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = Indexed_db.Key_path.Id "id"
+    let path = Indexed_db.Key_path.Identifier "id"
   end
 
   let name = "items_by_date_added"
@@ -82,7 +82,7 @@ module Items = struct
 
     let path =
       Indexed_db.Key_path.(
-        S [| Id "item.Id"; Id "item.Name"; Id "sorts.views" |])
+        Identifiers [| "item.Id"; "item.Name"; "sorts.views" |])
   end
 
   module Key_date_added = struct
@@ -90,7 +90,7 @@ module Items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = Indexed_db.Key_path.Id "sorts.date_added"
+    let path = Indexed_db.Key_path.Identifier "sorts.date_added"
   end
 
   module Key_id = struct
@@ -98,7 +98,7 @@ module Items = struct
 
     let to_jv k = Jv.of_string k
     let of_jv j = Jv.to_string j
-    let path = Indexed_db.Key_path.Id "item.Id"
+    let path = Indexed_db.Key_path.Identifier "item.Id"
   end
 
   module Key_view_kind = struct
@@ -113,7 +113,7 @@ module Items = struct
           { type' = Jv.to_string type'; views = Jv.(to_list to_string views) }
       | _ -> assert false
 
-    let path = Indexed_db.Key_path.S [| Id "item.Type"; Id "sorts.views" |]
+    let path = Indexed_db.Key_path.Identifiers [| "item.Type"; "sorts.views" |]
   end
 
   module Key_type_name = struct
@@ -131,7 +131,8 @@ module Items = struct
       | _ -> assert false
 
     let path =
-      Indexed_db.Key_path.S [| Id "item.CollectionType"; Id "sorts.sort_name" |]
+      Indexed_db.Key_path.Identifiers
+        [| "item.CollectionType"; "sorts.sort_name" |]
   end
 
   let name = "items"
@@ -157,7 +158,7 @@ module Virtual_folder = struct
 
     let to_jv k = Jv.of_string k
     let of_jv j = Jv.to_string j
-    let path = Indexed_db.Key_path.Id "ItemId"
+    let path = Indexed_db.Key_path.Identifier "ItemId"
   end
 
   let name = "virtual_folders"

@@ -1,11 +1,12 @@
 open Brr
 
 module Key_path = struct
-  type t = Id of string | S of t array
+  type t = Empty | Identifier of string | Identifiers of string array
 
-  let rec to_jv = function
-    | Id p -> Jv.of_string p
-    | S keys -> Jv.of_array to_jv keys
+  let to_jv = function
+    | Empty -> Jv.of_string ""
+    | Identifier p -> Jv.of_string p
+    | Identifiers keys -> Jv.of_array Jv.of_string keys
 end
 
 module Key_range = struct
@@ -72,6 +73,14 @@ module type Key = sig
   val path : Key_path.t
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
+end
+
+module Auto_increment : Key with type t = int = struct
+  type t = int
+
+  let path = Key_path.Empty
+  let to_jv = Jv.of_int
+  let of_jv = Jv.to_int
 end
 
 module type Store_content_intf = sig
@@ -298,12 +307,14 @@ module Database = struct
   let create_object_store (type t') (module S : Store with type t = t')
       ?(auto_increment = false) (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
-    (* TODO: move autoincrement to store_content *)
-    let key_path = Key_path.to_jv S.Content.Key.path in
-    let opts = ("keyPath", key_path) :: opts in
+    let opts =
+      if S.Content.Key.path = Empty then opts
+      else
+        let key_path = Key_path.to_jv S.Content.Key.path in
+        ("keyPath", key_path) :: opts
+    in
     let options = Jv.obj @@ Array.of_list opts in
     Console.info [ "new object store with options:"; options ];
-    (* TODO: keypath should be optionnal *)
     Jv.call db "createObjectStore" [| Jv.of_string S.Content.name; options |]
     |> S.of_jv
 
