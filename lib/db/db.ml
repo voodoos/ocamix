@@ -37,6 +37,7 @@ let on_upgrade_needed e q =
     let key_path = Indexed_db.Key_path.Identifier "id" in
     Orderred_items_store.create db ~key_path ~auto_increment:false
   in
+  let _ = ItemsByDateAdded.create list in
   let items =
     let key_path =
       Indexed_db.Key_path.(
@@ -44,18 +45,17 @@ let on_upgrade_needed e q =
     in
     Item_store.create ~key_path ~auto_increment:false db
   in
+  let () =
+    ignore
+      ( ItemsByTypeAndName.create items,
+        ItemsByViewAndKind.create items,
+        ItemsById.create items )
+  in
   let virtual_folders =
     let key_path = Indexed_db.Key_path.Identifier "ItemId" in
     Virtual_folder_store.create ~key_path ~auto_increment:false db
   in
-  let index_date_added =
-    Item_store.create_index (module ItemsByDateAdded) items
-  in
-  let _ = ItemsByTypeAndName.create items () in
-  let _ = ItemsByViewAndKind.create items () in
-  let _ = ItemsById.create items () in
-  Console.info
-    [ "Stores created:"; list; items; index_date_added; virtual_folders ]
+  Console.info [ "Stores created:"; list; items; virtual_folders ]
 
 let with_idb ?version ~name f =
   let open Brr_io.Indexed_db in

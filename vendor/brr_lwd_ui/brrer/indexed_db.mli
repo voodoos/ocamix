@@ -223,7 +223,7 @@ module Make_index
 
   include module type of Params
 
-  val create : Store.t -> unit -> t
+  val create : Store.t -> t
   (** Creates a new index during a version upgrade. [Some_index.create store] is
       equivalent to [Store.create_index (module Some_index) store] but more
       convenient to use in most cases. *)

@@ -350,7 +350,7 @@ struct
 
   include Index
 
-  let create store () = Store.create_index (module Index) store
+  let create store = Store.create_index (module Index) store
 end
 
 module Open_db_request = struct
