@@ -239,7 +239,12 @@ module type Store_intf = sig
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 
   val create_index :
-    (module Index_intf with type t = 't) -> name:string -> Key_path.t -> t -> 't
+    (module Index_intf with type t = 't) ->
+    name:string ->
+    Key_path.t ->
+    ?unique:bool ->
+    t ->
+    't
 
   val index : (module Index_intf with type t = 't) -> name:string -> t -> 't
   val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
@@ -314,9 +319,15 @@ struct
       Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
 
     let create_index (type t') (module I : Index_intf with type t = t') ~name
-        key_path t : t' =
+        key_path ?unique t : t' =
+      let options =
+        [ Option.map (fun b -> ("unique", Jv.of_bool b)) unique ]
+        |> List.filter_map Fun.id |> Array.of_list |> Jv.obj
+      in
+
       let key_path = Key_path.to_jv key_path in
-      Jv.call t "createIndex" [| Jv.of_string name; key_path |] |> I.of_jv
+      Jv.call t "createIndex" [| Jv.of_string name; key_path; options |]
+      |> I.of_jv
 
     let index (type t') (module I : Index_intf with type t = t') ~name t : t' =
       Jv.call t "index" [| Jv.of_string name |] |> I.of_jv
@@ -344,8 +355,8 @@ module Make_index (Store : Store_intf) (Key : Key) = struct
 
   include Index
 
-  let create ~name key_path store =
-    Store.create_index (module Index) ~name key_path store
+  let create ~name key_path ?unique store =
+    Store.create_index (module Index) ~name key_path ?unique store
 end
 
 module Open_db_request = struct

@@ -157,7 +157,12 @@ module type Store_intf = sig
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 
   val create_index :
-    (module Index_intf with type t = 't) -> name:string -> Key_path.t -> t -> 't
+    (module Index_intf with type t = 't) ->
+    name:string ->
+    Key_path.t ->
+    ?unique:bool ->
+    t ->
+    't
 
   val index : (module Index_intf with type t = 't) -> name:string -> t -> 't
   val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
@@ -217,7 +222,7 @@ module Make_index (Store : Store_intf) (Key : Key) : sig
   include module type of
       Content_access (Store.Content) (Store.Primary_key) (Key)
 
-  val create : name:string -> Key_path.t -> Store.t -> t
+  val create : name:string -> Key_path.t -> ?unique:bool -> Store.t -> t
   (** Creates a new index during a version upgrade. [Some_index.create store] is
       equivalent to [Store.create_index (module Some_index) store] but more
       convenient to use in most cases. *)
