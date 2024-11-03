@@ -73,6 +73,9 @@ module Item = struct
     let assoc = List.map ~f:(fun (key, v) -> (key, `String v)) i in
     `Assoc assoc
 
+  type genre_item = { name : string; [@key "Name"] id : string [@key "Id"] }
+  [@@deriving yojson]
+
   type image_blur_hashes = {
     primary : image_blur_hash option; [@yojson.option] [@key "Primary"]
   }
@@ -206,6 +209,7 @@ module Item = struct
     server_id : string; [@key "ServerId"]
     image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
     type_ : type_str; [@key "Type"]
+    genre_items : genre_item list; [@default []] [@key "GenreItems"]
     collection_type : string option;
         [@default None]
         [@yojson_drop_default Equal.poly]
