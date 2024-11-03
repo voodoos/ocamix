@@ -63,6 +63,11 @@ let on_upgrade_needed e q =
     let key_path = Indexed_db.Key_path.Identifier "ItemId" in
     Virtual_folder_store.create ~key_path ~auto_increment:false db
   in
+  let _genres =
+    Genres_store.create ~auto_increment:true db
+    |> Genres_by_name.create ~name:"genres_by_name"
+         (Key_path.Identifier "item.name")
+  in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
 
 let with_idb ?version ~name f =

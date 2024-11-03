@@ -159,3 +159,25 @@ module ItemsByDateAdded =
 module ItemsByViewAndKind = Make_index (Items_store) (Items.Key_view_kind)
 module ItemsById = Make_index (Items_store) (Items.Key_id)
 module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
+
+module Genres = struct
+  open Generic_schema
+
+  type t = Genre.t with_source [@@deriving yojson]
+
+  let name = "genres"
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+end
+
+module Genres_store = Make_object_store (Genres) (Auto_increment)
+
+module Genres_by_name =
+  Make_index
+    (Genres_store)
+    (struct
+      type t = string
+
+      let of_jv = Jv.to_string
+      let to_jv = Jv.of_string
+    end)
