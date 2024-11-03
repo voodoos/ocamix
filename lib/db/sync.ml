@@ -352,20 +352,53 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         in
         let idb_put ~start_index items =
           let open Brr_io.Indexed_db in
-          let transaction =
-            Database.transaction
-              [ (module OI); (module I); (module Stores.Genres_store) ]
-              ~mode:Readwrite idb
+          let get_or_set_genre store index ({ name; id } : Api.Item.genre_item)
+              =
+            let canon =
+              name |> String.lowercase_ascii
+              |> String.filter ~f:(fun c ->
+                     let c = Char.to_int c in
+                     (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
+            in
+            Stores.Genres_by_canonical_name.get_key canon index
+            |> Request.fut
+            |> Fun.flip Fut.bind (function
+                 | Ok (Some key) ->
+                     Console.log [ "Found genre with key"; key ];
+                     Fut.return key
+                 | Ok None ->
+                     let genre =
+                       Generic_schema.
+                         {
+                           source_info = Jellyfin { id };
+                           item = { Genre.name; canon };
+                         }
+                     in
+                     Console.log [ "Genre not found, inserting" ];
+                     Stores.Genres_store.add genre store
+                     |> Request.fut |> Fut.map Result.get_exn
+                 | Error e -> raise (Jv.Error e))
           in
-          let s_list = Transaction.object_store (module OI) transaction in
-          let s_items = Transaction.object_store (module I) transaction in
-          let s_genres =
-            Console.log [ "objs" ];
-            Transaction.object_store (module Stores.Genres_store) transaction
-          in
-          Console.log [ "after" ];
           List.iteri items
             ~f:(fun index ({ Api.Item.id; path; type_; name; _ } as item) ->
+              let transaction =
+                Database.transaction
+                  [ (module OI); (module I); (module Stores.Genres_store) ]
+                  ~mode:Readwrite idb
+              in
+              let s_list = Transaction.object_store (module OI) transaction in
+              let s_items = Transaction.object_store (module I) transaction in
+              let s_genres =
+                Console.log [ "objs" ];
+                Transaction.object_store
+                  (module Stores.Genres_store)
+                  transaction
+              in
+              let i_genres =
+                Stores.Genres_store.index
+                  (module Stores.Genres_by_canonical_name)
+                  ~name:"genres_by_canon_name" s_genres
+              in
               let index = start_index + index in
               let path = Option.value ~default:"" path in
               let views = views_of_path vfolders path in
@@ -374,22 +407,8 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               match type_ with
               | MusicAlbum ->
                   List.iter item.genre_items
-                    ~f:(fun ({ name; id } : Api.Item.genre_item) ->
-                      let canon =
-                        name |> String.lowercase_ascii
-                        |> String.filter ~f:(fun c ->
-                               let c = Char.to_int c in
-                               (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
-                      in
-                      let genre =
-                        Generic_schema.
-                          {
-                            source_info = Jellyfin { id };
-                            item = { Genre.name; canon };
-                          }
-                      in
-                      Console.log [ "put"; name ];
-                      Stores.Genres_store.put genre s_genres |> ignore)
+                    ~f:(fun (genre_item : Api.Item.genre_item) ->
+                      get_or_set_genre s_genres i_genres genre_item |> ignore)
                   (* todo store the album*)
               | _ ->
                   I.put

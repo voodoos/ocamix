@@ -66,7 +66,7 @@ let on_upgrade_needed e q =
   in
   let _genres =
     Genres_store.create ~auto_increment:true db
-    |> Genres_by_canonical_name.create ~name:"genres_by_canonname"
+    |> Genres_by_canonical_name.create ~name:"genres_by_canon_name" ~unique:true
          (Key_path.Identifier "item.canon")
   in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
