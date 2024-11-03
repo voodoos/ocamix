@@ -117,6 +117,9 @@ struct
 
   external of_jv : Jv.t -> t = "%identity"
 
+  module Content = Content
+  module Primary_key = Primary_key
+
   let count () t = Jv.call t "count" [||] |> Request.of_jv ~f:Jv.to_int
 
   let get key t =
@@ -236,9 +239,8 @@ module type Index = sig
   module Key : Key
 end
 
-module Make_object_store (C : Store_content_intf) (Primary_key : Key) = struct
-  module Content = C
-  module Primary_key = Primary_key
+module Make_object_store (Content : Store_content_intf) (Primary_key : Key) =
+struct
   include Content_access (Content) (Primary_key) (Primary_key)
 
   let add v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
@@ -273,9 +275,8 @@ module Make_index
     (Store : Store_intf)
     (Key : Key) =
 struct
-  module Content = Store.Content
-  module Key = Key
   include Content_access (Store.Content) (Store.Primary_key) (Key)
+  module Key = Key
   include P
 end
 

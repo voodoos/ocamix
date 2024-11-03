@@ -74,7 +74,10 @@ module Content_access
     (Key : Key) : sig
   type t
 
-  external of_jv : Jv.t -> t = "%identity"
+  val of_jv : Jv.t -> t
+
+  module Content : Store_content_intf with type t = Content.t
+  module Primary_key : Key with type t = Primary_key.t
 
   module Cursor : sig
     type t
@@ -154,9 +157,9 @@ module type Index = sig
   module Key : Key
 end
 
-module Make_object_store (C : Store_content_intf) (Primary_key : Key) : sig
-  module Content : Store_content_intf with type t = C.t
-  module Primary_key : Key with type t = Primary_key.t
+module Make_object_store
+    (Content : Store_content_intf)
+    (Primary_key : Key) : sig
   include module type of Content_access (Content) (Primary_key) (Primary_key)
 
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
@@ -166,19 +169,18 @@ module Make_object_store (C : Store_content_intf) (Primary_key : Key) : sig
 end
 
 module Make_index
-    (P : sig
+    (Params : sig
       val name : string
       val key_path : Key_path.t
     end)
     (Store : Store_intf)
     (Key : Key) : sig
-  module Content : Store_content_intf with type t = Store.Content.t
   module Key : Key with type t = Key.t
 
   include module type of
       Content_access (Store.Content) (Store.Primary_key) (Key)
 
-  include module type of P
+  include module type of Params
 end
 
 module Transaction : sig
