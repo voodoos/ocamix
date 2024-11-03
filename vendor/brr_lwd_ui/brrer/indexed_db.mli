@@ -1,7 +1,7 @@
 open Brr
 
 module Key_path : sig
-  type t = Empty | Identifier of string | Identifiers of string array
+  type t = Identifier of string | Identifiers of string array
 end
 
 module Key_range : sig
@@ -54,7 +54,6 @@ end
 module type Key = sig
   type t
 
-  val path : Key_path.t
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
 end
@@ -149,6 +148,7 @@ module type Index = sig
 
   val of_jv : Jv.t -> t
   val name : string
+  val key_path : Key_path.t
 
   module Key : Key
 end
@@ -156,6 +156,7 @@ end
 module Make_index
     (P : sig
       val name : string
+      val key_path : Key_path.t
     end)
     (C : Store_content_intf)
     (Key : Key) : sig
@@ -190,7 +191,11 @@ module Database : sig
   val of_jv : Jv.t -> t
 
   val create_object_store :
-    (module Store with type t = 't) -> ?auto_increment:bool -> t -> 't
+    (module Store with type t = 't) ->
+    ?key_path:Key_path.t ->
+    ?auto_increment:bool ->
+    t ->
+    't
 
   val delete_object_store : t -> string -> unit
 

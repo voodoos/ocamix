@@ -1,10 +1,9 @@
 open Brr
 
 module Key_path = struct
-  type t = Empty | Identifier of string | Identifiers of string array
+  type t = Identifier of string | Identifiers of string array
 
   let to_jv = function
-    | Empty -> Jv.of_string ""
     | Identifier p -> Jv.of_string p
     | Identifiers keys -> Jv.of_array Jv.of_string keys
 end
@@ -70,7 +69,6 @@ end
 module type Key = sig
   type t
 
-  val path : Key_path.t
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
 end
@@ -78,7 +76,6 @@ end
 module Auto_increment : Key with type t = int = struct
   type t = int
 
-  let path = Key_path.Empty
   let to_jv = Jv.of_int
   let of_jv = Jv.to_int
 end
@@ -232,6 +229,7 @@ module type Index = sig
 
   val of_jv : Jv.t -> t
   val name : string
+  val key_path : Key_path.t
 
   module Key : Key
 end
@@ -239,6 +237,7 @@ end
 module Make_index
     (P : sig
       val name : string
+      val key_path : Key_path.t
     end)
     (C : Store_content_intf)
     (K : Key) =
@@ -262,7 +261,7 @@ module Make_object_store (C : Store_content_intf) = struct
     Jv.call t "add" args |> Request.of_jv ~f:Content.Key.of_jv
 
   let create_index (type t') (module I : Index with type t = t') t : t' =
-    let key_path = Key_path.to_jv I.Key.path in
+    let key_path = Key_path.to_jv I.key_path in
     Jv.call t "createIndex" [| Jv.of_string I.name; key_path |] |> I.of_jv
 
   let index (type t') (module I : Index with type t = t') t : t' =
@@ -305,13 +304,14 @@ module Database = struct
   external of_jv : Jv.t -> t = "%identity"
 
   let create_object_store (type t') (module S : Store with type t = t')
-      ?(auto_increment = false) (db : t) : t' =
+      ?key_path ?(auto_increment = false) (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
     let opts =
-      if S.Content.Key.path = Empty then opts
-      else
-        let key_path = Key_path.to_jv S.Content.Key.path in
-        ("keyPath", key_path) :: opts
+      match key_path with
+      | None -> opts
+      | Some key_path ->
+          let key_path = Key_path.to_jv key_path in
+          ("keyPath", key_path) :: opts
     in
     let options = Jv.obj @@ Array.of_list opts in
     Console.info [ "new object store with options:"; options ];

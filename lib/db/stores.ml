@@ -28,7 +28,6 @@ module Orderred_items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = Indexed_db.Key_path.Identifier "id"
   end
 
   let name = "items_by_date_added"
@@ -79,10 +78,6 @@ module Items = struct
           let views = Jv.to_list Jv.to_string views in
           { id; sort_name; views }
       | _ -> assert false
-
-    let path =
-      Indexed_db.Key_path.(
-        Identifiers [| "item.Id"; "item.Name"; "sorts.views" |])
   end
 
   module Key_date_added = struct
@@ -90,7 +85,6 @@ module Items = struct
 
     let to_jv k = Jv.of_int k
     let of_jv j = Jv.to_int j
-    let path = Indexed_db.Key_path.Identifier "sorts.date_added"
   end
 
   module Key_id = struct
@@ -98,7 +92,6 @@ module Items = struct
 
     let to_jv k = Jv.of_string k
     let of_jv j = Jv.to_string j
-    let path = Indexed_db.Key_path.Identifier "item.Id"
   end
 
   module Key_view_kind = struct
@@ -112,8 +105,6 @@ module Items = struct
       | [| type'; views |] ->
           { type' = Jv.to_string type'; views = Jv.(to_list to_string views) }
       | _ -> assert false
-
-    let path = Indexed_db.Key_path.Identifiers [| "item.Type"; "sorts.views" |]
   end
 
   module Key_type_name = struct
@@ -129,10 +120,6 @@ module Items = struct
             sort_name = Jv.to_string sort_name;
           }
       | _ -> assert false
-
-    let path =
-      Indexed_db.Key_path.Identifiers
-        [| "item.CollectionType"; "sorts.sort_name" |]
   end
 
   let name = "items"
@@ -158,7 +145,6 @@ module Virtual_folder = struct
 
     let to_jv k = Jv.of_string k
     let of_jv j = Jv.to_string j
-    let path = Indexed_db.Key_path.Identifier "ItemId"
   end
 
   let name = "virtual_folders"
@@ -175,6 +161,7 @@ module ItemsByDateAdded =
   Indexed_db.Make_index
     (struct
       let name = "items_by_date_added"
+      let key_path = Indexed_db.Key_path.Identifier "sorts.date_added"
     end)
     (Items)
     (Items.Key_date_added)
@@ -183,6 +170,9 @@ module ItemsByViewAndKind =
   Indexed_db.Make_index
     (struct
       let name = "items_by_view_and_kind"
+
+      let key_path =
+        Indexed_db.Key_path.Identifiers [| "item.Type"; "sorts.views" |]
     end)
     (Items)
     (Items.Key_view_kind)
@@ -191,6 +181,7 @@ module ItemsById =
   Indexed_db.Make_index
     (struct
       let name = "items_by_id"
+      let key_path = Indexed_db.Key_path.Identifier "item.Id"
     end)
     (Items)
     (Items.Key_id)
@@ -199,6 +190,10 @@ module ItemsByTypeAndName =
   Indexed_db.Make_index
     (struct
       let name = "items_by_type_and_name"
+
+      let key_path =
+        Indexed_db.Key_path.Identifiers
+          [| "item.CollectionType"; "sorts.sort_name" |]
     end)
     (Items)
     (Items.Key_type_name)

@@ -3,6 +3,7 @@ module Sync = Sync
 module View = View
 open Brrer
 open Brr
+open Brr_io
 module OI = Stores.Orderred_items_store
 module I = Stores.Items_store
 module VF = Stores.Virtual_folder_store
@@ -34,20 +35,28 @@ let on_upgrade_needed e q =
   Console.info [ "Erasing existing stores" ];
   Array.iter (Database.delete_object_store db) stores;
   let list =
-    Database.create_object_store (module OI) ~auto_increment:false db
+    let key_path = Indexed_db.Key_path.Identifier "id" in
+    Database.create_object_store (module OI) ~key_path ~auto_increment:false db
   in
   let items =
-    Database.create_object_store (module I) ~auto_increment:false db
+    let key_path =
+      Indexed_db.Key_path.(
+        Identifiers [| "item.Id"; "item.Name"; "sorts.views" |])
+    in
+    Database.create_object_store (module I) ~key_path ~auto_increment:false db
   in
   let virtual_folders =
-    Database.create_object_store (module VF) ~auto_increment:false db
+    let key_path = Indexed_db.Key_path.Identifier "ItemId" in
+    Database.create_object_store (module VF) ~key_path ~auto_increment:false db
   in
-  let index_date_added =
-    I.create_index (module Stores.ItemsByDateAdded) items
+  let open Stores in
+  let _genres =
+    Database.create_object_store (module Genres_store) ~auto_increment:true db
   in
-  let _ = I.create_index (module Stores.ItemsByTypeAndName) items in
-  let _ = I.create_index (module Stores.ItemsByViewAndKind) items in
-  let _ = I.create_index (module Stores.ItemsById) items in
+  let index_date_added = I.create_index (module ItemsByDateAdded) items in
+  let _ = I.create_index (module ItemsByTypeAndName) items in
+  let _ = I.create_index (module ItemsByViewAndKind) items in
+  let _ = I.create_index (module ItemsById) items in
   Console.info
     [ "Stores created:"; list; items; index_date_added; virtual_folders ]
 
