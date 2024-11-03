@@ -2,7 +2,7 @@
 # see https://github.com/nodejs/node/issues/48444
 #export UV_USE_IO_URING=0
 
-opam exec -- dune build @default --profile=dev --watch --terminal-persistence=preserve &
+opam exec -- dune build @ocaml-index @default --profile=dev --watch --terminal-persistence=preserve &
 DUNE_PID=$!
 yarn run dev &
 SERVER_PID=$!
