@@ -126,6 +126,10 @@ struct
     let f jv = Jv.to_option (fun j -> Content.of_jv j) jv in
     Jv.call t "get" [| Key.to_jv key |] |> Request.of_jv ~f
 
+  let get_key key t =
+    let f jv = Jv.to_option (fun j -> Primary_key.of_jv j) jv in
+    Jv.call t "getKey" [| Key.to_jv key |] |> Request.of_jv ~f
+
   let get_all t =
     let f jv = Jv.to_array (fun c -> Content.of_jv c) jv in
     Jv.call t "getAll" [||] |> Request.of_jv ~f
@@ -270,6 +274,8 @@ module Transaction = struct
 
   let object_store (type t') (module S : Store_intf with type t = t') t : t' =
     Jv.call t "objectStore" [| Jv.of_string S.Content.name |] |> S.of_jv
+
+  let commit t = Jv.call t "commit" [||] |> ignore
 end
 
 module Database = struct

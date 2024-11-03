@@ -104,6 +104,8 @@ module Content_access
   (** TODO: count has optional parameters *)
 
   val get : Key.t -> t -> Content.t option Request.t
+  val get_key : Key.t -> t -> Primary_key.t option Request.t
+  (* TODO: other parameters are possible *)
 
   val get_all : t -> Content.t Array.t Request.t
   (** [get_all] retrieves all objects that are inside the index. There is a
@@ -175,6 +177,7 @@ module Transaction : sig
   val string_of_mode : mode -> string
   val mode_of_string : string -> mode
   val object_store : (module Store_intf with type t = 't) -> t -> 't
+  val commit : t -> unit
 end
 
 module Database : sig
