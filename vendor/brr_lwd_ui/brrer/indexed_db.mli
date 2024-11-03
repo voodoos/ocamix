@@ -147,7 +147,7 @@ module type Store_intf = sig
   module Primary_key : Key
 end
 
-module type Index = sig
+module type Index_intf = sig
   type t
 
   val of_jv : Jv.t -> t
@@ -155,32 +155,6 @@ module type Index = sig
   val key_path : Key_path.t
 
   module Key : Key
-end
-
-module Make_object_store
-    (Content : Store_content_intf)
-    (Primary_key : Key) : sig
-  include module type of Content_access (Content) (Primary_key) (Primary_key)
-
-  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
-  val create_index : (module Index with type t = 't) -> t -> 't
-  val index : (module Index with type t = 't) -> t -> 't
-  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
-end
-
-module Make_index
-    (Params : sig
-      val name : string
-      val key_path : Key_path.t
-    end)
-    (Store : Store_intf)
-    (Key : Key) : sig
-  module Key : Key with type t = Key.t
-
-  include module type of
-      Content_access (Store.Content) (Store.Primary_key) (Key)
-
-  include module type of Params
 end
 
 module Transaction : sig
@@ -210,6 +184,33 @@ module Database : sig
     (module Store_intf) list -> ?mode:Transaction.mode -> t -> Transaction.t
 
   val object_store_names : t -> string array
+end
+
+module Make_object_store
+    (Content : Store_content_intf)
+    (Primary_key : Key) : sig
+  include module type of Content_access (Content) (Primary_key) (Primary_key)
+
+  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val create_index : (module Index_intf with type t = 't) -> t -> 't
+  val index : (module Index_intf with type t = 't) -> t -> 't
+  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val create : ?key_path:Key_path.t -> ?auto_increment:bool -> Database.t -> t
+end
+
+module Make_index
+    (Params : sig
+      val name : string
+      val key_path : Key_path.t
+    end)
+    (Store : Store_intf)
+    (Key : Key) : sig
+  module Key : Key with type t = Key.t
+
+  include module type of
+      Content_access (Store.Content) (Store.Primary_key) (Key)
+
+  include module type of Params
 end
 
 module Open_db_request : sig

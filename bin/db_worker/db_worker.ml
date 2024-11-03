@@ -51,8 +51,8 @@ module Worker () = struct
   let read_only_store () =
     let open Fut.Result_syntax in
     let+ idb = idb in
-    IDB.Database.transaction [ (module Db.I) ] ~mode:Readonly idb
-    |> IDB.Transaction.object_store (module Db.I)
+    IDB.Database.transaction [ (module Db.Item_store) ] ~mode:Readonly idb
+    |> IDB.Transaction.object_store (module Db.Item_store)
 
   let get_view_keys store { Db.View.kind = _; src_views; sort; filters } =
     (* todo: staged memoization + specialized queries using indexes *)
@@ -121,7 +121,7 @@ module Worker () = struct
         Result.map_err (fun jv -> `Jv jv) res
     | Get_all () ->
         let* store = read_only_store () in
-        let+ req = Db.I.get_all store |> as_fut in
+        let+ req = Db.Item_store.get_all store |> as_fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
     | Get_server_libraries server_id' ->
         let* store = read_only_store () in

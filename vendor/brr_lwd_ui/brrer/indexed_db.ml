@@ -229,7 +229,7 @@ module type Store_intf = sig
   module Primary_key : Key
 end
 
-module type Index = sig
+module type Index_intf = sig
   type t
 
   val of_jv : Jv.t -> t
@@ -237,47 +237,6 @@ module type Index = sig
   val key_path : Key_path.t
 
   module Key : Key
-end
-
-module Make_object_store (Content : Store_content_intf) (Primary_key : Key) =
-struct
-  include Content_access (Content) (Primary_key) (Primary_key)
-
-  let add v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
-    let args =
-      match key with
-      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
-      | None -> [| Content.to_jv v |]
-    in
-    Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
-
-  let create_index (type t') (module I : Index with type t = t') t : t' =
-    let key_path = Key_path.to_jv I.key_path in
-    Jv.call t "createIndex" [| Jv.of_string I.name; key_path |] |> I.of_jv
-
-  let index (type t') (module I : Index with type t = t') t : t' =
-    Jv.call t "index" [| Jv.of_string I.name |] |> I.of_jv
-
-  let put v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
-    let args =
-      match key with
-      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
-      | None -> [| Content.to_jv v |]
-    in
-    Jv.call t "put" args |> Request.of_jv ~f:Primary_key.of_jv
-end
-
-module Make_index
-    (P : sig
-      val name : string
-      val key_path : Key_path.t
-    end)
-    (Store : Store_intf)
-    (Key : Key) =
-struct
-  include Content_access (Store.Content) (Store.Primary_key) (Key)
-  module Key = Key
-  include P
 end
 
 module Transaction = struct
@@ -333,6 +292,51 @@ module Database = struct
 
   let object_store_names t =
     Jv.get t "objectStoreNames" |> Jv.to_array Jv.to_string
+end
+
+module Make_object_store (Content : Store_content_intf) (Primary_key : Key) =
+struct
+  module Store = Content_access (Content) (Primary_key) (Primary_key)
+  include Store
+
+  let create ?key_path ?auto_increment db =
+    Database.create_object_store (module Store) ?key_path ?auto_increment db
+
+  let add v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
+    let args =
+      match key with
+      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
+      | None -> [| Content.to_jv v |]
+    in
+    Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
+
+  let create_index (type t') (module I : Index_intf with type t = t') t : t' =
+    let key_path = Key_path.to_jv I.key_path in
+    Jv.call t "createIndex" [| Jv.of_string I.name; key_path |] |> I.of_jv
+
+  let index (type t') (module I : Index_intf with type t = t') t : t' =
+    Jv.call t "index" [| Jv.of_string I.name |] |> I.of_jv
+
+  let put v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
+    let args =
+      match key with
+      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
+      | None -> [| Content.to_jv v |]
+    in
+    Jv.call t "put" args |> Request.of_jv ~f:Primary_key.of_jv
+end
+
+module Make_index
+    (P : sig
+      val name : string
+      val key_path : Key_path.t
+    end)
+    (Store : Store_intf)
+    (Key : Key) =
+struct
+  include Content_access (Store.Content) (Store.Primary_key) (Key)
+  module Key = Key
+  include P
 end
 
 module Open_db_request = struct
