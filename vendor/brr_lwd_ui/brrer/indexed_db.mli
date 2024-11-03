@@ -138,15 +138,6 @@ module Content_access
     ?query:Jv.t -> ?direction:Direction.t -> t -> Cursor.t option Request.t
 end
 
-module type Store_intf = sig
-  type t
-
-  val of_jv : Jv.t -> t
-
-  module Content : Store_content_intf
-  module Primary_key : Key
-end
-
 module type Index_intf = sig
   type t
 
@@ -155,6 +146,20 @@ module type Index_intf = sig
   val key_path : Key_path.t
 
   module Key : Key
+end
+
+module type Store_intf = sig
+  type t
+
+  val of_jv : Jv.t -> t
+
+  module Content : Store_content_intf
+  module Primary_key : Key
+
+  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val create_index : (module Index_intf with type t = 't) -> t -> 't
+  val index : (module Index_intf with type t = 't) -> t -> 't
+  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 end
 
 module Transaction : sig
@@ -177,6 +182,7 @@ module Database : sig
     ?auto_increment:bool ->
     t ->
     't
+  (** Creates and returns a new object store or index. *)
 
   val delete_object_store : t -> string -> unit
 
@@ -191,11 +197,16 @@ module Make_object_store
     (Primary_key : Key) : sig
   include module type of Content_access (Content) (Primary_key) (Primary_key)
 
-  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
-  val create_index : (module Index_intf with type t = 't) -> t -> 't
-  val index : (module Index_intf with type t = 't) -> t -> 't
-  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  include
+    Store_intf
+      with type t := t
+       and type Content.t = Content.t
+       and type Primary_key.t = Primary_key.t
+
   val create : ?key_path:Key_path.t -> ?auto_increment:bool -> Database.t -> t
+  (** Creates and returns a new object store or index. [Some_store.create db] is
+      equivalent to [Database.create_object_store (module Some_store) db] but
+      more convenient to use in most cases. *)
 end
 
 module Make_index
@@ -211,6 +222,11 @@ module Make_index
       Content_access (Store.Content) (Store.Primary_key) (Key)
 
   include module type of Params
+
+  val create : Store.t -> unit -> t
+  (** Creates a new index during a version upgrade. [Some_index.create store] is
+      equivalent to [Store.create_index (module Some_index) store] but more
+      convenient to use in most cases. *)
 end
 
 module Open_db_request : sig

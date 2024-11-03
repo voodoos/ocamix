@@ -51,9 +51,9 @@ let on_upgrade_needed e q =
   let index_date_added =
     Item_store.create_index (module ItemsByDateAdded) items
   in
-  let _ = Item_store.create_index (module ItemsByTypeAndName) items in
-  let _ = Item_store.create_index (module ItemsByViewAndKind) items in
-  let _ = Item_store.create_index (module ItemsById) items in
+  let _ = ItemsByTypeAndName.create items () in
+  let _ = ItemsByViewAndKind.create items () in
+  let _ = ItemsById.create items () in
   Console.info
     [ "Stores created:"; list; items; index_date_added; virtual_folders ]
 
