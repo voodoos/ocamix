@@ -83,12 +83,9 @@ end
 module type Store_content_intf = sig
   type t
 
-  module Key : Key
-
   val name : string
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
-  val get_key : t -> Key.t
 end
 
 module Direction = struct
@@ -111,7 +108,11 @@ module Direction = struct
   let of_jv j = of_string (Jv.to_string j)
 end
 
-module Content_access (Content : Store_content_intf) (Key : Key) = struct
+module Content_access
+    (Content : Store_content_intf)
+    (Primary_key : Key)
+    (Key : Key) =
+struct
   type t = Jv.t
 
   external of_jv : Jv.t -> t = "%identity"
@@ -128,7 +129,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
 
   let get_all_keys ?query t =
     let args = match query with None -> [||] | Some query -> [| query |] in
-    let f jv = Jv.to_array (fun c -> Content.Key.of_jv c) jv in
+    let f jv = Jv.to_array (fun c -> Primary_key.of_jv c) jv in
     Jv.call t "getAllKeys" args |> Request.of_jv ~f
 
   module Cursor = struct
@@ -137,7 +138,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     external of_jv : Jv.t -> t = "%identity"
 
     let key t = Jv.get t "key" |> Jv.to_option Key.of_jv
-    let primary_key t = Jv.get t "primaryKey" |> Jv.to_option Content.Key.of_jv
+    let primary_key t = Jv.get t "primaryKey" |> Jv.to_option Primary_key.of_jv
 
     let advance count t =
       ignore @@ Jv.call t "advance" [| Jv.of_int count |];
@@ -145,7 +146,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
 
     let continue ?key t =
       let args =
-        match key with None -> [||] | Some key -> [| Content.Key.to_jv key |]
+        match key with None -> [||] | Some key -> [| Primary_key.to_jv key |]
       in
       ignore @@ Jv.call t "continue" args
   end
@@ -162,7 +163,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
 
     let update v t =
       Jv.call t "update" [| Content.to_jv v |]
-      |> Request.of_jv ~f:Content.Key.of_jv
+      |> Request.of_jv ~f:Primary_key.of_jv
   end
 
   let open_cursor ?query ?direction t : Cursor_with_value.t option Request.t =
@@ -216,12 +217,13 @@ module Content_access (Content : Store_content_intf) (Key : Key) = struct
     result
 end
 
-module type Store = sig
+module type Store_intf = sig
   type t
 
   val of_jv : Jv.t -> t
 
   module Content : Store_content_intf
+  module Primary_key : Key
 end
 
 module type Index = sig
@@ -234,31 +236,18 @@ module type Index = sig
   module Key : Key
 end
 
-module Make_index
-    (P : sig
-      val name : string
-      val key_path : Key_path.t
-    end)
-    (C : Store_content_intf)
-    (K : Key) =
-struct
+module Make_object_store (C : Store_content_intf) (Primary_key : Key) = struct
   module Content = C
-  module Key = K
-  include Content_access (Content) (K)
-  include P
-end
+  module Primary_key = Primary_key
+  include Content_access (Content) (Primary_key) (Primary_key)
 
-module Make_object_store (C : Store_content_intf) = struct
-  module Content = C
-  include Content_access (Content) (Content.Key)
-
-  let add v ?(key : Content.Key.t option) t : Content.Key.t Request.t =
+  let add v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
     let args =
       match key with
-      | Some key -> [| Content.to_jv v; Content.Key.to_jv key |]
+      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
       | None -> [| Content.to_jv v |]
     in
-    Jv.call t "add" args |> Request.of_jv ~f:Content.Key.of_jv
+    Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
 
   let create_index (type t') (module I : Index with type t = t') t : t' =
     let key_path = Key_path.to_jv I.key_path in
@@ -267,13 +256,27 @@ module Make_object_store (C : Store_content_intf) = struct
   let index (type t') (module I : Index with type t = t') t : t' =
     Jv.call t "index" [| Jv.of_string I.name |] |> I.of_jv
 
-  let put v ?(key : Content.Key.t option) t : Content.Key.t Request.t =
+  let put v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
     let args =
       match key with
-      | Some key -> [| Content.to_jv v; Content.Key.to_jv key |]
+      | Some key -> [| Content.to_jv v; Primary_key.to_jv key |]
       | None -> [| Content.to_jv v |]
     in
-    Jv.call t "put" args |> Request.of_jv ~f:Content.Key.of_jv
+    Jv.call t "put" args |> Request.of_jv ~f:Primary_key.of_jv
+end
+
+module Make_index
+    (P : sig
+      val name : string
+      val key_path : Key_path.t
+    end)
+    (Store : Store_intf)
+    (Key : Key) =
+struct
+  module Content = Store.Content
+  module Key = Key
+  include Content_access (Store.Content) (Store.Primary_key) (Key)
+  include P
 end
 
 module Transaction = struct
@@ -294,7 +297,7 @@ module Transaction = struct
     | "readwriteflush" -> Readwriteflush
     | s -> raise (Invalid_argument s)
 
-  let object_store (type t') (module S : Store with type t = t') t : t' =
+  let object_store (type t') (module S : Store_intf with type t = t') t : t' =
     Jv.call t "objectStore" [| Jv.of_string S.Content.name |] |> S.of_jv
 end
 
@@ -303,7 +306,7 @@ module Database = struct
 
   external of_jv : Jv.t -> t = "%identity"
 
-  let create_object_store (type t') (module S : Store with type t = t')
+  let create_object_store (type t') (module S : Store_intf with type t = t')
       ?key_path ?(auto_increment = false) (db : t) : t' =
     let opts = [ ("autoIncrement", Jv.of_bool auto_increment) ] in
     let opts =
@@ -323,7 +326,7 @@ module Database = struct
 
   let transaction stores ?(mode = Transaction.Readonly) t =
     let mode = Transaction.string_of_mode mode |> Jv.of_string in
-    let jv_of_store (module S : Store) = Jv.of_string S.Content.name in
+    let jv_of_store (module S : Store_intf) = Jv.of_string S.Content.name in
     Jv.call t "transaction" [| Jv.of_list jv_of_store stores; mode |]
     |> Transaction.of_jv
 

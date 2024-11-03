@@ -25,11 +25,11 @@ let fut_of_array (fs : 'a Fut.t array) : 'a array Fut.t =
 module Worker () = struct
   let view_memo :
       ( string Db.View.selection * Db.View.Sort.t,
-        IS.Content.Key.t array )
+        IS.Primary_key.t array )
       Hashtbl.t =
     Hashtbl.create 64
 
-  let last_view : (int * IS.Content.Key.t array) ref = ref (-1, [||])
+  let last_view : (int * IS.Primary_key.t array) ref = ref (-1, [||])
 
   let check_db idb source =
     let server_id, source = source in
@@ -78,7 +78,7 @@ module Worker () = struct
             | All -> all_keys
             | Only src_views ->
                 Array.filter all_keys
-                  ~f:(fun { Db.Stores.Items.Key.views; _ } ->
+                  ~f:(fun { Db.Stores.Items_store_key.views; _ } ->
                     List.exists views ~f:(fun v -> List.memq v ~set:src_views))
           in
           Hashtbl.add view_memo (src_views, sort) keys;
@@ -89,7 +89,8 @@ module Worker () = struct
         | [ Search sub ] when not (String.is_empty sub) ->
             let sub = String.lowercase_ascii sub in
             let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-            Array.filter keys ~f:(fun { Db.Stores.Items.Key.sort_name; _ } ->
+            Array.filter keys
+              ~f:(fun { Db.Stores.Items_store_key.sort_name; _ } ->
                 let sort_name = String.lowercase_ascii sort_name in
                 String.Find.find ~pattern sort_name >= 0)
         | _ -> keys
@@ -99,8 +100,8 @@ module Worker () = struct
         | Name ->
             Array.sort keys
               ~cmp:(fun
-                  { Db.Stores.Items.Key.sort_name = sna; _ }
-                  { Db.Stores.Items.Key.sort_name = snb; _ }
+                  { Db.Stores.Items_store_key.sort_name = sna; _ }
+                  { Db.Stores.Items_store_key.sort_name = snb; _ }
                 -> String.compare sna snb)
         | _ -> ()
       in

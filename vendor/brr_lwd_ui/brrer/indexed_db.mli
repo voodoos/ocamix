@@ -63,15 +63,15 @@ module Auto_increment : Key with type t = int
 module type Store_content_intf = sig
   type t
 
-  module Key : Key
-
   val name : string
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
-  val get_key : t -> Key.t
 end
 
-module Content_access (Content : Store_content_intf) (Key : Key) : sig
+module Content_access
+    (Content : Store_content_intf)
+    (Primary_key : Key)
+    (Key : Key) : sig
   type t
 
   external of_jv : Jv.t -> t = "%identity"
@@ -80,10 +80,10 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
     type t
 
     val key : t -> Key.t option
-    val primary_key : t -> Content.Key.t option
+    val primary_key : t -> Primary_key.t option
     val advance : int -> t -> t
 
-    val continue : ?key:Content.Key.t -> t -> unit
+    val continue : ?key:Primary_key.t -> t -> unit
     (** [continue t] advances the cursor to the next position along its
         direction, to the item whose key matches the optional key parameter.
         This will re-trigger the [on_success] event of the cursor's query. *)
@@ -94,7 +94,7 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
 
     val value : t -> Content.t option
     val delete : t -> unit Request.t
-    val update : Content.t -> t -> Content.Key.t Request.t
+    val update : Content.t -> t -> Primary_key.t Request.t
   end
 
   val count : unit -> t -> int Request.t
@@ -110,14 +110,14 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
 
       TODO: optional parameters *)
 
-  val get_all_keys : ?query:Key_range.t -> t -> Content.Key.t Array.t Request.t
+  val get_all_keys : ?query:Key_range.t -> t -> Primary_key.t Array.t Request.t
   (** [get_all_keys] retrieves the list of all primary keys.
 
       TODO stronger query type TODO optional count parameter *)
 
   val fold_keys :
     init:'a ->
-    f:('a -> Key.t -> Content.Key.t -> 'a) ->
+    f:('a -> Key.t -> Primary_key.t -> 'a) ->
     Cursor.t option Request.t ->
     'a Fut.or_error
   (** [fold_keys c] enable convenient iteration other the keys of an index. It
@@ -135,12 +135,13 @@ module Content_access (Content : Store_content_intf) (Key : Key) : sig
     ?query:Jv.t -> ?direction:Direction.t -> t -> Cursor.t option Request.t
 end
 
-module type Store = sig
+module type Store_intf = sig
   type t
 
   val of_jv : Jv.t -> t
 
   module Content : Store_content_intf
+  module Primary_key : Key
 end
 
 module type Index = sig
@@ -153,27 +154,31 @@ module type Index = sig
   module Key : Key
 end
 
+module Make_object_store (C : Store_content_intf) (Primary_key : Key) : sig
+  module Content : Store_content_intf with type t = C.t
+  module Primary_key : Key with type t = Primary_key.t
+  include module type of Content_access (Content) (Primary_key) (Primary_key)
+
+  val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  val create_index : (module Index with type t = 't) -> t -> 't
+  val index : (module Index with type t = 't) -> t -> 't
+  val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+end
+
 module Make_index
     (P : sig
       val name : string
       val key_path : Key_path.t
     end)
-    (C : Store_content_intf)
+    (Store : Store_intf)
     (Key : Key) : sig
-  module Content : Store_content_intf with type t = C.t and type Key.t = C.Key.t
+  module Content : Store_content_intf with type t = Store.Content.t
   module Key : Key with type t = Key.t
-  include module type of Content_access (Content) (Key)
+
+  include module type of
+      Content_access (Store.Content) (Store.Primary_key) (Key)
+
   include module type of P
-end
-
-module Make_object_store (C : Store_content_intf) : sig
-  module Content : Store_content_intf with type t = C.t and type Key.t = C.Key.t
-  include module type of Content_access (Content) (Content.Key)
-
-  val add : Content.t -> ?key:Content.Key.t -> t -> Content.Key.t Request.t
-  val create_index : (module Index with type t = 't) -> t -> 't
-  val index : (module Index with type t = 't) -> t -> 't
-  val put : Content.t -> ?key:Content.Key.t -> t -> Content.Key.t Request.t
 end
 
 module Transaction : sig
@@ -182,7 +187,7 @@ module Transaction : sig
 
   val string_of_mode : mode -> string
   val mode_of_string : string -> mode
-  val object_store : (module Store with type t = 't) -> t -> 't
+  val object_store : (module Store_intf with type t = 't) -> t -> 't
 end
 
 module Database : sig
@@ -191,7 +196,7 @@ module Database : sig
   val of_jv : Jv.t -> t
 
   val create_object_store :
-    (module Store with type t = 't) ->
+    (module Store_intf with type t = 't) ->
     ?key_path:Key_path.t ->
     ?auto_increment:bool ->
     t ->
@@ -200,7 +205,7 @@ module Database : sig
   val delete_object_store : t -> string -> unit
 
   val transaction :
-    (module Store) list -> ?mode:Transaction.mode -> t -> Transaction.t
+    (module Store_intf) list -> ?mode:Transaction.mode -> t -> Transaction.t
 
   val object_store_names : t -> string array
 end

@@ -23,13 +23,6 @@ let jv_to_t decoder j =
 module Orderred_items = struct
   type t = { id : int; item : string option } [@@deriving yojson]
 
-  module Key = struct
-    type t = int
-
-    let to_jv k = Jv.of_int k
-    let of_jv j = Jv.to_int j
-  end
-
   let name = "items_by_date_added"
 
   let to_jv t =
@@ -60,25 +53,6 @@ module Items = struct
   type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
 
   let compare t t' = String.compare t.sorts.sort_name t'.sorts.sort_name
-
-  module Key = struct
-    type t = { id : string; sort_name : string; views : string list }
-
-    let to_jv { id; sort_name; views } =
-      let id = Jv.of_string id in
-      let sort_name = Jv.of_string sort_name in
-      let views = Jv.of_list Jv.of_string views in
-      Jv.of_jv_array [| id; sort_name; views |]
-
-    let of_jv j =
-      match Jv.to_jv_array j with
-      | [| id; sort_name; views |] ->
-          let id = Jv.to_string id in
-          let sort_name = Jv.to_string sort_name in
-          let views = Jv.to_list Jv.to_string views in
-          { id; sort_name; views }
-      | _ -> assert false
-  end
 
   module Key_date_added = struct
     type t = int
@@ -125,13 +99,6 @@ module Items = struct
   let name = "items"
   let to_jv t = t_to_jv yojson_of_t t
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-
-  let get_key t =
-    {
-      Key.sort_name = t.sorts.sort_name;
-      id = t.item.Item.id;
-      views = t.sorts.views;
-    }
 end
 
 module Virtual_folder = struct
@@ -140,22 +107,51 @@ module Virtual_folder = struct
   (* todo: multiserver: we should add a server_id key *)
   type t = Virtual_folders.virtual_folder [@@deriving yojson]
 
-  module Key = struct
-    type t = string
-
-    let to_jv k = Jv.of_string k
-    let of_jv j = Jv.to_string j
-  end
-
   let name = "virtual_folders"
   let to_jv t = t_to_jv yojson_of_t t
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-  let get_key t = t.Virtual_folders.item_id
 end
 
-module Orderred_items_store = Indexed_db.Make_object_store (Orderred_items)
-module Items_store = Indexed_db.Make_object_store (Items)
-module Virtual_folder_store = Indexed_db.Make_object_store (Virtual_folder)
+module Orderred_items_store =
+  Indexed_db.Make_object_store
+    (Orderred_items)
+    (struct
+      type t = int
+
+      let to_jv k = Jv.of_int k
+      let of_jv j = Jv.to_int j
+    end)
+
+module Items_store_key = struct
+  type t = { id : string; sort_name : string; views : string list }
+
+  let to_jv { id; sort_name; views } =
+    let id = Jv.of_string id in
+    let sort_name = Jv.of_string sort_name in
+    let views = Jv.of_list Jv.of_string views in
+    Jv.of_jv_array [| id; sort_name; views |]
+
+  let of_jv j =
+    match Jv.to_jv_array j with
+    | [| id; sort_name; views |] ->
+        let id = Jv.to_string id in
+        let sort_name = Jv.to_string sort_name in
+        let views = Jv.to_list Jv.to_string views in
+        { id; sort_name; views }
+    | _ -> assert false
+end
+
+module Items_store = Indexed_db.Make_object_store (Items) (Items_store_key)
+
+module Virtual_folder_store =
+  Indexed_db.Make_object_store
+    (Virtual_folder)
+    (struct
+      type t = string
+
+      let to_jv k = Jv.of_string k
+      let of_jv j = Jv.to_string j
+    end)
 
 module ItemsByDateAdded =
   Indexed_db.Make_index
@@ -163,7 +159,7 @@ module ItemsByDateAdded =
       let name = "items_by_date_added"
       let key_path = Indexed_db.Key_path.Identifier "sorts.date_added"
     end)
-    (Items)
+    (Orderred_items_store)
     (Items.Key_date_added)
 
 module ItemsByViewAndKind =
@@ -174,7 +170,7 @@ module ItemsByViewAndKind =
       let key_path =
         Indexed_db.Key_path.Identifiers [| "item.Type"; "sorts.views" |]
     end)
-    (Items)
+    (Items_store)
     (Items.Key_view_kind)
 
 module ItemsById =
@@ -183,7 +179,7 @@ module ItemsById =
       let name = "items_by_id"
       let key_path = Indexed_db.Key_path.Identifier "item.Id"
     end)
-    (Items)
+    (Items_store)
     (Items.Key_id)
 
 module ItemsByTypeAndName =
@@ -195,5 +191,5 @@ module ItemsByTypeAndName =
         Indexed_db.Key_path.Identifiers
           [| "item.CollectionType"; "sorts.sort_name" |]
     end)
-    (Items)
+    (Items_store)
     (Items.Key_type_name)
