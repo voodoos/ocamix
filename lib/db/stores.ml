@@ -172,7 +172,7 @@ end
 
 module Genres_store = Make_object_store (Genres) (Auto_increment)
 
-module Genres_by_name =
+module Genres_by_canonical_name =
   Make_index
     (Genres_store)
     (struct

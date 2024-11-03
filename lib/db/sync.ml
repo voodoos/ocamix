@@ -33,7 +33,9 @@ open Source.Api
 *)
 
 let chunk_size = 500
-let include_item_types = [ Source.Api.Item.MusicArtist; MusicAlbum; Audio ]
+
+let include_item_types =
+  [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
 
 let fetch_total_item_count source =
   let open Fut.Result_syntax in
@@ -314,7 +316,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               ids = [];
               parent_id = None;
               user_id = source.auth_response.user.id;
-              fields = [ ParentId; Path ];
+              fields = [ ParentId; Path; Genres ];
               include_item_types;
               start_index = Some start_index;
               limit = Some limit;
@@ -351,20 +353,49 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         let idb_put ~start_index items =
           let open Brr_io.Indexed_db in
           let transaction =
-            Database.transaction [ (module OI); (module I) ] ~mode:Readwrite idb
+            Database.transaction
+              [ (module OI); (module I); (module Stores.Genres_store) ]
+              ~mode:Readwrite idb
           in
           let s_list = Transaction.object_store (module OI) transaction in
           let s_items = Transaction.object_store (module I) transaction in
-          List.iteri items ~f:(fun index ({ Api.Item.id; path; _ } as item) ->
+          let s_genres =
+            Console.log [ "objs" ];
+            Transaction.object_store (module Stores.Genres_store) transaction
+          in
+          Console.log [ "after" ];
+          List.iteri items
+            ~f:(fun index ({ Api.Item.id; path; type_; name; _ } as item) ->
               let index = start_index + index in
               let path = Option.value ~default:"" path in
               let views = views_of_path vfolders path in
-              let sort_name = Option.value item.sort_name ~default:item.name in
+              let sort_name = Option.value item.sort_name ~default:name in
               ignore (OI.put { id = index; item = Some id } s_list);
-              ignore
-                (I.put
-                   { sorts = { date_added = index; views; sort_name }; item }
-                   s_items))
+              match type_ with
+              | MusicAlbum ->
+                  List.iter item.genre_items
+                    ~f:(fun ({ name; id } : Api.Item.genre_item) ->
+                      let canon =
+                        name |> String.lowercase_ascii
+                        |> String.filter ~f:(fun c ->
+                               let c = Char.to_int c in
+                               (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
+                      in
+                      let genre =
+                        Generic_schema.
+                          {
+                            source_info = Jellyfin { id };
+                            item = { Genre.name; canon };
+                          }
+                      in
+                      Console.log [ "put"; name ];
+                      Stores.Genres_store.put genre s_genres |> ignore)
+                  (* todo store the album*)
+              | _ ->
+                  I.put
+                    { sorts = { date_added = index; views; sort_name }; item }
+                    s_items
+                  |> ignore)
         in
         idb_put ~start_index items
       in

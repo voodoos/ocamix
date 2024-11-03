@@ -5,6 +5,7 @@ open Brrer
 open Brr
 open Brr_io
 module Worker_api = Db_worker_api
+module Generic_schema = Generic_schema
 
 module Item_store = struct
   include Stores.Items_store
@@ -65,8 +66,8 @@ let on_upgrade_needed e q =
   in
   let _genres =
     Genres_store.create ~auto_increment:true db
-    |> Genres_by_name.create ~name:"genres_by_name"
-         (Key_path.Identifier "item.name")
+    |> Genres_by_canonical_name.create ~name:"genres_by_canonname"
+         (Key_path.Identifier "item.canon")
   in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
 

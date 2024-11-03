@@ -3,7 +3,7 @@ module Artist = struct
 end
 
 module Genre = struct
-  type t = { name : string } [@@deriving yojson]
+  type t = { name : string; canon : string } [@@deriving yojson]
 end
 
 type source = Jellyfin of { id : string } [@@deriving yojson]
