@@ -60,6 +60,7 @@ module Worker () = struct
     let hash = Hashtbl.hash (src_views, sort, filters) in
     if Int.equal (fst !last_view) hash then Fut.ok (snd !last_view)
     else
+      let n = Performance.now_ms G.performance in
       let+ keys =
         try Fut.ok @@ Hashtbl.find view_memo (src_views, sort)
         with Not_found ->
@@ -77,6 +78,9 @@ module Worker () = struct
             in
             IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
           in
+          Console.log
+            [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
+          let n = Performance.now_ms G.performance in
           let keys =
             match src_views with
             | All -> all_keys
@@ -85,6 +89,8 @@ module Worker () = struct
                   ~f:(fun { Db.Stores.Items_store_key.views; _ } ->
                     List.exists views ~f:(fun v -> List.memq v ~set:src_views))
           in
+          Console.log
+            [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
           Hashtbl.add view_memo (src_views, sort) keys;
           keys
       in
@@ -99,6 +105,7 @@ module Worker () = struct
                 String.Find.find ~pattern sort_name >= 0)
         | _ -> keys
       in
+      let n = Performance.now_ms G.performance in
       let () =
         match sort with
         | Name ->
@@ -109,6 +116,7 @@ module Worker () = struct
                 -> String.compare sna snb)
         | _ -> ()
       in
+      Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
       last_view := (hash, keys);
       keys
 
