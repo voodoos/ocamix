@@ -1,6 +1,6 @@
 open! Std
 open Brrer
-open Brr_io
+open Brr_io.Indexed_db
 module Api = Data_source.Jellyfin_api
 
 (* Proposition:
@@ -113,7 +113,7 @@ module Virtual_folder = struct
 end
 
 module Orderred_items_store =
-  Indexed_db.Make_object_store
+  Make_object_store
     (Orderred_items)
     (struct
       type t = int
@@ -141,10 +141,10 @@ module Items_store_key = struct
     | _ -> assert false
 end
 
-module Items_store = Indexed_db.Make_object_store (Items) (Items_store_key)
+module Items_store = Make_object_store (Items) (Items_store_key)
 
 module Virtual_folder_store =
-  Indexed_db.Make_object_store
+  Make_object_store
     (Virtual_folder)
     (struct
       type t = string
@@ -154,41 +154,41 @@ module Virtual_folder_store =
     end)
 
 module ItemsByDateAdded =
-  Indexed_db.Make_index
+  Make_index
     (struct
       let name = "items_by_date_added"
-      let key_path = Indexed_db.Key_path.Identifier "sorts.date_added"
+      let key_path = Key_path.Identifier "sorts.date_added"
     end)
     (Orderred_items_store)
     (Items.Key_date_added)
 
 module ItemsByViewAndKind =
-  Indexed_db.Make_index
+  Make_index
     (struct
       let name = "items_by_view_and_kind"
 
       let key_path =
-        Indexed_db.Key_path.Identifiers [| "item.Type"; "sorts.views" |]
+        Key_path.Identifiers [| "item.Type"; "sorts.views" |]
     end)
     (Items_store)
     (Items.Key_view_kind)
 
 module ItemsById =
-  Indexed_db.Make_index
+  Make_index
     (struct
       let name = "items_by_id"
-      let key_path = Indexed_db.Key_path.Identifier "item.Id"
+      let key_path = Key_path.Identifier "item.Id"
     end)
     (Items_store)
     (Items.Key_id)
 
 module ItemsByTypeAndName =
-  Indexed_db.Make_index
+  Make_index
     (struct
       let name = "items_by_type_and_name"
 
       let key_path =
-        Indexed_db.Key_path.Identifiers
+        Key_path.Identifiers
           [| "item.CollectionType"; "sorts.sort_name" |]
     end)
     (Items_store)
