@@ -37,7 +37,10 @@ let on_upgrade_needed e q =
     let key_path = Indexed_db.Key_path.Identifier "id" in
     Orderred_items_store.create db ~key_path ~auto_increment:false
   in
-  let _ = ItemsByDateAdded.create list in
+  let _ =
+    ItemsByDateAdded.create ~name:"items_by_date_added"
+      (Key_path.Identifier "sorts.date_added") list
+  in
   let items =
     let key_path =
       Indexed_db.Key_path.(
@@ -47,9 +50,14 @@ let on_upgrade_needed e q =
   in
   let () =
     ignore
-      ( ItemsByTypeAndName.create items,
-        ItemsByViewAndKind.create items,
-        ItemsById.create items )
+      ( ItemsByTypeAndName.create ~name:"items_by_type_and_name"
+          (Key_path.Identifiers [| "item.CollectionType"; "sorts.sort_name" |])
+          items,
+        ItemsByViewAndKind.create ~name:"items_by_view_and_kind"
+          (Key_path.Identifiers [| "item.Type"; "sorts.views" |])
+          items,
+        ItemsById.create ~name:"items_by_id" (Key_path.Identifier "item.Id")
+          items )
   in
   let virtual_folders =
     let key_path = Indexed_db.Key_path.Identifier "ItemId" in

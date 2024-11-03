@@ -70,7 +70,11 @@ module Worker () = struct
               IDB.Key_range.bound ~lower ~upper ~lower_open:true
                 ~upper_open:false ()
             in
-            let idx = IS.index (module IS.Index.Kind_View) store in
+            let idx =
+              IS.index
+                (module IS.Index.Kind_View)
+                ~name:"items_by_view_and_kind" store
+            in
             IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
           in
           let keys =
@@ -125,7 +129,12 @@ module Worker () = struct
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
     | Get_server_libraries server_id' ->
         let* store = read_only_store () in
-        let index = IS.(index (module IS.Index.Type_Name) store) in
+        let index =
+          IS.(
+            index
+              (module IS.Index.Type_Name)
+              ~name:"items_by_type_and_name" store)
+        in
         let lower = Jv.of_array Jv.of_string [| "music" |] in
         let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
         let query =
@@ -150,7 +159,12 @@ module Worker () = struct
         items
     | Get_libraries () ->
         let* store = read_only_store () in
-        let index = IS.(index (module IS.Index.Type_Name) store) in
+        let index =
+          IS.(
+            index
+              (module IS.Index.Type_Name)
+              ~name:"items_by_type_and_name" store)
+        in
         let lower = Jv.of_array Jv.of_string [| "music" |] in
         let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
         let query =

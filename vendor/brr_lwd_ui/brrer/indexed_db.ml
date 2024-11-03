@@ -224,8 +224,6 @@ module type Index_intf = sig
   type t
 
   val of_jv : Jv.t -> t
-  val name : string
-  val key_path : Key_path.t
 
   module Key : Key
 end
@@ -239,8 +237,11 @@ module type Store_intf = sig
   module Primary_key : Key
 
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
-  val create_index : (module Index_intf with type t = 't) -> t -> 't
-  val index : (module Index_intf with type t = 't) -> t -> 't
+
+  val create_index :
+    (module Index_intf with type t = 't) -> name:string -> Key_path.t -> t -> 't
+
+  val index : (module Index_intf with type t = 't) -> name:string -> t -> 't
   val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 end
 
@@ -312,12 +313,13 @@ struct
       in
       Jv.call t "add" args |> Request.of_jv ~f:Primary_key.of_jv
 
-    let create_index (type t') (module I : Index_intf with type t = t') t : t' =
-      let key_path = Key_path.to_jv I.key_path in
-      Jv.call t "createIndex" [| Jv.of_string I.name; key_path |] |> I.of_jv
+    let create_index (type t') (module I : Index_intf with type t = t') ~name
+        key_path t : t' =
+      let key_path = Key_path.to_jv key_path in
+      Jv.call t "createIndex" [| Jv.of_string name; key_path |] |> I.of_jv
 
-    let index (type t') (module I : Index_intf with type t = t') t : t' =
-      Jv.call t "index" [| Jv.of_string I.name |] |> I.of_jv
+    let index (type t') (module I : Index_intf with type t = t') ~name t : t' =
+      Jv.call t "index" [| Jv.of_string name |] |> I.of_jv
 
     let put v ?(key : Primary_key.t option) t : Primary_key.t Request.t =
       let args =
@@ -334,23 +336,16 @@ struct
     Database.create_object_store (module Store) ?key_path ?auto_increment db
 end
 
-module Make_index
-    (P : sig
-      val name : string
-      val key_path : Key_path.t
-    end)
-    (Store : Store_intf)
-    (Key : Key) =
-struct
+module Make_index (Store : Store_intf) (Key : Key) = struct
   module Index = struct
     include Content_access (Store.Content) (Store.Primary_key) (Key)
-    include P
     module Key = Key
   end
 
   include Index
 
-  let create store = Store.create_index (module Index) store
+  let create ~name key_path store =
+    Store.create_index (module Index) ~name key_path store
 end
 
 module Open_db_request = struct

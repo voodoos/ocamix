@@ -142,8 +142,6 @@ module type Index_intf = sig
   type t
 
   val of_jv : Jv.t -> t
-  val name : string
-  val key_path : Key_path.t
 
   module Key : Key
 end
@@ -157,8 +155,11 @@ module type Store_intf = sig
   module Primary_key : Key
 
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
-  val create_index : (module Index_intf with type t = 't) -> t -> 't
-  val index : (module Index_intf with type t = 't) -> t -> 't
+
+  val create_index :
+    (module Index_intf with type t = 't) -> name:string -> Key_path.t -> t -> 't
+
+  val index : (module Index_intf with type t = 't) -> name:string -> t -> 't
   val put : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
 end
 
@@ -194,6 +195,7 @@ end
 
 module Make_object_store
     (Content : Store_content_intf)
+    (* TODO: at that step do we really need the content's type ?*)
     (Primary_key : Key) : sig
   include module type of Content_access (Content) (Primary_key) (Primary_key)
 
@@ -209,21 +211,13 @@ module Make_object_store
       more convenient to use in most cases. *)
 end
 
-module Make_index
-    (Params : sig
-      val name : string
-      val key_path : Key_path.t
-    end)
-    (Store : Store_intf)
-    (Key : Key) : sig
+module Make_index (Store : Store_intf) (Key : Key) : sig
   module Key : Key with type t = Key.t
 
   include module type of
       Content_access (Store.Content) (Store.Primary_key) (Key)
 
-  include module type of Params
-
-  val create : Store.t -> t
+  val create : name:string -> Key_path.t -> Store.t -> t
   (** Creates a new index during a version upgrade. [Some_index.create store] is
       equivalent to [Store.create_index (module Some_index) store] but more
       convenient to use in most cases. *)

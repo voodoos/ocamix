@@ -154,42 +154,8 @@ module Virtual_folder_store =
     end)
 
 module ItemsByDateAdded =
-  Make_index
-    (struct
-      let name = "items_by_date_added"
-      let key_path = Key_path.Identifier "sorts.date_added"
-    end)
-    (Orderred_items_store)
-    (Items.Key_date_added)
+  Make_index (Orderred_items_store) (Items.Key_date_added)
 
-module ItemsByViewAndKind =
-  Make_index
-    (struct
-      let name = "items_by_view_and_kind"
-
-      let key_path =
-        Key_path.Identifiers [| "item.Type"; "sorts.views" |]
-    end)
-    (Items_store)
-    (Items.Key_view_kind)
-
-module ItemsById =
-  Make_index
-    (struct
-      let name = "items_by_id"
-      let key_path = Key_path.Identifier "item.Id"
-    end)
-    (Items_store)
-    (Items.Key_id)
-
-module ItemsByTypeAndName =
-  Make_index
-    (struct
-      let name = "items_by_type_and_name"
-
-      let key_path =
-        Key_path.Identifiers
-          [| "item.CollectionType"; "sorts.sort_name" |]
-    end)
-    (Items_store)
-    (Items.Key_type_name)
+module ItemsByViewAndKind = Make_index (Items_store) (Items.Key_view_kind)
+module ItemsById = Make_index (Items_store) (Items.Key_id)
+module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
