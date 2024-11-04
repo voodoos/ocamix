@@ -352,14 +352,8 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         in
         let idb_put ~start_index items =
           let open Brr_io.Indexed_db in
-          let get_or_set_genre store index ({ name; id } : Api.Item.genre_item)
-              =
-            let canon =
-              name |> String.lowercase_ascii
-              |> String.filter ~f:(fun c ->
-                     let c = Char.to_int c in
-                     (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
-            in
+          let get_or_set_genre store index ({ name; _ } : Api.Item.genre_item) =
+            let canon = canonicalize_string name in
             Stores.Genres_by_canonical_name.get_key canon index
             |> Request.fut
             |> Fun.flip Fut.bind (function
@@ -367,13 +361,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                      Console.log [ "Found genre with key"; key ];
                      Fut.return key
                  | Ok None ->
-                     let genre =
-                       Generic_schema.
-                         {
-                           source_info = Jellyfin { id };
-                           item = { Genre.name; canon };
-                         }
-                     in
+                     let genre = Generic_schema.{ Genre.name; canon } in
                      Console.log [ "Genre not found, inserting" ];
                      Stores.Genres_store.add genre store
                      |> Request.fut |> Fut.map Result.get_exn

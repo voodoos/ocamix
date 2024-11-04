@@ -40,3 +40,10 @@ let new_uuid_v4 () = Uuidm.v4_gen random_state ()
 let tee f x =
   let () = f x in
   x
+
+let canonicalize_string s =
+  Ubase.from_utf8 ?malformed:None ~strip:"" s
+  |> String.lowercase_ascii
+  |> String.filter ~f:(fun c ->
+         let c = Char.to_int c in
+         (c >= 97 && c <= 122) || (c >= 48 && c <= 57))

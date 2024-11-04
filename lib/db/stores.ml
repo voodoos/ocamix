@@ -160,10 +160,13 @@ module ItemsByViewAndKind = Make_index (Items_store) (Items.Key_view_kind)
 module ItemsById = Make_index (Items_store) (Items.Key_id)
 module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
 
-module Genres = struct
-  open Generic_schema
+(* WIP New generic database schema:
+   - Instead of storing Jellyfin specific items we process them to fit a more
+     conventionnal schema. *)
+open Generic_schema
 
-  type t = Genre.t with_source [@@deriving yojson]
+module Genres = struct
+  type t = Genre.t [@@deriving yojson]
 
   let name = "genres"
   let to_jv t = t_to_jv yojson_of_t t

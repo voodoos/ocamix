@@ -31,4 +31,5 @@
   json-data-encoding-browser
   uuidm
   base64
-  hector))
+  hector
+  ubase))

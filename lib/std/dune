@@ -8,4 +8,5 @@
   base64
   uuidm
   json-data-encoding
-  ezjsonm))
+  ezjsonm
+  ubase))

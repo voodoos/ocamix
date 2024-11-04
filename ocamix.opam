@@ -24,6 +24,7 @@ depends: [
   "uuidm"
   "base64"
   "hector"
+  "ubase"
   "odoc" {with-doc}
 ]
 build: [
