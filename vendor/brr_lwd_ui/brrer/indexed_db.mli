@@ -1,5 +1,7 @@
 open Brr
 
+(* TODO we don't need all those functors ! *)
+
 module Key_path : sig
   type t = Identifier of string | Identifiers of string array
 end
@@ -53,6 +55,9 @@ end
 
 module type Key = sig
   type t
+  (* TODO keys are not arbitrary javascript values. Keys can be: string, date, float, a binary blob, and array. For
+     arrays, the key can range from an empty value to infinity. And you can include
+     an array within an array. *)
 
   val to_jv : t -> Jv.t
   val of_jv : Jv.t -> t
