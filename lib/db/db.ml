@@ -64,11 +64,21 @@ let on_upgrade_needed e q =
     let key_path = Indexed_db.Key_path.Identifier "ItemId" in
     Virtual_folder_store.create ~key_path ~auto_increment:false db
   in
+  let _collections =
+    Collections_store.create ~auto_increment:true db
+    |> Collections_by_id.create ~name:"by-id" ~unique:true
+         (Key_path.Identifier "id")
+  in
   let _genres =
     Genres_store.create ~auto_increment:true db
     |> Genres_by_canonical_name.create ~name:"genres_by_canon_name" ~unique:true
          (Key_path.Identifier "canon")
   in
+  let _albums =
+    Albums_store.create db
+    |> Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id")
+  in
+  let _tracks = Tracks_store.create db in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
 
 let with_idb ?version ~name f =

@@ -32,7 +32,7 @@ open Source.Api
    prefixed by one of the view's virtual folder locations.
 *)
 
-let chunk_size = 500
+let chunk_size = 2500
 
 let include_item_types =
   [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
@@ -67,6 +67,7 @@ type db_infos = {
   last_value : Stores.Orderred_items.t option;
 }
 
+(* TODO this is wrong with the new DB schema. *)
 let get_db_infos idb =
   let infos, set_infos = Fut.create () in
   let transaction = Database.transaction [ (module OI) ] ~mode:Readonly idb in
@@ -207,16 +208,34 @@ let update_views source idb =
   List.iter views.items ~f:(fun (item : Item.t) ->
       let open Brr_io.Indexed_db in
       let transaction =
-        Database.transaction [ (module OI); (module I) ] ~mode:Readwrite idb
+        Database.transaction
+          [ (module Stores.Collections_store) ]
+          ~mode:Readwrite idb
       in
-      let s_items = Transaction.object_store (module I) transaction in
-      let sort_name = Option.value item.sort_name ~default:item.name in
-      I.put { sorts = { date_added = -1; views = []; sort_name }; item } s_items
-      |> ignore);
+      let s_collections =
+        Transaction.object_store (module Stores.Collections_store) transaction
+      in
+      let _sort_name = Option.value item.sort_name ~default:item.name in
+      let _ =
+        if
+          String.equal "music" @@ Option.get_or ~default:"" item.collection_type
+        then
+          Stores.Collections_store.put
+            { id = Jellyfin item.id; name = item.name }
+            s_collections
+          |> ignore
+      in
+      ());
   views
+
+type folder_path = { folder_id : string; path : string }
+type view_paths = { view_id : string; paths : folder_path list }
 
 let deduce_virtual_folders_from_views source (views : Views.response) =
   let open Fut.Result_syntax in
+  (* Immediate children of a music view are musicartists. But their parent field
+     does not contain the view's id the a virtual folder's id. We gather these
+     virtual folder thar are required to deduce the view from an item. *)
   let parent_ids_of_view_children { Item.id; _ } =
     let+ res =
       Source.query source
@@ -242,7 +261,7 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
       ~f:(fun set { Item.parent_id; _ } ->
         match parent_id with
         | None | Some None -> set
-        | Some (Some pid) -> String.Set.add pid set)
+        | Some (Some parent_id) -> String.Set.add parent_id set)
   in
   let paths_of_parents parents =
     let+ res =
@@ -266,7 +285,7 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
         ()
     in
     List.filter_map res.items ~f:(fun { Item.id; path; _ } ->
-        Option.map (fun path -> (id, path)) path)
+        Option.map (fun path -> { folder_id = id; path }) path)
   in
   let open Fut.Syntax in
   let+ result =
@@ -274,17 +293,19 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
         let open Fut.Result_syntax in
         let* parents = parent_ids_of_view_children view in
         let+ paths = paths_of_parents parents in
-        (id, paths))
+        { view_id = id; paths })
     |> Fut.of_list
   in
   Result.flatten_l result
 
-let views_of_path (vfolders : (string * (string * string) list) list) path =
+let views_of_path (vfolders : view_paths list) path =
   (* We look at the prefix of a path to determine which virtual_folder (and thus
      view) it's a part of. *)
-  List.filter_map vfolders ~f:(fun (view_id, locations) ->
-      if List.exists locations ~f:(fun (_, pre) -> String.prefix ~pre path) then
-        Some view_id
+  List.filter_map vfolders ~f:(fun { view_id; paths } ->
+      if
+        List.exists paths ~f:(fun { folder_id = _; path = pre } ->
+            String.prefix ~pre path)
+      then Some view_id
       else None)
 
 let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
@@ -332,7 +353,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
     in
     enqueue ~start_index:first total;
     let total_queries = Queue.length fetch_queue in
-    let rec run_queue ?(threads = 1) q =
+    let rec run_queue ?(threads = 2) q =
       assert (threads > 0);
       let rec take_n acc n =
         if n = 0 then List.rev acc
@@ -352,30 +373,37 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
         in
         let idb_put ~start_index items =
           let open Brr_io.Indexed_db in
-          let get_or_set_genre store index ({ name; _ } : Api.Item.genre_item) =
-            let canon = canonicalize_string name in
-            Stores.Genres_by_canonical_name.get_key canon index
-            |> Request.fut
-            |> Fun.flip Fut.bind (function
-                 | Ok (Some key) ->
-                     Console.log [ "Found genre with key"; key ];
-                     Fut.return key
-                 | Ok None ->
-                     let genre = Generic_schema.{ Genre.name; canon } in
-                     Console.log [ "Genre not found, inserting" ];
-                     Stores.Genres_store.add genre store
-                     |> Request.fut |> Fut.map Result.get_exn
-                 | Error e -> raise (Jv.Error e))
-          in
           List.iteri items
-            ~f:(fun index ({ Api.Item.id; path; type_; name; _ } as item) ->
+            ~f:(fun
+                index
+                ({ Api.Item.id; path; type_; name; album_id; server_id; _ } as
+                 item)
+              ->
               let transaction =
                 Database.transaction
-                  [ (module OI); (module I); (module Stores.Genres_store) ]
+                  [
+                    (module OI);
+                    (module I);
+                    (module Stores.Collections_store);
+                    (module Stores.Genres_store);
+                    (module Stores.Albums_store);
+                    (module Stores.Tracks_store);
+                  ]
                   ~mode:Readwrite idb
               in
               let s_list = Transaction.object_store (module OI) transaction in
               let s_items = Transaction.object_store (module I) transaction in
+              let s_collections =
+                Transaction.object_store
+                  (module Stores.Collections_store)
+                  transaction
+              in
+              let i_collections =
+                Stores.(
+                  Collections_store.index
+                    (module Collections_by_id)
+                    ~name:"by-id" s_collections)
+              in
               let s_genres =
                 Console.log [ "objs" ];
                 Transaction.object_store
@@ -387,6 +415,40 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                   (module Stores.Genres_by_canonical_name)
                   ~name:"genres_by_canon_name" s_genres
               in
+              let s_albums =
+                Transaction.object_store
+                  (module Stores.Albums_store)
+                  transaction
+              in
+              let s_tracks =
+                Transaction.object_store
+                  (module Stores.Tracks_store)
+                  transaction
+              in
+              let get_or_set_genre name =
+                let canon = canonicalize_string name in
+                Stores.Genres_by_canonical_name.get_key canon i_genres
+                |> Request.fut
+                |> Fun.flip Fut.bind (function
+                     | Ok (Some key) ->
+                         Console.log [ "Found genre with key"; key ];
+                         Fut.return key
+                     | Ok None ->
+                         let genre = Generic_schema.{ Genre.name; canon } in
+                         Console.log [ "Genre not found, inserting" ];
+                         Stores.Genres_store.add genre s_genres
+                         |> Request.fut |> Fut.map Result.get_exn
+                     | Error e -> raise (Jv.Error e))
+              in
+              let prepare_genres genre_items =
+                List.concat_map genre_items
+                  ~f:(fun ({ name; _ } : Api.Item.genre_item) ->
+                    String.split_on_char ~by:';' name
+                    |> List.concat_map ~f:(String.split_on_char ~by:',')
+                    |> List.map ~f:String.trim
+                    |> List.map ~f:get_or_set_genre)
+                |> Fut.of_list
+              in
               let index = start_index + index in
               let path = Option.value ~default:"" path in
               let views = views_of_path vfolders path in
@@ -394,10 +456,44 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               ignore (OI.put { id = index; item = Some id } s_list);
               match type_ with
               | MusicAlbum ->
-                  List.iter item.genre_items
-                    ~f:(fun (genre_item : Api.Item.genre_item) ->
-                      get_or_set_genre s_genres i_genres genre_item |> ignore)
-                  (* todo store the album*)
+                  prepare_genres item.genre_items
+                  |> Fut.map (fun genres ->
+                         let key = { Generic_schema.Album.Key.name; genres } in
+                         let id = Generic_schema.Id.Jellyfin id in
+                         Console.log [ "Album"; key; id; sort_name; genres ];
+                         Stores.Albums_store.add ~key { id; sort_name; genres }
+                           s_albums)
+                  |> ignore
+              | Audio ->
+                  let views =
+                    List.map views ~f:(fun view ->
+                        Stores.Collections_by_id.get_key (Jellyfin view)
+                          i_collections
+                        |> Request.fut)
+                    |> Fut.of_list
+                    |> Fut.map
+                         (List.filter_map ~f:(Result.get_or ~default:None))
+                  in
+                  Fut.pair views @@ prepare_genres item.genre_items
+                  |> Fut.map (fun (collections, genres) ->
+                         let key =
+                           {
+                             Generic_schema.Track.Key.name;
+                             genres;
+                             collections;
+                           }
+                         in
+                         let id = Generic_schema.Id.Jellyfin id in
+                         let server_id = Generic_schema.Id.Jellyfin server_id in
+                         let album_id =
+                           Option.map
+                             (fun id -> Generic_schema.Id.Jellyfin id)
+                             album_id
+                         in
+                         Stores.Tracks_store.add ~key
+                           { id; album_id; sort_name; genres; server_id }
+                           s_tracks)
+                  |> ignore
               | _ ->
                   I.put
                     { sorts = { date_added = index; views; sort_name }; item }

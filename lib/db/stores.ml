@@ -165,6 +165,26 @@ module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
      conventionnal schema. *)
 open Generic_schema
 
+module Collection = struct
+  type t = Collection.t [@@deriving yojson]
+
+  let name = "collections"
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+end
+
+module Collections_store = Make_object_store (Collection) (Auto_increment)
+
+module Collections_by_id =
+  Make_index
+    (Collections_store)
+    (struct
+      include Generic_schema.Id
+
+      let to_jv t = t_to_jv yojson_of_t t
+      let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+    end)
+
 module Genres = struct
   type t = Genre.t [@@deriving yojson]
 
@@ -183,4 +203,72 @@ module Genres_by_canonical_name =
 
       let of_jv = Jv.to_string
       let to_jv = Jv.of_string
+    end)
+
+module Album = struct
+  type t = Album.t [@@deriving yojson]
+
+  let name = "albums"
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+end
+
+module Albums_store =
+  Make_object_store
+    (Album)
+    (struct
+      include Generic_schema.Album.Key
+
+      let to_jv { name; genres } =
+        let name = Jv.of_string name in
+        let genres = Jv.of_list Jv.of_int genres in
+        Jv.of_jv_array [| name; genres |]
+
+      let of_jv j =
+        match Jv.to_jv_array j with
+        | [| name; genres |] ->
+            let name = Jv.to_string name in
+            let genres = Jv.to_list Jv.to_int genres in
+            { name; genres }
+        | _ -> assert false
+    end)
+
+module Albums_by_id =
+  Make_index
+    (Albums_store)
+    (struct
+      include Generic_schema.Id
+
+      let to_jv t = t_to_jv yojson_of_t t
+      let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+    end)
+
+module Track = struct
+  type t = Track.t [@@deriving yojson]
+
+  let name = "tracks"
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+end
+
+module Tracks_store =
+  Make_object_store
+    (Track)
+    (struct
+      include Generic_schema.Track.Key
+
+      let to_jv { name; genres; collections } =
+        let name = Jv.of_string name in
+        let genres = Jv.of_list Jv.of_int genres in
+        let collections = Jv.of_list Jv.of_int collections in
+        Jv.of_jv_array [| name; genres; collections |]
+
+      let of_jv j =
+        match Jv.to_jv_array j with
+        | [| name; genres; collections |] ->
+            let name = Jv.to_string name in
+            let genres = Jv.to_list Jv.to_int genres in
+            let collections = Jv.to_list Jv.to_int collections in
+            { name; genres; collections }
+        | _ -> assert false
     end)
