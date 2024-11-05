@@ -9,12 +9,12 @@ module Queries = struct
     | Set_session_uuid : string -> unit query
     | Add_servers : server list -> unit query
     | Get_all : unit -> Api.Item.t list query
-    | Get_libraries : unit -> Stores.Items.t list query
-    | Get_server_libraries : string -> Stores.Items.t list query
+    | Get_libraries : unit -> (int * Stores.Collection.t) array query
     | Create_view : View.req -> View.t query
     | Get :
         View.t * View.Order.t * int array
-        -> Stores.Items.t option array query
+        -> (Generic_schema.Track.Key.t * Generic_schema.Track.t) option array
+           query
 
   type 'a event = Servers_status_update : (string * Sync.report) event
 end

@@ -33,7 +33,7 @@ module Sort = struct
     | _ -> Date_added
 end
 
-type 'a selection = All | Only of 'a list
+type 'a selection = All | Only of int list
 type kind = Audio
 type filter = Search of string
 

@@ -11,7 +11,10 @@ type t = Elwd.t Lwd.t
 
 let playstate = { playlist = Lwd.var None; current_index = Lwd.var 0 }
 
-type now_playing = { item : DS.Api.Item.t; url : string }
+type now_playing = {
+  item : Db.Generic_schema.Track.Key.t * Db.Generic_schema.Track.t;
+  url : string;
+}
 
 let now_playing = Lwd.var None
 
@@ -33,19 +36,31 @@ module Playback_controller (P : sig
   val fetch :
     View.ranged ->
     int array ->
-    (Db.Stores.Items.t option array, Db.Worker_api.error) Fut.result
+    ( (Db.Generic_schema.Track.Key.t * Db.Generic_schema.Track.t) option array,
+      Db.Worker_api.error )
+    Fut.result
 end) =
 struct
   let set_play_url playlist current_index =
     match playlist with
     | None -> Fut.ok ()
     | Some playlist ->
+        let open Db.Generic_schema in
         let open Fut.Result_syntax in
         let+ item =
           let+ result = P.fetch playlist [| current_index |] in
           match result with
-          | [| Some { Db.Stores.Items.item; _ } |] ->
-              let { DS.Api.Item.server_id; id; album_id; name; _ } = item in
+          | [|
+           Some
+             Track.(
+               ( { Key.name; _ },
+                 {
+                   id = Jellyfin id;
+                   server_id = Jellyfin server_id;
+                   album_id;
+                   _;
+                 } ) as item);
+          |] ->
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
               let url = audio_url connexion id in
@@ -53,7 +68,10 @@ struct
               let () =
                 let open Brr_io.Media.Session in
                 let session = of_navigator G.navigator in
-                let image_id = Option.value ~default:id album_id in
+                let image_id =
+                  Option.map (fun (Id.Jellyfin id) -> id) album_id
+                  |> Option.value ~default:id
+                in
                 let img_src =
                   Printf.sprintf
                     "%s/Items/%s/Images/Primary?width=500&format=Jpg"
@@ -169,8 +187,15 @@ struct
               let src =
                 match np with
                 | None -> "track.png"
-                | Some { item = { id; album_id; server_id; _ }; _ } ->
-                    let image_id = Option.value ~default:id album_id in
+                | Some { item = _, { id; album_id; server_id; _ }; _ } ->
+                    let (Jellyfin id) = id in
+                    let (Jellyfin server_id) = server_id in
+                    let image_id =
+                      Option.map
+                        (fun (Db.Generic_schema.Id.Jellyfin id) -> id)
+                        album_id
+                      |> Option.value ~default:id
+                    in
                     let servers =
                       Lwd_seq.to_list (Lwd.peek Servers.connexions)
                     in
@@ -205,7 +230,7 @@ struct
           let txt =
             Lwd.map (Lwd.get now_playing) ~f:(function
               | None -> El.txt' "Nothing playing"
-              | Some { item = { name; _ }; _ } -> El.txt' name)
+              | Some { item = { name; _ }, _; _ } -> El.txt' name)
           in
           Elwd.span [ `R txt ]
         in

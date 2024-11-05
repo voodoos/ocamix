@@ -38,11 +38,9 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
     At.src (Jstr.v url)
   in
   let render (ranged : View.ranged Lwd.t) start_index
-      {
-        Db.Stores.Items.item =
-          { Api.Item.id; name; album_id; server_id; image_blur_hashes; _ };
-        _;
-      } =
+      Db.Generic_schema.Track.(
+        ( { Key.name; _ },
+          { id = Jellyfin id; server_id = Jellyfin server_id; album_id; _ } )) =
     let play_from (ranged : View.ranged Lwd.t) =
       Lwd.map ranged ~f:(fun ranged _ ->
           ignore
@@ -60,14 +58,14 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
     let img_url =
-      match (image_blur_hashes, album_id) with
-      | { primary = None }, _ | _, None ->
-          Lwd.return (At.src (Jstr.v "track.png"))
-      | _, Some id -> Lwd.return (img_url server_id id)
+      match album_id with
+      | None -> Lwd.return (At.src (Jstr.v "track.png"))
+      | Some (Jellyfin id) -> Lwd.return (img_url server_id id)
     in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
-        | Some { item = { id = item_id; _ }; _ } when String.equal item_id id ->
+        | Some { item = _, { id = Jellyfin item_id; _ }; _ }
+          when String.equal item_id id ->
             El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "|>" ]
         | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
     in

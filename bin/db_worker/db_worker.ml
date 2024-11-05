@@ -25,11 +25,12 @@ let fut_of_array (fs : 'a Fut.t array) : 'a array Fut.t =
 module Worker () = struct
   let view_memo :
       ( string Db.View.selection * Db.View.Sort.t,
-        IS.Primary_key.t array )
+        Db.Generic_schema.Track.Key.t array )
       Hashtbl.t =
     Hashtbl.create 64
 
-  let last_view : (int * IS.Primary_key.t array) ref = ref (-1, [||])
+  let last_view : (int * Db.Generic_schema.Track.Key.t array) ref =
+    ref (-1, [||])
 
   let check_db idb source =
     let server_id, source = source in
@@ -54,6 +55,13 @@ module Worker () = struct
     IDB.Database.transaction [ (module Db.Item_store) ] ~mode:Readonly idb
     |> IDB.Transaction.object_store (module Db.Item_store)
 
+  let get_store (type t') (module Store : IDB.Store_intf with type t = t')
+      ?(mode = IDB.Transaction.Readonly) () : (t', error) Fut.result =
+    let open Fut.Result_syntax in
+    let+ idb = idb in
+    IDB.Database.transaction [ (module Store) ] ~mode idb
+    |> IDB.Transaction.object_store (module Store)
+
   let get_view_keys store { Db.View.kind = _; src_views; sort; filters } =
     (* todo: staged memoization + specialized queries using indexes *)
     let open Fut.Result_syntax in
@@ -64,20 +72,7 @@ module Worker () = struct
       let+ keys =
         try Fut.ok @@ Hashtbl.find view_memo (src_views, sort)
         with Not_found ->
-          let+ all_keys =
-            let lower = Jv.of_array Jv.of_string [| "Audio" |] in
-            let upper = Jv.of_array Jv.of_string [| "Audio\u{0}" |] in
-            let query =
-              IDB.Key_range.bound ~lower ~upper ~lower_open:true
-                ~upper_open:false ()
-            in
-            let idx =
-              IS.index
-                (module IS.Index.Kind_View)
-                ~name:"items_by_view_and_kind" store
-            in
-            IS.Index.Kind_View.get_all_keys ~query idx |> as_fut
-          in
+          let+ all_keys = Db.Stores.Tracks_store.get_all_keys store |> as_fut in
           Console.log
             [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
           let n = Performance.now_ms G.performance in
@@ -86,8 +81,9 @@ module Worker () = struct
             | All -> all_keys
             | Only src_views ->
                 Array.filter all_keys
-                  ~f:(fun { Db.Stores.Items_store_key.views; _ } ->
-                    List.exists views ~f:(fun v -> List.memq v ~set:src_views))
+                  ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
+                    List.exists collections ~f:(fun v ->
+                        List.memq v ~set:src_views))
           in
           Console.log
             [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
@@ -99,20 +95,20 @@ module Worker () = struct
         | [ Search sub ] when not (String.is_empty sub) ->
             let sub = String.lowercase_ascii sub in
             let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-            Array.filter keys
-              ~f:(fun { Db.Stores.Items_store_key.sort_name; _ } ->
-                let sort_name = String.lowercase_ascii sort_name in
-                String.Find.find ~pattern sort_name >= 0)
+            Array.filter keys ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
+                let name = String.lowercase_ascii name in
+                String.Find.find ~pattern name >= 0)
         | _ -> keys
       in
       let n = Performance.now_ms G.performance in
       let () =
         match sort with
         | Name ->
+            (* TODO sort should be achieved by using the sort_name index*)
             Array.sort keys
               ~cmp:(fun
-                  { Db.Stores.Items_store_key.sort_name = sna; _ }
-                  { Db.Stores.Items_store_key.sort_name = snb; _ }
+                  { Db.Generic_schema.Track.Key.name = sna; _ }
+                  { Db.Generic_schema.Track.Key.name = snb; _ }
                 -> String.compare sna snb)
         | _ -> ()
       in
@@ -120,6 +116,8 @@ module Worker () = struct
       last_view := (hash, keys);
       keys
 
+  (* TODO there is no reason to delegate everything to the worker, only view
+     creation is really slow *)
   let on_query (type a) (q : a query) : (a, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
@@ -135,71 +133,28 @@ module Worker () = struct
         let* store = read_only_store () in
         let+ req = Db.Item_store.get_all store |> as_fut in
         Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
-    | Get_server_libraries server_id' ->
-        let* store = read_only_store () in
-        let index =
-          IS.(
-            index
-              (module IS.Index.Type_Name)
-              ~name:"items_by_type_and_name" store)
-        in
-        let lower = Jv.of_array Jv.of_string [| "music" |] in
-        let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
-        let query =
-          IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
-            ()
-        in
-        let* keys = IS.Index.Type_Name.get_all_keys ~query index |> as_fut in
-        let open Fut.Syntax in
-        let+ items =
-          List.map (Array.to_list keys) ~f:(fun k -> IS.get k store |> as_fut)
-          |> Fut.of_list
-        in
-        let items =
-          Result.flatten_l items
-          |> Result.map
-               (List.filter_map ~f:(function
-                 | Some ({ Db.Stores.Items.item = { server_id; _ }; _ } as item)
-                   when String.equal server_id server_id' ->
-                     Some item
-                 | Some _ | None -> None))
-        in
-        items
     | Get_libraries () ->
-        let* store = read_only_store () in
-        let index =
-          IS.(
-            index
-              (module IS.Index.Type_Name)
-              ~name:"items_by_type_and_name" store)
+        let* store = get_store (module Db.Stores.Collections_store) () in
+        let keys =
+          Db.Stores.Collections_store.get_all_keys store |> IDB.Request.fut
         in
-        let lower = Jv.of_array Jv.of_string [| "music" |] in
-        let upper = Jv.of_array Jv.of_string [| "music\u{0}" |] in
-        let query =
-          IDB.Key_range.bound ~lower ~upper ~lower_open:true ~upper_open:false
-            ()
+        let records =
+          Db.Stores.Collections_store.get_all store |> IDB.Request.fut
         in
-        let* keys = IS.Index.Type_Name.get_all_keys ~query index |> as_fut in
-        let open Fut.Syntax in
-        let+ items =
-          List.map (Array.to_list keys) ~f:(fun k -> IS.get k store |> as_fut)
-          |> Fut.of_list
-        in
-        let items =
-          Result.flatten_l items
-          |> Result.map (fun l ->
-                 List.map l ~f:(Option.get_exn_or "Item should exists."))
-        in
-        items
+        Fut.pair keys records
+        |> Fut.map (function
+             | Ok keys, Ok records ->
+                 Ok (Array.map2 ~f:(fun k r -> (k, r)) keys records)
+             | Error e, Ok _ | _, Error e -> Error (`Jv e))
     | Create_view request ->
-        let* store = read_only_store () in
+        let* store = get_store (module Db.Stores.Tracks_store) () in
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
         { Db.View.request; start_offset = 0; item_count }
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
-        let* store = read_only_store () in
+        let* store = get_store (module Db.Stores.Tracks_store) () in
         let* keys = get_view_keys store view.request in
         let open Fut.Syntax in
         let+ results =
@@ -212,14 +167,16 @@ module Worker () = struct
                 (* This could be optimize when access is sequential *)
                 let key = keys.(index) in
                 let open Fut.Syntax in
-                let+ result = IS.get key store |> IDB.Request.fut in
+                let+ result =
+                  Db.Stores.Tracks_store.get key store |> IDB.Request.fut
+                in
                 match result with
                 | Ok None -> None
                 | Error err ->
                     Console.error
                       [ "An error occured while loading item"; key; err ];
                     None
-                | Ok (Some v) -> Some v
+                | Ok (Some v) -> Some (key, v)
               with _ -> Fut.return None)
           |> fut_of_array
         in

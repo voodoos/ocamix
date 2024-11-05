@@ -81,6 +81,27 @@ let app =
     make { name = "view-order"; default = "desc"; label = [] } options
   in
   let f_sort_order = Lwd.pair (Lwd.get f_sort.value) (Lwd.get f_order.value) in
+
+  let _f_genres =
+    Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
+    let open Brr_io.Indexed_db in
+    let module G = Db.Stores.Genres_store in
+    let genres =
+      Database.transaction [ (module G) ] ~mode:Readonly idb
+      |> Transaction.object_store (module G)
+    in
+    G.get_all genres |> Request.fut
+    |> Fut.map (function
+         | Ok genres ->
+             let genres =
+               let open Db.Generic_schema in
+               Array.map ~f:(fun g -> g.Genre.name) genres
+             in
+             Console.log [ "GENRES"; genres ]
+         | _ -> Console.log [ "OUTCH GENRES" ])
+    |> ignore
+  in
+
   let filters, f_value =
     let f_libraries =
       let open Field_checkboxes in
@@ -88,8 +109,8 @@ let app =
         Lwd_seq.fold_monoid
           (fun (_, l) ->
             Lwd_seq.map
-              (fun (l : Db.Stores.Items.t) ->
-                Check (l.item.id, [ `P (El.txt' l.item.name) ], true))
+              (fun ((key, l) : int * Db.Generic_schema.Collection.t) ->
+                Check (key, [ `P (El.txt' l.name) ], true))
               l)
           (Lwd.return Lwd_seq.empty, Lwd.map2 ~f:Lwd_seq.concat)
           Servers.servers_libraries
@@ -179,8 +200,25 @@ let app =
           let src =
             match np with
             | None -> "track.png"
-            | Some { item = { id; album_id; server_id; _ }; _ } ->
-                let image_id = Option.value ~default:id album_id in
+            | Some
+                {
+                  item =
+                    Db.Generic_schema.Track.(
+                      ( _,
+                        {
+                          id = Jellyfin id;
+                          server_id = Jellyfin server_id;
+                          album_id;
+                          _;
+                        } ));
+                  _;
+                } ->
+                let image_id =
+                  Option.map
+                    (fun (Db.Generic_schema.Id.Jellyfin id) -> id)
+                    album_id
+                  |> Option.value ~default:id
+                in
                 let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
                 let connexion : DS.connexion = List.assq server_id servers in
                 (* todo: this is done in multiple places, we should factor
