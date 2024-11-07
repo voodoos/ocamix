@@ -33,13 +33,13 @@ module Sort = struct
     | _ -> Date_added
 end
 
-type 'a selection = All | Only of int list
+type 'a selection = All | Only of 'a list
 type kind = Audio
 type filter = Search of string
 
 type req = {
   kind : kind;
-  src_views : string selection;
+  src_views : int selection;
   sort : Sort.t;
   filters : filter list;
 }

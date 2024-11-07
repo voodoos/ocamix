@@ -25,7 +25,7 @@ let fut_of_array (fs : 'a Fut.t array) : 'a array Fut.t =
 
 module Worker () = struct
   let view_memo :
-      ( string Db.View.selection * Db.View.Sort.t,
+      ( int Db.View.selection * Db.View.Sort.t,
         Db.Generic_schema.Track.Key.t array )
       Hashtbl.t =
     Hashtbl.create 64
@@ -60,56 +60,48 @@ module Worker () = struct
   let get_view_keys store { Db.View.kind = _; src_views; sort; filters } =
     (* todo: staged memoization + specialized queries using indexes *)
     let open Fut.Result_syntax in
-    let hash = Hashtbl.hash (src_views, sort, filters) in
-    if Int.equal (fst !last_view) hash then Fut.ok (snd !last_view)
-    else
+    let n = Performance.now_ms G.performance in
+    let+ keys =
+      let+ all_keys = Db.Stores.Tracks_store.get_all_keys store |> as_fut in
+      Console.log
+        [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
       let n = Performance.now_ms G.performance in
-      let+ keys =
-        try Fut.ok @@ Hashtbl.find view_memo (src_views, sort)
-        with Not_found ->
-          let+ all_keys = Db.Stores.Tracks_store.get_all_keys store |> as_fut in
-          Console.log
-            [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
-          let n = Performance.now_ms G.performance in
-          let keys =
-            match src_views with
-            | All -> all_keys
-            | Only src_views ->
-                Array.filter all_keys
-                  ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
-                    List.exists collections ~f:(fun v ->
-                        List.memq v ~set:src_views))
-          in
-          Console.log
-            [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
-          Hashtbl.add view_memo (src_views, sort) keys;
-          keys
-      in
       let keys =
-        match filters with
-        | [ Search sub ] when not (String.is_empty sub) ->
-            let sub = String.lowercase_ascii sub in
-            let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-            Array.filter keys ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
-                let name = String.lowercase_ascii name in
-                String.Find.find ~pattern name >= 0)
-        | _ -> keys
+        match src_views with
+        | All -> all_keys
+        | Only src_views ->
+            Array.filter all_keys
+              ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
+                List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
       in
-      let n = Performance.now_ms G.performance in
-      let () =
-        match sort with
-        | Name ->
-            (* TODO sort should be achieved by using the sort_name index*)
-            Array.sort keys
-              ~cmp:(fun
-                  { Db.Generic_schema.Track.Key.name = sna; _ }
-                  { Db.Generic_schema.Track.Key.name = snb; _ }
-                -> String.compare sna snb)
-        | _ -> ()
-      in
-      Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
-      last_view := (hash, keys);
+      Console.log
+        [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
       keys
+    in
+    let keys =
+      match filters with
+      | [ Search sub ] when not (String.is_empty sub) ->
+          let sub = String.lowercase_ascii sub in
+          let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
+          Array.filter keys ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
+              let name = String.lowercase_ascii name in
+              String.Find.find ~pattern name >= 0)
+      | _ -> keys
+    in
+    let n = Performance.now_ms G.performance in
+    let () =
+      match sort with
+      | Name ->
+          (* TODO sort should be achieved by using the sort_name index*)
+          Array.sort keys
+            ~cmp:(fun
+                { Db.Generic_schema.Track.Key.name = sna; _ }
+                { Db.Generic_schema.Track.Key.name = snb; _ }
+              -> String.compare sna snb)
+      | _ -> ()
+    in
+    Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
+    keys
 
   (* TODO there is no reason to delegate everything to the worker, only view
      creation is really slow *)
@@ -144,8 +136,8 @@ module Worker () = struct
         { Db.View.request; start_offset = 0; item_count }
     | Get_view_albums view ->
         let* store = get_store (module Tracks_store) () in
-        let* s_genres = get_store (module Genres_store) () in
         let* keys = get_view_keys store view.request in
+        let* s_genres = get_store (module Genres_store) () in
         let+ genres = Genres_store.get_all s_genres |> as_fut in
         Array.fold_left keys ~init:Int_set.empty
           ~f:(fun acc { Db.Generic_schema.Track.Key.genres; _ } ->
