@@ -1,9 +1,10 @@
 open! Std
+module Int_set = Set.Make (Int)
 open Db.Worker_api
 open Brrer
 open! Brr
 module IDB = Brr_io.Indexed_db
-module IS = Db.Item_store
+open Db.Stores
 
 let () = Random.self_init ()
 
@@ -48,12 +49,6 @@ module Worker () = struct
       ignore (set_idb @@ Ok idb)
     in
     idb
-
-  let read_only_store () =
-    let open Fut.Result_syntax in
-    let+ idb = idb in
-    IDB.Database.transaction [ (module Db.Item_store) ] ~mode:Readonly idb
-    |> IDB.Transaction.object_store (module Db.Item_store)
 
   let get_store (type t') (module Store : IDB.Store_intf with type t = t')
       ?(mode = IDB.Transaction.Readonly) () : (t', error) Fut.result =
@@ -129,10 +124,6 @@ module Worker () = struct
         let open Fut.Syntax in
         let+ res = check_db idb (List.hd l) in
         Result.map_err (fun jv -> `Jv jv) res
-    | Get_all () ->
-        let* store = read_only_store () in
-        let+ req = Db.Item_store.get_all store |> as_fut in
-        Array.map ~f:(fun i -> i.Db.Stores.Items.item) req |> Array.to_list
     | Get_libraries () ->
         let* store = get_store (module Db.Stores.Collections_store) () in
         let keys =
@@ -151,6 +142,18 @@ module Worker () = struct
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
         { Db.View.request; start_offset = 0; item_count }
+    | Get_view_albums view ->
+        let* store = get_store (module Tracks_store) () in
+        let* s_genres = get_store (module Genres_store) () in
+        let* keys = get_view_keys store view.request in
+        let+ genres = Genres_store.get_all s_genres |> as_fut in
+        Array.fold_left keys ~init:Int_set.empty
+          ~f:(fun acc { Db.Generic_schema.Track.Key.genres; _ } ->
+            Int_set.add_list acc genres)
+        |> Int_set.to_list
+        |> List.map ~f:(fun key ->
+               try { Db.Generic_schema.key; value = genres.(key - 1) }
+               with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)

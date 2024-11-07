@@ -9,6 +9,8 @@ open! Std
    arrays, the key can range from an empty value to infinity. And you can include
    an array within an array. *)
 
+type ('key, 'value) with_key = { key : 'key; value : 'value }
+
 module Id = struct
   type t = Jellyfin of string [@@deriving yojson]
 
@@ -26,6 +28,7 @@ end
 
 module Genre = struct
   type t = { name : string; canon : string } [@@deriving yojson]
+  type nonrec with_key = (int, t) with_key
 end
 
 module Album = struct
