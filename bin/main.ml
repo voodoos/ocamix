@@ -36,20 +36,6 @@ end)
 
 let app =
   let open Brr_lwd_ui.Forms in
-  let playlist = Brr_lwd_ui.Persistent.var ~key:"toto1" 0 in
-  let on_click _ _ =
-    Lwd.set playlist (Lwd.peek playlist + 1);
-    Lang.set Lang.En;
-    Brr_lwd_ui.Button.Next
-  in
-  let _btn_mix, _, _ =
-    Ui.Two_state_button.make ~on_click (fun _ ->
-        [
-          `R
-            (Lwd.map (Lwd.get playlist) ~f:(fun pl ->
-                 El.txt' ("click" ^ string_of_int pl)));
-        ])
-  in
   let status =
     Elwd.div
       ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ]
