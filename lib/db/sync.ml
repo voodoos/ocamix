@@ -32,7 +32,7 @@ open Source.Api
    prefixed by one of the view's virtual folder locations.
 *)
 
-let chunk_size = 500
+let chunk_size = 10000
 
 let include_item_types =
   [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
@@ -353,7 +353,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
     in
     enqueue ~start_index:first total;
     let total_queries = Queue.length fetch_queue in
-    let rec run_queue ?(threads = 4) q =
+    let rec run_queue ?(threads = 1) q =
       assert (threads > 0);
       let rec take_n acc n =
         if n = 0 then List.rev acc
@@ -370,8 +370,10 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
       (* TODO: there's a stack overflow somewhere...*)
       let f req =
         let+ { Api.Items.start_index; items; _ } =
+          Console.log [ "Before query" ];
           query source (module Api.Items) req ()
         in
+        Console.log [ "Successfully decoded query"; List.length items ];
         let () =
           report
           @@ Some
@@ -411,7 +413,6 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                     ~name:"by-id" s_collections)
               in
               let s_genres =
-                Console.log [ "objs" ];
                 Transaction.object_store
                   (module Stores.Genres_store)
                   transaction
@@ -463,7 +464,6 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                   |> Fut.map (fun genres ->
                          let key = { Generic_schema.Album.Key.name; genres } in
                          let id = Generic_schema.Id.Jellyfin id in
-                         Console.log [ "Album"; key; id; sort_name; genres ];
                          Stores.Albums_store.add ~key { id; sort_name; genres }
                            s_albums)
                   |> ignore
