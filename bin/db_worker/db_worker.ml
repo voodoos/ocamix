@@ -1,5 +1,4 @@
 open! Std
-module Int_set = Set.Make (Int)
 open Db.Worker_api
 open Brrer
 open! Brr
@@ -57,11 +56,16 @@ module Worker () = struct
     IDB.Database.transaction [ (module Store) ] ~mode idb
     |> IDB.Transaction.object_store (module Store)
 
-  let get_view_keys store { Db.View.kind = _; src_views; sort; filters } =
+  let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
+    Hashtbl.create 64
+
+  let get_view_keys store
+      ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
     let open Fut.Result_syntax in
-    let n = Performance.now_ms G.performance in
-    let+ keys =
+    try Fut.ok @@ Hashtbl.find view_memo @@ Db.View.hash req
+    with Not_found ->
+      let n = Performance.now_ms G.performance in
       let+ all_keys = Db.Stores.Tracks_store.get_all_keys store |> as_fut in
       Console.log
         [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
@@ -74,34 +78,39 @@ module Worker () = struct
               ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
                 List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
       in
+      let keys =
+        List.fold_left filters ~init:keys ~f:(fun keys -> function
+          | Db.View.Search sub when not (String.is_empty sub) ->
+              let sub = String.lowercase_ascii sub in
+              let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
+              Array.filter keys
+                ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
+                  let name = String.lowercase_ascii name in
+                  String.Find.find ~pattern name >= 0)
+          | Genres (Only ids) ->
+              Array.filter keys
+                ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
+                  let genres = Int.Set.of_list genres in
+                  Int.Set.subset genres ids)
+          | _ -> keys)
+      in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
+      let n = Performance.now_ms G.performance in
+      let () =
+        match sort with
+        | Name ->
+            (* TODO sort should be achieved by using the sort_name index*)
+            Array.sort keys
+              ~cmp:(fun
+                  { Db.Generic_schema.Track.Key.name = sna; _ }
+                  { Db.Generic_schema.Track.Key.name = snb; _ }
+                -> String.compare sna snb)
+        | _ -> ()
+      in
+      Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
+      Hashtbl.add view_memo (Db.View.hash req) keys;
       keys
-    in
-    let keys =
-      match filters with
-      | [ Search sub ] when not (String.is_empty sub) ->
-          let sub = String.lowercase_ascii sub in
-          let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-          Array.filter keys ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
-              let name = String.lowercase_ascii name in
-              String.Find.find ~pattern name >= 0)
-      | _ -> keys
-    in
-    let n = Performance.now_ms G.performance in
-    let () =
-      match sort with
-      | Name ->
-          (* TODO sort should be achieved by using the sort_name index*)
-          Array.sort keys
-            ~cmp:(fun
-                { Db.Generic_schema.Track.Key.name = sna; _ }
-                { Db.Generic_schema.Track.Key.name = snb; _ }
-              -> String.compare sna snb)
-      | _ -> ()
-    in
-    Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
-    keys
 
   (* TODO there is no reason to delegate everything to the worker, only view
      creation is really slow *)
@@ -139,12 +148,11 @@ module Worker () = struct
         let* keys = get_view_keys store view.request in
         let* s_genres = get_store (module Genres_store) () in
         let+ genres = Genres_store.get_all s_genres |> as_fut in
-        Array.fold_left keys ~init:Int_set.empty
+        Array.fold_left keys ~init:Int.Map.empty
           ~f:(fun acc { Db.Generic_schema.Track.Key.genres; _ } ->
-            Int_set.add_list acc genres)
-        |> Int_set.to_list
-        |> List.map ~f:(fun key ->
-               try { Db.Generic_schema.key; value = genres.(key - 1) }
+            Int.Map.add_list acc (List.map genres ~f:(fun g -> (g, ()))))
+        |> Int.Map.mapi (fun key () ->
+               try genres.(key - 1)
                with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should

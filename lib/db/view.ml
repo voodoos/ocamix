@@ -33,16 +33,28 @@ module Sort = struct
     | _ -> Date_added
 end
 
-type 'a selection = All | Only of 'a list
+type 'a selection = All | Only of 'a
 type kind = Audio
-type filter = Search of string
+type filter = Search of string | Genres of Int.Set.t selection
 
 type req = {
   kind : kind;
-  src_views : int selection;
+  src_views : int list selection;
   sort : Sort.t;
   filters : filter list;
 }
+
+let hash { kind; src_views; sort; filters } =
+  let filters =
+    List.map filters ~f:(fun f ->
+        match f with
+        | Search s -> s
+        | Genres (Only s) ->
+            Int.Set.to_list s |> List.map ~f:string_of_int
+            |> String.concat ~sep:";"
+        | Genres All -> "allgenres")
+  in
+  Hash.poly (kind, src_views, sort, filters)
 
 type t = { request : req; start_offset : int; item_count : int }
 type ranged = { view : t; first : int; last : int; order : Order.t }
@@ -51,5 +63,3 @@ let item_count t = t.item_count - t.start_offset
 
 let req kind ?(src_views = All) ?(sort = Sort.Date_added) ?(filters = []) () =
   { kind; src_views; sort; filters }
-
-let hash req = Hashtbl.hash (req.src_views, req.filters)

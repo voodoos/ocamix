@@ -10,9 +10,7 @@ type 'value desc = Check of 'value * label * checked
 type 'value group = { name : string; desc : 'value desc Lwd_seq.t Lwd.t }
 type 'a reactive_field = { field : Elwd.t Lwd.t; value : 'a Lwd.t }
 
-let name ~g ~n ~id base_name =
-  if id then Printf.sprintf "%s-%i-%i-id" base_name g n
-  else Printf.sprintf "%s-%i-%i" base_name g n
+let name ~g ~n base_name = Printf.sprintf "%s-%i-%i" base_name g n
 
 let make_single ?persist ?(ev = []) ?(on_change = fun _ -> ()) name value label
     checked =
@@ -45,17 +43,16 @@ let make_single ?persist ?(ev = []) ?(on_change = fun _ -> ()) name value label
   let ev = `P on_change :: ev in
   (Elwd.(div [ `R (input ~at ~ev ()); `R lbl ]), var)
 
-let make ?(persist = true) t =
+let make ?at ?(persist = true) t =
   (* <fieldset><legend> *)
   (* <fieldset><legend> *)
   let make_all ~g desc =
-    let n = ref 0 in
     Lwd_seq.map
       (function
         | Check (v, l, c) ->
-            let name = name ~g ~n:!n ~id:false t.name in
+            let n = Hashtbl.hash v in
+            let name = name ~g ~n t.name in
             let elt, value = make_single ~persist name v l c in
-            incr n;
             (elt, value))
       desc
   in
@@ -67,7 +64,7 @@ let make ?(persist = true) t =
       Lwd_seq.monoid all
     |> Lwd_seq.lift |> Lwd_seq.filter_map Fun.id
   in
-  { field = Elwd.div [ `S (Lwd_seq.lift elts) ]; value }
+  { field = Elwd.div ?at [ `S (Lwd_seq.lift elts) ]; value }
 
 (* let rec make_all ~g ~n (acc_elt, acc_value) desc =
      match desc with

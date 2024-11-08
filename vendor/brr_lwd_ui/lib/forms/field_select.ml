@@ -12,14 +12,15 @@ type 'a reactive_field = {
 let name ~id base_name =
   if id then Printf.sprintf "%s--id" base_name else base_name
 
-let make ?(persist = true) ?(at = []) ?(ev = []) (desc : string Field.desc)
-    options =
+let make ?(persist = true) ?(at = []) ?(ev = []) ?(on_change = ignore)
+    (desc : string Field.desc) options =
   let id = name ~id:true desc.name in
   let name = name ~id:false desc.name in
   let value =
     if persist then Persistent.var ~key:id desc.default
     else Lwd.var desc.default
   in
+  let () = on_change @@ Lwd.peek value in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
   let field =
     let at =
@@ -31,8 +32,9 @@ let make ?(persist = true) ?(at = []) ?(ev = []) (desc : string Field.desc)
     let on_change =
       Elwd.handler Ev.change (fun ev ->
           let t = Ev.target ev |> Ev.target_to_jv in
-          let value' = Jv.get t "value" in
-          Lwd.set value (Jv.to_string value'))
+          let value' = Jv.get t "value" |> Jv.to_string in
+          on_change value';
+          Lwd.set value value')
     in
     let ev = `P on_change :: ev in
     let options =

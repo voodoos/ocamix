@@ -35,7 +35,6 @@ module P = Player.Playback_controller (struct
 end)
 
 let app =
-  let open Brr_lwd_ui.Forms in
   let status =
     Elwd.div
       ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ]
@@ -45,110 +44,16 @@ let app =
     let player = P.make () in
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
-  let f_search =
-    let open Field_textinput in
-    make { name = "pouet"; default = None; label = [] }
-  in
-  let f_sort =
-    let open Field_select in
-    let options =
-      Lwd.pure
-        (Lwd_seq.of_list [ ("date_added", "Date added"); ("name", "Name") ])
-    in
-    make { name = "view-sort"; default = "date_added"; label = [] } options
-  in
-  let f_order =
-    let open Field_select in
-    let options =
-      Lwd.pure
-        (Lwd_seq.of_list
-           [ ("asc", "Asc"); ("desc", "Desc"); ("random", "Random") ])
-    in
-    make { name = "view-order"; default = "desc"; label = [] } options
-  in
-  let f_sort_order = Lwd.pair (Lwd.get f_sort.value) (Lwd.get f_order.value) in
-
-  let _f_genres =
-    Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
-    let open Brr_io.Indexed_db in
-    let module G = Db.Stores.Genres_store in
-    let genres =
-      Database.transaction [ (module G) ] ~mode:Readonly idb
-      |> Transaction.object_store (module G)
-    in
-    G.get_all genres |> Request.fut
-    |> Fut.map (function
-         | Ok genres ->
-             let genres =
-               let open Db.Generic_schema in
-               Array.map ~f:(fun g -> g.Genre.name) genres
-             in
-             Console.log [ "GENRES"; genres ]
-         | _ -> Console.log [ "OUTCH GENRES" ])
-    |> ignore
-  in
-
-  let filters, f_value =
-    let f_libraries =
-      let open Field_checkboxes in
-      let choices =
-        Lwd_seq.fold_monoid
-          (fun (_, l) ->
-            Lwd_seq.map
-              (fun ((key, l) : int * Db.Generic_schema.Collection.t) ->
-                Check (key, [ `P (El.txt' l.name) ], true))
-              l)
-          (Lwd.return Lwd_seq.empty, Lwd.map2 ~f:Lwd_seq.concat)
-          Servers.servers_libraries
-      in
-      make { name = "pouet"; desc = Lwd.join choices }
-    in
-    let filters =
-      Elwd.div
-        [
-          `R f_sort.field;
-          `R f_order.field;
-          `R f_search.field;
-          `R f_libraries.field;
-        ]
-    in
-    (filters, f_libraries.value)
-  in
   let main_view =
-    let previous_value = ref None in
-    let request =
-      Ui_utils.map3 f_value (Lwd.get f_search.value) f_sort_order
-        ~f:(fun l t (s, _o) ->
-          let filters = Option.map (fun s -> [ Db.View.Search s ]) t in
-          Console.log
-            [
-              "Updating main view:";
-              Jv.of_option ~none:(Jv.of_string "\"\"") Jv.of_string t;
-              (* Jv.of_list Jv.of_string l; *)
-              Jv.of_string s;
-            ];
-          let sort = Db.View.Sort.of_string s in
-          let new_view =
-            Db.View.(
-              req Audio ~src_views:(Only (Lwd_seq.to_list l)) ~sort ?filters ())
-          in
-          Option.map_or ~default:new_view
-            (fun old ->
-              if Equal.poly old new_view then old
-              else (
-                previous_value := Some new_view;
-                new_view))
-            !previous_value)
-    in
+    (* TODO this is silly *)
+    let view = Lwd.get Ui_filters.view in
+    let request = Lwd.map view ~f:(fun { View.request; _ } -> request) in
     let item_count =
-      Lwd.map request ~f:(fun req -> Worker_client.get_view_item_count req)
+      Lwd.map view ~f:(fun { View.item_count; _ } -> item_count)
     in
-    let item_count = (* FIXME *) Lwd.join item_count in
     let order =
-      Lwd.map2 item_count f_sort_order ~f:(fun item_count (_, order) ->
-          let size = item_count in
-          let order = View.Order.of_string ~size order in
-          order)
+      Lwd.map2 item_count (Lwd.get Ui_filters.selected_order) ~f:(fun size ->
+          View.Order.of_string ~size)
     in
     { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
   in
@@ -224,7 +129,7 @@ let app =
       `R
         (Elwd.div
            ~at:[ `P (At.class' (Jstr.v "item-list")) ]
-           [ `R big_cover; `R filters; `R (Elwd.div [ `R main_list ]) ]);
+           [ `R big_cover; `R Ui_filters.bar; `R (Elwd.div [ `R main_list ]) ]);
       `R
         (Elwd.div ~at:[ `P (At.class' (Jstr.v "playlist")) ] [ `R now_playing ]);
       `R player_ui;
