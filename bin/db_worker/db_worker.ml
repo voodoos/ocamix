@@ -44,7 +44,7 @@ module Worker () = struct
   let idb =
     let idb, set_idb = Fut.create () in
     let _ =
-      Db.with_idb ~name:"tracks" ~version:1 @@ fun idb ->
+      Db.with_idb ~name:"tracks" ~version:2 @@ fun idb ->
       ignore (set_idb @@ Ok idb)
     in
     idb
