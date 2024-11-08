@@ -57,7 +57,7 @@ let app =
     in
     { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
   in
-
+  (* TODO filter and view does not update correctly while syncing *)
   let main_list =
     Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch main_view
   in
