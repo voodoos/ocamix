@@ -23,7 +23,7 @@ body {
     box-sizing: border-box;
 
     grid-template-columns: 2fr 1fr;
-    grid-template-rows: 5rem 1fr;
+    grid-template-rows: auto 1fr;
 
     @media screen and (max-width: 512px) {
         grid-template-columns: 1fr;
