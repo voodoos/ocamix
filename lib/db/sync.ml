@@ -32,7 +32,7 @@ open Source.Api
    prefixed by one of the view's virtual folder locations.
 *)
 
-let chunk_size = 2500
+let chunk_size = 2000
 
 let include_item_types =
   [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
@@ -362,6 +362,11 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
           | None -> List.rev acc
           | Some elt -> take_n (elt :: acc) (n - 1)
       in
+      (* TODO requests are slow: the server takes 3.5 seconds when asking for
+         two times 2000 records and handling the result is slow (2~3 seconds).
+         We could send the next request while handling the previous results.
+         This should speed up the process a lot. (Also there might be
+         opportunities to speed up result handling.) *)
       let f req =
         let+ { Api.Items.start_index; items; _ } =
           query source (module Api.Items) req ()
