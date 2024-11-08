@@ -435,12 +435,9 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                 Stores.Genres_by_canonical_name.get_key canon i_genres
                 |> Request.fut
                 |> Fun.flip Fut.bind (function
-                     | Ok (Some key) ->
-                         Console.log [ "Found genre with key"; key ];
-                         Fut.return key
+                     | Ok (Some key) -> Fut.return key
                      | Ok None ->
                          let genre = Generic_schema.{ Genre.name; canon } in
-                         Console.log [ "Genre not found, inserting" ];
                          Stores.Genres_store.add genre s_genres
                          |> Request.fut |> Fut.map Result.get_exn
                      | Error e -> raise (Jv.Error e))
