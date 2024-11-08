@@ -30,7 +30,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         with:
           # Version of the OCaml compiler to initialise
-          ocaml-compiler: 4.14.x
+          ocaml-compiler: 5.2.x
 
       - name: Install dependencies
         run: |
