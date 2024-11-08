@@ -33,8 +33,12 @@ let filter0_changed () =
   let open Fut.Result_syntax in
   let* view = Worker_client.query (Create_view req) in
   let+ genres = Worker_client.query (Get_view_albums view) in
+  let sorted_genres =
+    Int.Map.to_list genres
+    |> List.sort ~cmp:(fun (_, (c1, _)) (_, (c2, _)) -> Int.compare c2 c1)
+  in
   Lwd.set view0 (Some view);
-  Lwd.set view0_genres (Lwd_seq.of_list (Int.Map.to_list genres))
+  Lwd.set view0_genres (Lwd_seq.of_list sorted_genres)
 
 let filter1_changed () =
   let open View in
@@ -79,7 +83,9 @@ let genres_choices =
   let at = Attrs.O.(`P (C "vertical-picker") @:: v (`P (C ""))) in
   let choices =
     Lwd_seq.map
-      (fun (key, { Genre.name; _ }) -> Check (key, [ `P (El.txt' name) ], true))
+      (fun (key, (count, { Genre.name; _ })) ->
+        let text = Printf.sprintf "%s (%i)" name count in
+        Check (key, [ `P (El.txt' text) ], true))
       (Lwd.get view0_genres)
   in
   let { field; value } =

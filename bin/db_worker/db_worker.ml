@@ -150,9 +150,14 @@ module Worker () = struct
         let+ genres = Genres_store.get_all s_genres |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
           ~f:(fun acc { Db.Generic_schema.Track.Key.genres; _ } ->
-            Int.Map.add_list acc (List.map genres ~f:(fun g -> (g, ()))))
-        |> Int.Map.mapi (fun key () ->
-               try genres.(key - 1)
+            Int.Map.add_list_with
+              ~f:(fun _ -> ( + ))
+              acc
+              (List.map genres ~f:(fun g -> (g, 1))))
+        |> Int.Map.mapi (fun key usage_count ->
+               try
+                 (usage_count, genres.(key - 1))
+                 (* Indexeddb auto increments starts at 1 *)
                with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should

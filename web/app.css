@@ -164,6 +164,12 @@ body {
     max-height: 5rem;
     overflow-y: auto;
 
+
+    & label {
+        padding-right: 0.35rem;
+        padding-left: 0.35rem;
+    }
+
     .genres-picker & {
         flex-direction: row;
         flex-wrap: wrap;
