@@ -174,6 +174,7 @@ let ui () =
     Lwd_seq.map (fun (_, server) -> ui_status server) servers_with_status
   in
   let ui_form =
+    (* FIXME: user can validate multiple times *)
     Lwd.map servers_with_status ~f:(fun s ->
         match Lwd_seq.view s with
         | Empty -> Lwd_seq.element @@ Elwd.div [ `R (ui_form ()) ]

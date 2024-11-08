@@ -32,7 +32,7 @@ open Source.Api
    prefixed by one of the view's virtual folder locations.
 *)
 
-let chunk_size = 2000
+let chunk_size = 500
 
 let include_item_types =
   [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
@@ -353,7 +353,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
     in
     enqueue ~start_index:first total;
     let total_queries = Queue.length fetch_queue in
-    let rec run_queue ?(threads = 2) q =
+    let rec run_queue ?(threads = 4) q =
       assert (threads > 0);
       let rec take_n acc n =
         if n = 0 then List.rev acc
@@ -367,6 +367,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
          We could send the next request while handling the previous results.
          This should speed up the process a lot. (Also there might be
          opportunities to speed up result handling.) *)
+      (* TODO: there's a stack overflow somewhere...*)
       let f req =
         let+ { Api.Items.start_index; items; _ } =
           query source (module Api.Items) req ()
