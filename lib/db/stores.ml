@@ -30,7 +30,7 @@ module Orderred_items = struct
       Jv.obj
         [|
           ("id", Jv.of_int t.id);
-          ("item", Jv.of_option ~none:(Jv.of_string "") Jv.of_string t.item);
+          ("item", Jv.of_option ~none:Jv.null Jv.of_string t.item);
         |]
     in
     obj
