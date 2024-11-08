@@ -137,3 +137,41 @@ body {
         background-position: center;
     }
 }
+
+.filters-container {
+    display: flex;
+    flex-direction: column;
+
+    & .filters-row {
+        display: flex;
+        flex-direction: row;
+
+        &>* {
+            flex-shrink: 0;
+            margin: 0.5rem;
+        }
+
+        &>.genres-picker {
+            flex-shrink: 1;
+        }
+    }
+}
+
+.vertical-picker {
+    display: flex;
+    flex-direction: column;
+
+    max-height: 5rem;
+    overflow-y: auto;
+
+
+    & label {
+        padding-right: 0.35rem;
+        padding-left: 0.35rem;
+    }
+
+    .genres-picker & {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}
