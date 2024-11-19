@@ -198,6 +198,13 @@ module Database : sig
     't
   (** Creates and returns a new object store or index. *)
 
+  val create_object_store' :
+    (module Store_intf with type t = 't) ->
+    ?key_path:Key_path.t ->
+    ?auto_increment:bool ->
+    t ->
+    't
+
   val delete_object_store : t -> string -> unit
 
   val transaction :

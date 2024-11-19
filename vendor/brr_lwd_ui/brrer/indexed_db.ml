@@ -278,10 +278,39 @@ module Transaction = struct
   let commit t = Jv.call t "commit" [||] |> ignore
 end
 
+type 'v jv_able = { to_jv : 'v -> Jv.t; of_jv : Jv.t -> 'v }
+
+module Key' = struct
+  type 'value t = 'value jv_able
+end
+
+module Store_desc = struct
+  type ('primary_key, 'value) t = {
+    name : string;
+    primary_key : 'primary_key Key'.t;
+    value : 'value jv_able;
+  }
+
+  let create ~name primary_key value = { name; primary_key; value }
+end
+
+module Store' = struct
+  type ('primary_key, 'value) t = {
+    jv : Jv.t;
+    desc : ('primary_key, 'value) Store_desc.t;
+  }
+end
+
 module Database = struct
   type t = Jv.t
 
   external of_jv : Jv.t -> t = "%identity"
+
+  let create_object_store' desc t =
+    let jv =
+      Jv.call t "createObjectStore" [| Jv.of_string desc.Store_desc.name |]
+    in
+    { Store'.jv; desc }
 
   let create_object_store (type t') (module S : Store_intf with type t = t')
       ?key_path ?(auto_increment = false) (db : t) : t' =
