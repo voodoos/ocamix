@@ -23,19 +23,12 @@ let fut_of_array (fs : 'a Fut.t array) : 'a array Fut.t =
   Obj.magic @@ fut @@ Jv.Promise.bind all to_array
 
 module Worker () = struct
-  let view_memo :
-      ( int Db.View.selection * Db.View.Sort.t,
-        Db.Generic_schema.Track.Key.t array )
-      Hashtbl.t =
-    Hashtbl.create 64
-
   let last_view : (int * Db.Generic_schema.Track.Key.t array) ref =
     ref (-1, [||])
 
   let check_db idb source =
     let server_id, source = source in
     let report status =
-      Hashtbl.clear view_memo;
       last_view := (-1, [||]);
       dispatch_event Servers_status_update (server_id, status)
     in
@@ -72,8 +65,8 @@ module Worker () = struct
       let n = Performance.now_ms G.performance in
       let keys =
         match src_views with
-        | All -> all_keys
-        | Only src_views ->
+        | { only = []; none_of = _ } -> [||]
+        | { only = src_views; none_of = _ } ->
             Array.filter all_keys
               ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
                 List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
@@ -87,11 +80,17 @@ module Worker () = struct
                 ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
                   let name = String.lowercase_ascii name in
                   String.Find.find ~pattern name >= 0)
-          | Genres (Only ids) ->
+          | Genres { only; none_of } ->
               Array.filter keys
                 ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
                   let genres = Int.Set.of_list genres in
-                  Int.Set.subset genres ids)
+                  let b_only =
+                    Int.Set.is_empty only || not (Int.Set.disjoint genres only)
+                  in
+                  let b_noneof =
+                    Int.Set.is_empty none_of || Int.Set.disjoint genres none_of
+                  in
+                  b_only && b_noneof)
           | _ -> keys)
       in
       Console.log

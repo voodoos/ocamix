@@ -33,13 +33,21 @@ module Sort = struct
     | _ -> Date_added
 end
 
-type 'a selection = All | Only of 'a
+module Selection = struct
+  type 'a t = { only : 'a; none_of : 'a }
+
+  let map ~f s = { only = f s.only; none_of = f s.none_of }
+  let init v = { only = v; none_of = v }
+end
+
+open Selection
+
 type kind = Audio
-type filter = Search of string | Genres of Int.Set.t selection
+type filter = Search of string | Genres of Int.Set.t Selection.t
 
 type req = {
   kind : kind;
-  src_views : int list selection;
+  src_views : int list Selection.t;
   sort : Sort.t;
   filters : filter list;
 }
@@ -49,10 +57,14 @@ let hash { kind; src_views; sort; filters } =
     List.map filters ~f:(fun f ->
         match f with
         | Search s -> s
-        | Genres (Only s) ->
-            Int.Set.to_list s |> List.map ~f:string_of_int
-            |> String.concat ~sep:";"
-        | Genres All -> "allgenres")
+        | Genres { only; none_of } ->
+            String.concat ~sep:";"
+            @@ List.concat
+                 [
+                   Int.Set.to_list only |> List.map ~f:string_of_int;
+                   [ "not" ];
+                   Int.Set.to_list none_of |> List.map ~f:string_of_int;
+                 ])
   in
   Hash.poly (kind, src_views, sort, filters)
 
@@ -61,5 +73,6 @@ type ranged = { view : t; first : int; last : int; order : Order.t }
 
 let item_count t = t.item_count - t.start_offset
 
-let req kind ?(src_views = All) ?(sort = Sort.Date_added) ?(filters = []) () =
+let req kind ?(src_views = init []) ?(sort = Sort.Date_added) ?(filters = []) ()
+    =
   { kind; src_views; sort; filters }
