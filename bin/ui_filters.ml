@@ -161,6 +161,9 @@ let genre_formula =
      { name = "genre-formula"; default = None; label = [] })
     .field
 
+let item_count =
+  Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } -> item_count)
+
 let search_and_sort =
   let f_search =
     let open Field_textinput in
@@ -199,7 +202,11 @@ let search_and_sort =
       { name = "view-order"; default = "desc"; label = [] }
       options
   in
-  [ `R f_sort.field; `R f_order.field; `R f_search.field ]
+  let item_count =
+    Lwd.map item_count ~f:(fun i -> El.txt' @@ Printf.sprintf "%i results" i)
+    |> fun txt -> Elwd.div [ `R txt ]
+  in
+  [ `R f_sort.field; `R f_order.field; `R f_search.field; `R item_count ]
 
 let library_chooser =
   let at = Attrs.O.(v (`P (C "vertical-picker"))) in
