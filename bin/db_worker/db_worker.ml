@@ -73,27 +73,30 @@ module Worker () = struct
         | None_of _ -> failwith "not implemented"
       in
       let keys =
-        List.fold_left filters ~init:keys ~f:(fun keys -> function
+        Array.filter keys
+          ~f:(fun
+              {
+                Db.Generic_schema.Track.Key.name;
+                Db.Generic_schema.Track.Key.genres;
+                _;
+              }
+            ->
+            let genres = Int.Set.of_list genres in
+            List.fold_left filters ~init:true ~f:(fun acc -> function
           | Db.View.Search sub when not (String.is_empty sub) ->
               let sub = String.lowercase_ascii sub in
               let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-              Array.filter
-                keys (* TODO EXTRACT THE filter from the loop if possible *)
-                ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
                   let name = String.lowercase_ascii name in
-                  String.Find.find ~pattern name >= 0)
+                  acc && String.Find.find ~pattern name >= 0
           | Genres (One_of one_of) ->
-              Array.filter keys
-                ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
-                  let genres = Int.Set.of_list genres in
-                  Int.Set.is_empty one_of
+                  acc
+                  && (Int.Set.is_empty one_of
                   || not (Int.Set.disjoint genres one_of))
           | Genres (None_of none_of) ->
-              Array.filter keys
-                ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
-                  let genres = Int.Set.of_list genres in
-                  Int.Set.is_empty none_of || Int.Set.disjoint genres none_of)
-          | _ -> keys)
+                  acc
+                  && (Int.Set.is_empty none_of
+                     || Int.Set.disjoint genres none_of)
+              | _ -> true))
       in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
