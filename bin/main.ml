@@ -88,39 +88,28 @@ let app =
     in
     let style =
       Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
-          let src =
+          let open Lwd_infix in
+          let$ src =
             match np with
-            | None -> "track.png"
+            | None -> Lwd.pure "track.png"
             | Some
                 {
                   item =
                     Db.Generic_schema.Track.(
-                      ( _,
-                        {
-                          id = Jellyfin id;
-                          server_id = Jellyfin server_id;
-                          album_id;
-                          _;
-                        } ));
+                      _, { server_id = Jellyfin server_id; album_id; _ });
                   _;
                 } ->
-                let image_id =
-                  Option.map
-                    (fun (Db.Generic_schema.Id.Jellyfin id) -> id)
-                    album_id
-                  |> Option.value ~default:id
-                in
                 let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
                 let connexion : DS.connexion = List.assq server_id servers in
-                (* todo: this is done in multiple places, we should factor
-                   that out. *)
-                Printf.sprintf "%s/Items/%s/Images/Primary?width=800&format=Jpg"
-                  connexion.base_url image_id
+                Lwd.get
+                @@ Player.cover_var ~base_url:connexion.base_url ~size:1024
+                     ~album_id
           in
+
           At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
     in
     let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
-    Elwd.div ~at [ `R (Elwd.div ~at:[ `R style ] []) ]
+    Elwd.div ~at [ `R (Elwd.div ~at:[ `R (Lwd.join style) ] []) ]
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])

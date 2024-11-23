@@ -23,19 +23,16 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
     Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun view order ->
         { View.view; first = 0; last = 0; order })
   in
-  let img_url server_id item_id =
+  let img_url server_id album_id =
     let servers =
       (* should this be reactive ? *)
       Lwd.peek Servers.connexions |> Lwd_seq.to_list
     in
     let url =
-      try
-        let connexion : DS.connexion = List.assq server_id servers in
-        Printf.sprintf "%s/Items/%s/Images/Primary?width=50" connexion.base_url
-          item_id
-      with Not_found -> "server-error.png"
+      let connexion : DS.connexion = List.assq server_id servers in
+      Player.cover_var ~base_url:connexion.base_url ~size:50 ~album_id
     in
-    At.src (Jstr.v url)
+    Lwd.map (Lwd.get url) ~f:(fun url -> At.src (Jstr.v url))
   in
   let render (ranged : View.ranged Lwd.t) start_index
       Db.Generic_schema.Track.(
@@ -57,11 +54,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
     let play_on_click =
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
-    let img_url =
-      match album_id with
-      | None -> Lwd.return (At.src (Jstr.v "track.png"))
-      | Some (Jellyfin id) -> Lwd.return (img_url server_id id)
-    in
+    let img_url = img_url server_id album_id in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
         | Some { item = _, { id = Jellyfin item_id; _ }; _ }

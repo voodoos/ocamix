@@ -48,8 +48,10 @@ let tee f x =
   let () = f x in
   x
 
+(* !! Changes to this function requires database upgrades. Std is probably not
+   the right place for this kind of app-specific behavior.*)
 let canonicalize_string s =
-  Ubase.from_utf8 ?malformed:None ~strip:"" s
+  Ubase.from_utf8 ?malformed:None ~strip:"_" s
   |> String.lowercase_ascii
   |> String.filter ~f:(fun c ->
          let c = Char.to_int c in

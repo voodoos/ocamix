@@ -37,6 +37,8 @@ let chunk_size = 10000
 let include_item_types =
   [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
 
+let sort_by = [ Source.Api.Types.DateCreated ]
+
 let fetch_total_item_count source =
   let open Fut.Result_syntax in
   let+ res =
@@ -53,7 +55,7 @@ let fetch_total_item_count source =
           start_index = None;
           limit = Some 0;
           sort_order = Some Ascending;
-          sort_by = [ DateCreated ];
+          sort_by;
           recursive = true;
           enable_user_data = false;
           enable_images = false;
@@ -337,12 +339,12 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
               ids = [];
               parent_id = None;
               user_id = source.auth_response.user.id;
-              fields = [ ParentId; Path; Genres ];
+              fields = [ ParentId; Path; Genres; DateCreated ];
               include_item_types;
               start_index = Some start_index;
               limit = Some limit;
               sort_order = Some Ascending;
-              sort_by = [ DateCreated ];
+              sort_by;
               recursive = true;
               enable_user_data = false;
               enable_images = true;

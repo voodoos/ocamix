@@ -32,6 +32,37 @@ let audio_url (server : DS.connexion) item_id =
     "%s/Audio/%s/universal?api_key=%s&audioCodec=aac&container=opus,mp3,aac,m4a,m4b,flac,wav,ogg&transcodingContainer=ts&transcodingProtocol=hls"
     server.base_url item_id server.auth_response.access_token
 
+let idb =
+  let idb, set_idb = Fut.create () in
+  let _ = Db.with_idb @@ fun idb -> ignore (set_idb idb) in
+  idb
+
+let get_album_cover_link ~base_url ~size ~album_id =
+  match album_id with
+  | None -> Fut.return "track.png"
+  | Some album_id ->
+      let open Brr_io.Indexed_db in
+      let open Db.Stores in
+      let open Db.Generic_schema in
+      let open Fut.Syntax in
+      let* idb = idb in
+      let index =
+        Database.transaction [ (module Albums_store) ] ~mode:Readonly idb
+        |> Transaction.object_store (module Albums_store)
+        |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
+      in
+      let+ album_id = Albums_by_idx.get album_id index |> Request.fut_exn in
+      Option.map
+        (fun { Album.id = Id.Jellyfin id; _ } ->
+          Printf.sprintf "%s/Items/%s/Images/Primary?width=%i&format=Jpg"
+            base_url id size)
+        album_id
+      |> Option.value ~default:"track.png"
+
+let cover_var ~base_url ~size ~album_id =
+  Brr_lwd_ui.Utils.var_of_fut ~init:"track.png"
+  @@ get_album_cover_link ~base_url ~size ~album_id
+
 module Playback_controller (P : sig
   val fetch :
     View.ranged ->
@@ -68,28 +99,24 @@ struct
               let () =
                 let open Brr_io.Media.Session in
                 let session = of_navigator G.navigator in
-                let image_id =
-                  Option.map (fun (Id.Jellyfin id) -> id) album_id
-                  |> Option.value ~default:id
-                in
-                let img_src =
-                  Printf.sprintf
-                    "%s/Items/%s/Images/Primary?width=500&format=Jpg"
-                    connexion.base_url image_id
+                let cover =
+                  get_album_cover_link ~base_url:connexion.base_url ~size:500
+                    ~album_id
                 in
                 let title = name in
                 let album = "" in
                 let artist = "" in
-                let artwork =
-                  [
-                    {
-                      Media_metadata.src = img_src;
-                      sizes = "500x500";
-                      type' = "image/jpeg";
-                    };
-                  ]
-                in
-                set_metadata session { title; artist; album; artwork }
+                Fut.await cover (fun img_src ->
+                    let artwork =
+                      [
+                        {
+                          Media_metadata.src = img_src;
+                          sizes = "500x500";
+                          type' = "image/jpeg";
+                        };
+                      ]
+                    in
+                    set_metadata session { title; artist; album; artwork })
               in
               { item; url }
           | _ -> raise Not_found
@@ -183,31 +210,25 @@ struct
     let now_playing =
       let track_cover =
         let style =
-          Lwd.map (Lwd.get now_playing) ~f:(fun np ->
-              let src =
-                match np with
-                | None -> "track.png"
-                | Some { item = _, { id; album_id; server_id; _ }; _ } ->
-                    let (Jellyfin id) = id in
-                    let (Jellyfin server_id) = server_id in
-                    let image_id =
-                      Option.map
-                        (fun (Db.Generic_schema.Id.Jellyfin id) -> id)
-                        album_id
-                      |> Option.value ~default:id
-                    in
-                    let servers =
-                      Lwd_seq.to_list (Lwd.peek Servers.connexions)
-                    in
+          let cover =
+            Lwd.map2 (Lwd.get now_playing) (Lwd.get Servers.connexions)
+              ~f:(fun now_playing servers ->
+                match now_playing with
+                | None -> Lwd.pure "track.png"
+                | Some
+                    {
+                      item = _, { album_id; server_id = Jellyfin server_id; _ };
+                      _;
+                    } ->
+                    let servers = Lwd_seq.to_list servers in
                     let connexion : DS.connexion =
                       List.assq server_id servers
                     in
-                    (* todo: this is done in multiple places, we should factor
-                       that out. *)
-                    Printf.sprintf
-                      "%s/Items/%s/Images/Primary?width=500&format=Jpg"
-                      connexion.base_url image_id
-              in
+                    Lwd.get
+                    @@ cover_var ~base_url:connexion.base_url ~size:500
+                         ~album_id)
+          in
+          Lwd.map (Lwd.join cover) ~f:(fun src ->
               Printf.sprintf "background-image: url(%S)" src)
         in
         let at =
