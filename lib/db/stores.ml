@@ -20,6 +20,17 @@ let jv_to_t decoder j =
   let json = Brr.Json.encode j in
   Ok (Jstr.to_string json |> Yojson.Safe.from_string |> decoder)
 
+module type Jsonable = sig
+  type t [@@deriving yojson]
+end
+
+module Of_jsonable (M : Jsonable) = struct
+  include M
+
+  let to_jv t = t_to_jv yojson_of_t t
+  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+end
+
 module Orderred_items = struct
   type t = { id : int; item : string option } [@@deriving yojson]
 
@@ -186,11 +197,9 @@ module Collections_by_id =
     end)
 
 module Genres = struct
-  type t = Genre.t [@@deriving yojson]
+  include Of_jsonable (Generic_schema.Genre)
 
   let name = "genres"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Genres_store = Make_object_store (Genres) (Auto_increment)
@@ -204,6 +213,16 @@ module Genres_by_canonical_name =
       let of_jv = Jv.to_string
       let to_jv = Jv.of_string
     end)
+
+module Artist = struct
+  include Of_jsonable (Generic_schema.Artist)
+
+  let name = "artistes"
+
+  module Key = Of_jsonable (Generic_schema.Artist.Key)
+end
+
+module Artists_store = Make_object_store (Artist) (Artist.Key)
 
 module Album = struct
   type t = Album.t [@@deriving yojson]
@@ -234,21 +253,21 @@ module Albums_store =
     end)
 
 module Albums_by_id =
-  Make_index
-    (Albums_store)
-    (struct
-      include Generic_schema.Id
+  Make_index (Albums_store) (Of_jsonable (Generic_schema.Id))
 
-      let to_jv t = t_to_jv yojson_of_t t
-      let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-    end)
+module Int_key = struct
+  type t = int
+
+  let of_jv = Jv.to_int
+  let to_jv = Jv.of_int
+end
+
+module Albums_by_idx = Make_index (Albums_store) (Int_key)
 
 module Track = struct
-  type t = Track.t [@@deriving yojson]
+  include Of_jsonable (Generic_schema.Track)
 
   let name = "tracks"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Tracks_store =

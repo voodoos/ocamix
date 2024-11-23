@@ -74,20 +74,25 @@ let on_upgrade_needed e q =
     |> Genres_by_canonical_name.create ~name:"genres_by_canon_name" ~unique:true
          (Key_path.Identifier "canon")
   in
+  let _artists = Artists_store.create db in
   let _albums =
-    Albums_store.create db
-    |> Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id")
+    let store = Albums_store.create db in
+    Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id") store |> ignore;
+    Albums_by_idx.create ~name:"by-idx" (Key_path.Identifier "idx") store
+    |> ignore
   in
   let _tracks = Tracks_store.create db in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
 
-let with_idb ?version ~name f =
+let schema_version = 2
+
+let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in
   let f _ev dbr =
     let db = Request.result dbr in
     f db
   in
   get_factory ()
-  |> Factory.open' ~name ?version
+  |> Factory.open' ~name ~version
   |> Open_db_request.on_upgrade_needed ~f:on_upgrade_needed
   |> Request.on_success ~f |> ignore
