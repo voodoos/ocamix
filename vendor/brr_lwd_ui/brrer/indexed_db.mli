@@ -51,6 +51,7 @@ module Request : sig
   val on_success : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
   val on_error : f:(Ev.Type.void Ev.t -> 'a t -> unit) -> 'a t -> 'a t
   val fut : 'a t -> 'a Fut.or_error
+  val fut_exn : 'a t -> 'a Fut.t
 end
 
 module type Key = sig

@@ -432,24 +432,24 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                   (module Stores.Tracks_store)
                   transaction
               in
-              let get_or_set_genre name =
-                let canon = canonicalize_string name in
+              let get_or_set_genre (name, canon) =
                 Stores.Genres_by_canonical_name.get_key canon i_genres
-                |> Request.fut
+                |> Request.fut_exn
                 |> Fun.flip Fut.bind (function
-                     | Ok (Some key) -> Fut.return key
-                     | Ok None ->
+                     | Some key -> Fut.return key
+                     | None ->
                          let genre = Generic_schema.{ Genre.name; canon } in
                          Stores.Genres_store.add genre s_genres
-                         |> Request.fut |> Fut.map Result.get_exn
-                     | Error e -> raise (Jv.Error e))
+                         |> Request.fut_exn)
               in
               let prepare_genres genre_items =
                 List.concat_map genre_items
                   ~f:(fun ({ name; _ } : Api.Item.genre_item) ->
                     String.split_on_char ~by:';' name
                     |> List.concat_map ~f:(String.split_on_char ~by:',')
-                    |> List.map ~f:String.trim
+                    |> List.map ~f:(fun name ->
+                           (name, canonicalize_string name))
+                    |> List.uniq ~eq:(fun (_, c1) (_, c2) -> String.equal c1 c2)
                     |> List.map ~f:get_or_set_genre)
                 |> Fut.of_list
               in
@@ -464,7 +464,29 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                   |> Fut.map (fun genres ->
                          let key = { Generic_schema.Album.Key.name; genres } in
                          let id = Generic_schema.Id.Jellyfin id in
-                         Stores.Albums_store.add ~key { id; sort_name; genres }
+                         let open Fut.Syntax in
+                         let+ idx =
+                           let albums_by_idx =
+                             Stores.Albums_store.index
+                               (module Stores.Albums_by_idx)
+                               ~name:"by-idx" s_albums
+                           in
+                           (* We get the last id for the manual auto-increent field *)
+                           (* TODO we should factor this out and do it only once *)
+                           let+ result =
+                             Stores.Albums_by_idx.open_key_cursor
+                               ~direction:Prev albums_by_idx
+                             |> Request.fut_exn
+                           in
+                           match result with
+                           | None -> 0
+                           | Some cursor ->
+                               (Stores.Albums_by_idx.Cursor.key cursor
+                               |> Option.get_or ~default:(-1))
+                               + 1
+                         in
+                         Stores.Albums_store.add ~key
+                           { idx; id; sort_name; genres }
                            s_albums)
                   |> ignore
               | Audio ->
@@ -478,7 +500,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                          (List.filter_map ~f:(Result.get_or ~default:None))
                   in
                   Fut.pair views @@ prepare_genres item.genre_items
-                  |> Fut.map (fun (collections, genres) ->
+                  |> Fun.flip Fut.bind (fun (collections, genres) ->
                          let key =
                            {
                              Generic_schema.Track.Key.name;
@@ -488,10 +510,24 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                          in
                          let id = Generic_schema.Id.Jellyfin id in
                          let server_id = Generic_schema.Id.Jellyfin server_id in
-                         let album_id =
-                           Option.map
-                             (fun id -> Generic_schema.Id.Jellyfin id)
-                             album_id
+                         let open Fut.Syntax in
+                         let+ album_id =
+                           match album_id with
+                           | Some id -> (
+                               let albums_by_id =
+                                 Stores.Albums_store.index
+                                   (module Stores.Albums_by_id)
+                                   ~name:"by-id" s_albums
+                               in
+                               let+ result =
+                                 Stores.Albums_by_id.get
+                                   (Generic_schema.Id.Jellyfin id) albums_by_id
+                                 |> Request.fut_exn
+                               in
+                               match result with
+                               | None -> None
+                               | Some { idx; _ } -> Some idx)
+                           | None -> Fut.return None
                          in
                          Stores.Tracks_store.add ~key
                            { id; album_id; sort_name; genres; server_id }

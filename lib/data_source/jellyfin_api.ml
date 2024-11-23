@@ -18,6 +18,10 @@ module Types = struct
     | CriticRating
     | DateCreated
     | DatePlayed
+    | Default
+    | IndexNumber
+    | IsFolder
+    | ParentIndexNumber
     | PlayCount
     | PremiereDate
     | ProductionYear

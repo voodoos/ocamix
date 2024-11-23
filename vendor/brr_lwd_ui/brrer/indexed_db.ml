@@ -64,6 +64,9 @@ module Request = struct
     let _ = on_success ~f:(fun _ t -> set (Ok (result t))) t in
     let _ = on_error ~f:(fun _ t -> set (Error (error t))) t in
     result_fut
+
+  let fut_exn t =
+    Fut.map (function Ok v -> v | Error e -> raise (Jv.Error e)) (fut t)
 end
 
 module type Key = sig
