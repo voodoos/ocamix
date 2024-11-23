@@ -30,6 +30,9 @@ open Source.Api
 
    For simplicity (?) we consider that an item is part of a view if its path is
    prefixed by one of the view's virtual folder locations.
+
+   TODO: maybe we should use:
+     "Gets all user media folders." /Library/MediaFolders
 *)
 
 let chunk_size = 10000
@@ -41,6 +44,28 @@ let sort_by = [ Source.Api.Types.DateCreated ]
 
 let fetch_total_item_count source =
   let open Fut.Result_syntax in
+  let* res =
+    Source.query source
+      (module Source.Api.Items)
+      Source.Api.Items.
+        {
+          (* todo make sort explicit (by date added date)*)
+          ids = [];
+          parent_id = Some "43d6ea74e04389601bd171db1aa31edc";
+          user_id = source.auth_response.user.id;
+          fields = [];
+          include_item_types = [ MusicArtist; MusicAlbum ];
+          start_index = None;
+          limit = None;
+          sort_order = Some Ascending;
+          sort_by;
+          recursive = false;
+          enable_user_data = false;
+          enable_images = false;
+        }
+      ()
+  in
+  Console.log [ "FOUND #"; res.total_record_count; " albums" ];
   let+ res =
     Source.query source
       (module Source.Api.Items)
@@ -199,15 +224,17 @@ let check_status ~source idb =
             Partial_fetch { first_unfetched_key = 0; last_source_item_key })
     | _ -> Inconsistent
 
-let update_views source idb =
+let update_collections source idb =
   let open Fut.Result_syntax in
-  let+ views =
+  let* views =
     Source.query source
       (module Source.Api.Views)
       { include_external_content = false }
       { user_id = source.auth_response.user.id }
   in
-  List.iter views.items ~f:(fun (item : Item.t) ->
+  let init = Fut.ok [] in
+  List.fold_left views.items ~init ~f:(fun acc (item : Item.t) ->
+      let* acc = acc in
       let open Brr_io.Indexed_db in
       let transaction =
         Database.transaction
@@ -217,28 +244,38 @@ let update_views source idb =
       let s_collections =
         Transaction.object_store (module Stores.Collections_store) transaction
       in
+      let collections_by_id = Stores.collections_by_id s_collections in
       let _sort_name = Option.value item.sort_name ~default:item.name in
-      let _ =
-        if
-          String.equal "music" @@ Option.get_or ~default:"" item.collection_type
-        then
-          Stores.Collections_store.put
-            { id = Jellyfin item.id; name = item.name }
-            s_collections
-          |> ignore
-      in
-      ());
-  views
+
+      if String.equal "music" @@ Option.get_or ~default:"" item.collection_type
+      then
+        let open Fut.Result_syntax in
+        let+ collection_id =
+          let* idx =
+            Stores.Collections_by_id.get_key (Jellyfin item.id)
+              collections_by_id
+            |> Request.fut
+          in
+          match idx with
+          | Some idx -> Fut.ok idx
+          | None ->
+              Stores.Collections_store.add
+                { id = Jellyfin item.id; name = item.name }
+                s_collections
+              |> Request.fut
+        in
+        (collection_id, item) :: acc
+      else Fut.ok acc)
 
 type folder_path = { folder_id : string; path : string }
 type view_paths = { view_id : string; paths : folder_path list }
 
-let deduce_virtual_folders_from_views source (views : Views.response) =
+let deduce_virtual_folders_from_views source views =
   let open Fut.Result_syntax in
   (* Immediate children of a music view are musicartists. But their parent field
      does not contain the view's id the a virtual folder's id. We gather these
      virtual folder thar are required to deduce the view from an item. *)
-  let parent_ids_of_view_children { Item.id; _ } =
+  let parent_ids_of_view_children id =
     let+ res =
       Source.query source
         (module Source.Api.Items)
@@ -291,9 +328,9 @@ let deduce_virtual_folders_from_views source (views : Views.response) =
   in
   let open Fut.Syntax in
   let+ result =
-    List.map views.items ~f:(fun ({ Item.id; _ } as view) ->
+    List.map views ~f:(fun (_, { Item.id; _ }) ->
         let open Fut.Result_syntax in
-        let* parents = parent_ids_of_view_children view in
+        let* parents = parent_ids_of_view_children id in
         let+ paths = paths_of_parents parents in
         { view_id = id; paths })
     |> Fut.of_list
@@ -310,6 +347,99 @@ let views_of_path (vfolders : view_paths list) path =
       then Some view_id
       else None)
 
+(* The new sync process is not based on the full list of items anymore since
+   this is too slow. It's a classic recursive search. The queue is initially
+   populated with the top-level views and each time new folders are found they are
+   added to the queue. The synchronization process ends when the queue is empty.
+
+   TODO: updates ? *)
+
+let sync_folder ~source ~collection_id ~(folder : Item.t) _idb =
+  let open Fut.Result_syntax in
+  let open Source in
+  (* We delegate recursive search to the server once we reached the artist's level *)
+  let recursive = Equal.poly folder.type_ Item.MusicArtist in
+  let req =
+    Api.Items.
+      {
+        ids = [];
+        parent_id = Some folder.id;
+        user_id = source.auth_response.user.id;
+        fields = [ ParentId; Path; Genres; DateCreated ];
+        include_item_types = [ Source.Api.Item.MusicArtist; MusicAlbum; Audio ];
+        start_index = None;
+        limit = None;
+        sort_by = [ DateCreated ];
+        sort_order = Some Ascending;
+        recursive;
+        enable_user_data = false;
+        enable_images = true;
+      }
+  in
+  let+ { Api.Items.start_index = _; items; _ } =
+    query source (module Api.Items) req ()
+  in
+  if recursive then []
+  else
+    List.fold_left items ~init:[] ~f:(fun acc -> function
+      | { Item.is_folder = true; _ } as item -> (collection_id, item) :: acc
+      | _ -> acc)
+
+let sync_v2 ~(source : Source.connexion) idb =
+  let open Fut.Result_syntax in
+  let* views = update_collections source idb in
+  let queue = Queue.create () in
+  let workers : int Fut.t Queue.t = Queue.create () in
+  let () =
+    List.iter views ~f:(fun (collection_id, view) ->
+        (* if String.equal view.Item.name "Musique" then *)
+        Queue.add (collection_id, view) queue)
+  in
+  let run_job ~worker ~worker_is_ready (collection_id, folder) =
+    let+ children = sync_folder ~source ~collection_id ~folder idb in
+    Console.log
+      [ "Worker #"; worker; " ready."; "New folders: "; List.length children ];
+    List.iter children ~f:(Fun.flip Queue.add queue);
+    worker_is_ready worker
+  in
+  let sync_all ~threads =
+    let () =
+      for i = 1 to threads do
+        Queue.add (Fut.return i) workers
+      done
+    in
+    let running_jobs = ref 0 in
+    let rec assign_work () =
+      match Queue.take_opt queue with
+      | None ->
+          Console.log
+            [
+              "Empty sync queue. "; !running_jobs; "/"; threads; " running jobs";
+            ];
+          Fut.ok ()
+      | Some job -> (
+          (* Wait for a worker *)
+          let future_worker, worker_is_ready = Fut.create () in
+          let next_worker = Queue.take_opt workers in
+          match next_worker with
+          | None -> Fut.ok ()
+          | Some next_worker ->
+              Fut.bind next_worker @@ fun worker ->
+              let j =
+                incr running_jobs;
+                let* () = run_job ~worker ~worker_is_ready job in
+                decr running_jobs;
+                assign_work ()
+              in
+              let w = assign_work () in
+              let () = Queue.add future_worker workers in
+              let* () = w in
+              j)
+    in
+    assign_work ()
+  in
+  sync_all ~threads:100
+
 let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   let make_placeholders first last =
@@ -324,7 +454,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   in
   let fetch_missing_items first last =
     let open Source in
-    let* views = update_views source idb in
+    let* views = update_collections source idb in
     let* vfolders = deduce_virtual_folders_from_views source views in
     let () = Console.info [ "Fetching items"; first; "to"; last; ":" ] in
     let fetch_queue = Queue.create () in
@@ -560,7 +690,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
   | Inconsistent -> Fut.ok ()
   | _ -> Fut.ok ()
 
-let check_and_sync ?report ~source idb =
+let _check_and_sync ?report ~source idb =
   let open Fut.Result_syntax in
   let* status = check_status ~source idb in
   let initial = { initial_report with status } in
@@ -575,3 +705,5 @@ let check_and_sync ?report ~source idb =
   Option.iter
     (fun report -> report { status = In_sync; sync_progress = None })
     report
+
+let check_and_sync ?report:_ ~source idb = sync_v2 ~source idb

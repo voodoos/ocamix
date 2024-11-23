@@ -196,6 +196,9 @@ module Collections_by_id =
       let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
     end)
 
+let collections_by_id store =
+  Collections_store.index (module Collections_by_id) ~name:"by-id" store
+
 module Genres = struct
   include Of_jsonable (Generic_schema.Genre)
 

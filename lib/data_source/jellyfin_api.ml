@@ -205,6 +205,7 @@ module Item = struct
     sort_name : string option; [@yojson.option] [@key "SortName"]
     id : string; [@key "Id"]
     path : string option; [@yojson.option] [@key "Path"]
+    is_folder : bool; [@key "IsFolder"]
     album_id : string option; [@yojson.option] [@key "AlbumId"]
     parent_id : string option option;
         (* [ParentId] might absent, [null], or a string *)
