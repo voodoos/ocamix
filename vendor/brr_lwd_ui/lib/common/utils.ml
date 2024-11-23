@@ -89,3 +89,10 @@ end = struct
 
   let get_exn t = match !t with None -> raise Not_set | Some v -> v
 end
+
+let var_of_fut ~init fut =
+  let v = Lwd.var init in
+  Fut.await fut (Lwd.set v);
+  v
+
+let wait_and_set v fut = Fut.await fut (Lwd.set v)
