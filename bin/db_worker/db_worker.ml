@@ -65,32 +65,34 @@ module Worker () = struct
       let n = Performance.now_ms G.performance in
       let keys =
         match src_views with
-        | { only = []; none_of = _ } -> [||]
-        | { only = src_views; none_of = _ } ->
+        | All -> all_keys
+        | One_of src_views ->
             Array.filter all_keys
               ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
                 List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
+        | None_of _ -> failwith "not implemented"
       in
       let keys =
         List.fold_left filters ~init:keys ~f:(fun keys -> function
           | Db.View.Search sub when not (String.is_empty sub) ->
               let sub = String.lowercase_ascii sub in
               let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-              Array.filter keys
+              Array.filter
+                keys (* TODO EXTRACT THE filter from the loop if possible *)
                 ~f:(fun { Db.Generic_schema.Track.Key.name; _ } ->
                   let name = String.lowercase_ascii name in
                   String.Find.find ~pattern name >= 0)
-          | Genres { only; none_of } ->
+          | Genres (One_of one_of) ->
               Array.filter keys
                 ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
                   let genres = Int.Set.of_list genres in
-                  let b_only =
-                    Int.Set.is_empty only || not (Int.Set.disjoint genres only)
-                  in
-                  let b_noneof =
-                    Int.Set.is_empty none_of || Int.Set.disjoint genres none_of
-                  in
-                  b_only && b_noneof)
+                  Int.Set.is_empty one_of
+                  || not (Int.Set.disjoint genres one_of))
+          | Genres (None_of none_of) ->
+              Array.filter keys
+                ~f:(fun { Db.Generic_schema.Track.Key.genres; _ } ->
+                  let genres = Int.Set.of_list genres in
+                  Int.Set.is_empty none_of || Int.Set.disjoint genres none_of)
           | _ -> keys)
       in
       Console.log
@@ -142,7 +144,7 @@ module Worker () = struct
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
         { Db.View.request; start_offset = 0; item_count }
-    | Get_view_albums view ->
+    | Get_view_genres view ->
         let* store = get_store (module Tracks_store) () in
         let* keys = get_view_keys store view.request in
         let* s_genres = get_store (module Genres_store) () in

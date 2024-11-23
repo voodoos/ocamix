@@ -22,7 +22,7 @@ let view =
         request =
           {
             kind = Audio;
-            src_views = Selection.init [];
+            src_views = All;
             sort = Sort.Date_added;
             filters = [];
           };
@@ -30,6 +30,10 @@ let view =
         item_count = 0;
       }
 
+(* TODO: "+rock +jap" means "rock" AND "jap"
+    - "+rock +jap" => "rock" AND "jap"
+    - "+(rock +jap)" => "rock" OR "jap"
+*)
 let genre_filter_of_formula ~genres formula =
   let open View.Selection in
   let string_of_chars chars = String.of_list (List.rev chars) in
@@ -37,33 +41,30 @@ let genre_filter_of_formula ~genres formula =
     let canon_name = canonicalize_string name in
     List.filter_map genres ~f:(fun (key, name) ->
         if String.find ~sub:canon_name name >= 0 then Some key else None)
+    |> Int.Set.of_list
   in
   String.fold_left formula ~init:[] ~f:(fun acc char ->
       match (char, acc) with
-      | '+', _ -> `Only [] :: acc
+      | '+', _ -> `One_of [] :: acc
       | '-', _ -> `None_of [] :: acc
-      | c, `Only l :: tl -> `Only (c :: l) :: tl
+      | c, `One_of l :: tl -> `One_of (c :: l) :: tl
       | c, `None_of l :: tl -> `None_of (c :: l) :: tl
       | _, _ -> acc)
-  |> List.fold_left ~init:(init [ [] ]) ~f:(fun ({ only; none_of } as s) ->
-       function
-       | `Only chars ->
+  |> List.filter_map ~f:(function
+       | `One_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then s
-           else { s with only = matching_genres ~name :: only }
+           if String.is_empty name then None
+           else Some (One_of (matching_genres ~name))
        | `None_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then s
-           else { s with none_of = matching_genres ~name :: none_of })
-  |> map ~f:(fun ll -> Int.Set.of_list (List.flatten ll))
+           if String.is_empty name then None
+           else Some (None_of (matching_genres ~name)))
+  |> List.map ~f:(fun f -> View.Genres f)
 
 let filter1_changed () =
   let open View in
   let src_views =
-    {
-      (Selection.init []) with
-      only = Lwd.peek selected_libraries |> Lwd_seq.to_list;
-    }
+    Selection.One_of (Lwd.peek selected_libraries |> Lwd_seq.to_list)
   in
   let sort = Sort.of_string @@ Lwd.peek selected_sort in
   let genres =
@@ -75,7 +76,7 @@ let filter1_changed () =
     in
     genre_filter_of_formula ~genres (Lwd.peek genre_formula)
   in
-  let filters = [ Search (Lwd.peek name_filter); Genres genres ] in
+  let filters = Search (Lwd.peek name_filter) :: genres in
   let req = { kind = Audio; src_views; sort; filters } in
   let open Fut.Result_syntax in
   let+ view' = Worker_client.query (Create_view req) in
@@ -84,15 +85,12 @@ let filter1_changed () =
 let filter0_changed () =
   let open View in
   let src_views =
-    {
-      (Selection.init []) with
-      only = Lwd.peek selected_libraries |> Lwd_seq.to_list;
-    }
+    Selection.One_of (Lwd.peek selected_libraries |> Lwd_seq.to_list)
   in
   let req = { kind = Audio; src_views; sort = Sort.Date_added; filters = [] } in
   let open Fut.Result_syntax in
   let+ view = Worker_client.query (Create_view req) in
-  let+ genres = Worker_client.query (Get_view_albums view) in
+  let+ genres = Worker_client.query (Get_view_genres view) in
   let sorted_genres =
     Int.Map.to_list genres
     |> List.sort ~cmp:(fun (_, (c1, _)) (_, (c2, _)) -> Int.compare c2 c1)

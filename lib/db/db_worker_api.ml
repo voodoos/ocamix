@@ -11,7 +11,7 @@ module Queries = struct
     | Add_servers : server list -> unit query
     | Get_libraries : unit -> (int * Stores.Collection.t) array query
     | Create_view : View.req -> View.t query
-    | Get_view_albums : View.t -> (int * Genre.t) Int.Map.t query
+    | Get_view_genres : View.t -> (int * Genre.t) Int.Map.t query
     | Get :
         View.t * View.Order.t * int array
         -> (Track.Key.t * Track.t) option array query
