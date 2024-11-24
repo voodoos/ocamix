@@ -23,13 +23,10 @@ module Collection = struct
 end
 
 module Artist = struct
-  type t = { idx : int; id : Id.t; name : string } [@@deriving yojson]
+  type t = { id : Id.t; name : string; canon : string; sort_name : string }
+  [@@deriving yojson]
 
-  module Key = struct
-    type t = { canon : string } [@@deriving yojson]
-  end
-
-  type nonrec with_key = (Key.t, t) with_key
+  type nonrec with_key = (int, t) with_key
 end
 
 module Genre = struct

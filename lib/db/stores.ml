@@ -31,6 +31,22 @@ module Of_jsonable (M : Jsonable) = struct
   let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
+module String_key = struct
+  type t = string
+
+  let to_jv k = Jv.of_string k
+  let of_jv j = Jv.to_string j
+end
+
+module Int_key = struct
+  type t = int
+
+  let of_jv = Jv.to_int
+  let to_jv = Jv.of_int
+end
+
+module Id_key = Of_jsonable (Generic_schema.Id)
+
 module Orderred_items = struct
   type t = { id : int; item : string option } [@@deriving yojson]
 
@@ -153,16 +169,7 @@ module Items_store_key = struct
 end
 
 module Items_store = Make_object_store (Items) (Items_store_key)
-
-module Virtual_folder_store =
-  Make_object_store
-    (Virtual_folder)
-    (struct
-      type t = string
-
-      let to_jv k = Jv.of_string k
-      let of_jv j = Jv.to_string j
-    end)
+module Virtual_folder_store = Make_object_store (Virtual_folder) (String_key)
 
 module ItemsByDateAdded =
   Make_index (Orderred_items_store) (Items.Key_date_added)
@@ -177,24 +184,15 @@ module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
 open Generic_schema
 
 module Collection = struct
-  type t = Collection.t [@@deriving yojson]
+  include Of_jsonable (Collection)
 
   let name = "collections"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Collections_store = Make_object_store (Collection) (Auto_increment)
 
 module Collections_by_id =
-  Make_index
-    (Collections_store)
-    (struct
-      include Generic_schema.Id
-
-      let to_jv t = t_to_jv yojson_of_t t
-      let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
-    end)
+  Make_index (Collections_store) (Of_jsonable (Generic_schema.Id))
 
 let collections_by_id store =
   Collections_store.index (module Collections_by_id) ~name:"by-id" store
@@ -220,12 +218,11 @@ module Genres_by_canonical_name =
 module Artist = struct
   include Of_jsonable (Generic_schema.Artist)
 
-  let name = "artistes"
-
-  module Key = Of_jsonable (Generic_schema.Artist.Key)
+  let name = "artists"
 end
 
-module Artists_store = Make_object_store (Artist) (Artist.Key)
+module Artists_store = Make_object_store (Artist) (Auto_increment)
+module Artists_by_id = Make_index (Artists_store) (Id_key)
 
 module Album = struct
   type t = Album.t [@@deriving yojson]
@@ -255,16 +252,7 @@ module Albums_store =
         | _ -> assert false
     end)
 
-module Albums_by_id =
-  Make_index (Albums_store) (Of_jsonable (Generic_schema.Id))
-
-module Int_key = struct
-  type t = int
-
-  let of_jv = Jv.to_int
-  let to_jv = Jv.of_int
-end
-
+module Albums_by_id = Make_index (Albums_store) (Id_key)
 module Albums_by_idx = Make_index (Albums_store) (Int_key)
 
 module Track = struct

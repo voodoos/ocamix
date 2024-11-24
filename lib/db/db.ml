@@ -74,10 +74,16 @@ let on_upgrade_needed e q =
     |> Genres_by_canonical_name.create ~name:"genres_by_canon_name" ~unique:true
          (Key_path.Identifier "canon")
   in
-  let _artists = Artists_store.create db in
+  let _artists =
+    Artists_store.create ~auto_increment:true db
+    |> Artists_by_id.create ~name:"by-id" (Key_path.Identifier "id")
+         ~unique:true
+  in
   let _albums =
     let store = Albums_store.create db in
-    Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id") store |> ignore;
+    Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id") ~unique:true
+      store
+    |> ignore;
     Albums_by_idx.create ~name:"by-idx" (Key_path.Identifier "idx") store
     |> ignore
   in

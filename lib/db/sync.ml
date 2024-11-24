@@ -249,12 +249,12 @@ let update_collections source idb =
 
       if String.equal "music" @@ Option.get_or ~default:"" item.collection_type
       then
-        let open Fut.Result_syntax in
+        let open Fut.Syntax in
         let+ collection_id =
           let* idx =
             Stores.Collections_by_id.get_key (Jellyfin item.id)
               collections_by_id
-            |> Request.fut
+            |> Request.fut_exn
           in
           match idx with
           | Some idx -> Fut.ok idx
@@ -264,7 +264,7 @@ let update_collections source idb =
                 s_collections
               |> Request.fut
         in
-        (collection_id, item) :: acc
+        Ok ((collection_id, item) :: acc)
       else Fut.ok acc)
 
 type folder_path = { folder_id : string; path : string }
@@ -354,7 +354,38 @@ let views_of_path (vfolders : view_paths list) path =
 
    TODO: updates ? *)
 
-let sync_folder ~source ~collection_id ~(folder : Item.t) _idb =
+let sync_artists items idb : (Item.t list, Jv.Error.t) Fut.result =
+  let open Fut.Result_syntax in
+  let open Brr_io.Indexed_db in
+  let transaction =
+    Database.transaction [ (module Stores.Artists_store) ] ~mode:Readwrite idb
+  in
+  let store =
+    Transaction.object_store (module Stores.Artists_store) transaction
+  in
+  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc -> function
+    | { Item.type_ = MusicArtist; name; id; _ } -> (
+        let canon = canonicalize_string name in
+        (* TODO There is no sort name in jellyfin's db... *)
+        let sort_name = "" in
+        let open Fut.Syntax in
+        let* result =
+          Stores.Artists_store.add
+            { id = Jellyfin id; name; canon; sort_name }
+            store
+          |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+          |> Request.fut
+        in
+        match result with
+        | Error _e ->
+            (* This happens when the item is already in the database *)
+            acc
+        | Ok _ -> acc)
+    | item ->
+        let+ acc = acc in
+        item :: acc)
+
+let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
   let open Fut.Result_syntax in
   let open Source in
   (* We delegate recursive search to the server once we reached the artist's level *)
@@ -376,19 +407,25 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) _idb =
         enable_images = true;
       }
   in
-  let+ { Api.Items.start_index = _; items; _ } =
+  let* { Api.Items.start_index = _; items; _ } =
     query source (module Api.Items) req ()
   in
+  let+ _rest = sync_artists items idb in
   if recursive then []
   else
     List.fold_left items ~init:[] ~f:(fun acc -> function
       | { Item.is_folder = true; _ } as item -> (collection_id, item) :: acc
       | _ -> acc)
 
+(* there is still too many recursion errors happening due to yojson:
+   (Std[21][2], runtime.caml_string_of_jsstring(json)); (might be fixed with cutting)
+*)
 let sync_v2 ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
+  Console.info [ "Syncing database" ];
   let* views = update_collections source idb in
   let queue = Queue.create () in
+  let max_queue_length = ref 0 in
   let workers : int Fut.t Queue.t = Queue.create () in
   let () =
     List.iter views ~f:(fun (collection_id, view) ->
@@ -397,8 +434,6 @@ let sync_v2 ~(source : Source.connexion) idb =
   in
   let run_job ~worker ~worker_is_ready (collection_id, folder) =
     let+ children = sync_folder ~source ~collection_id ~folder idb in
-    Console.log
-      [ "Worker #"; worker; " ready."; "New folders: "; List.length children ];
     List.iter children ~f:(Fun.flip Queue.add queue);
     worker_is_ready worker
   in
@@ -410,31 +445,26 @@ let sync_v2 ~(source : Source.connexion) idb =
     in
     let running_jobs = ref 0 in
     let rec assign_work () =
+      max_queue_length := max !max_queue_length (Queue.length queue);
+      Console.log [ "Remaining: "; Queue.length queue; "/"; max_queue_length ];
       match Queue.take_opt queue with
-      | None ->
-          Console.log
-            [
-              "Empty sync queue. "; !running_jobs; "/"; threads; " running jobs";
-            ];
-          Fut.ok ()
+      | None -> Fut.ok ()
       | Some job -> (
           (* Wait for a worker *)
-          let future_worker, worker_is_ready = Fut.create () in
           let next_worker = Queue.take_opt workers in
           match next_worker with
           | None -> Fut.ok ()
           | Some next_worker ->
               Fut.bind next_worker @@ fun worker ->
-              let j =
+              let future_worker, worker_is_ready = Fut.create () in
+              let () = Queue.add future_worker workers in
+              let _ =
                 incr running_jobs;
                 let* () = run_job ~worker ~worker_is_ready job in
                 decr running_jobs;
-                assign_work ()
+                (assign_work [@tailcall]) ()
               in
-              let w = assign_work () in
-              let () = Queue.add future_worker workers in
-              let* () = w in
-              j)
+              (assign_work [@tailcall]) ())
     in
     assign_work ()
   in
