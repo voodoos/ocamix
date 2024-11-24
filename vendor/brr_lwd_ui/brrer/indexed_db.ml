@@ -66,7 +66,13 @@ module Request = struct
     result_fut
 
   let fut_exn t =
-    Fut.map (function Ok v -> v | Error e -> raise (Jv.Error e)) (fut t)
+    Fut.map
+      (function
+        | Ok v -> v
+        | Error e ->
+            Console.error [ "Request failed: "; e ];
+            raise (Jv.Error e))
+      (fut t)
 end
 
 module type Key = sig
