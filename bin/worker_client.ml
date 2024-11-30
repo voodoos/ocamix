@@ -9,8 +9,6 @@ let servers_status =
   let var = Lwd.var ("", Db.Sync.initial_report) in
   let _ =
     listen Servers_status_update ~f:(fun (id, report) ->
-        Console.log
-          [ Format.asprintf "Server %s: %a" id Db.Sync.pp_report report ];
         Lwd.set var (id, report))
   in
   var
