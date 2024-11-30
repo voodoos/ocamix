@@ -361,7 +361,7 @@ let get_music_brainz_id external_urls =
         String.split_on_char ~by:'/' url |> List.last_opt
       else None)
 
-let sync_artists ~source:_ items idb : (Item.t list, Jv.Error.t) Fut.result =
+let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
   let transaction =
@@ -386,11 +386,103 @@ let sync_artists ~source:_ items idb : (Item.t list, Jv.Error.t) Fut.result =
           |> Request.fut
         in
         match result with
-        | Error _e ->
+        | Error error ->
             (* This happens when the item is already in the database *)
             (* TODO: It would be cleaner to check for dups before inserting.
                Especially since none of the current indexes clearly states what's a
                dup [<> musicbrainz id || <> jellyfin id] *)
+            Console.warn [ "Could not add artist into the db: "; name ];
+            Console.warn [ Jv.Error.message error ];
+            acc
+        | Ok _ -> acc)
+    | item ->
+        let+ acc = acc in
+        item :: acc)
+
+let prepare_genres idb genre_items =
+  let get_or_set_genre (name, canon) =
+    let transaction =
+      Database.transaction [ (module Stores.Genres_store) ] ~mode:Readwrite idb
+    in
+    let s_genres =
+      Transaction.object_store (module Stores.Genres_store) transaction
+    in
+    let i_genres =
+      Stores.Genres_store.index
+        (module Stores.Genres_by_canonical_name)
+        ~name:"genres_by_canon_name" s_genres
+    in
+    Stores.Genres_by_canonical_name.get_key canon i_genres
+    |> Request.fut_exn
+    |> Fun.flip Fut.bind (function
+         | Some key -> Fut.ok key
+         | None ->
+             let genre = Generic_schema.{ Genre.name; canon } in
+             Stores.Genres_store.add genre s_genres |> Request.fut)
+  in
+  List.concat_map genre_items
+    ~f:(fun ({ name; _ } : Source.Api.Item.genre_item) ->
+      String.split_on_char ~by:';' name
+      |> List.concat_map ~f:(String.split_on_char ~by:',')
+      |> List.map ~f:(fun name ->
+             let name = String.trim name in
+             (name, canonicalize_string name))
+      |> List.uniq ~eq:(fun (_, c1) (_, c2) -> String.equal c1 c2)
+      |> List.map ~f:get_or_set_genre)
+  |> Fut.of_list |> Fut.map Result.flatten_l
+
+let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
+  let open Fut.Result_syntax in
+  let open Brr_io.Indexed_db in
+  let sync_album
+      { Source.Api.Item.name; id; external_urls; sort_name; genre_items; _ } =
+    (* TODO Artists *)
+    (* TODO use Musicbrainz ids for dedup *)
+    let mbid = get_music_brainz_id external_urls in
+    let sort_name = Option.value ~default:name sort_name in
+    (* TODO There is no sort name in jellyfin's db... *)
+    let* genres = prepare_genres idb genre_items in
+    let transaction =
+      Database.transaction
+        [ (module Stores.Albums_store); (module Stores.Genres_store) ]
+        ~mode:Readwrite idb
+    in
+    let store =
+      Transaction.object_store (module Stores.Albums_store) transaction
+    in
+    let* idx =
+      let albums_by_idx =
+        Stores.Albums_store.index
+          (module Stores.Albums_by_idx)
+          ~name:"by-idx" store
+      in
+      (* We get the last id for the manual auto-increent field *)
+      let+ result =
+        Stores.Albums_by_idx.open_key_cursor ~direction:Prev albums_by_idx
+        |> Request.fut
+      in
+      match result with
+      | None -> 0
+      | Some cursor ->
+          (Stores.Albums_by_idx.Cursor.key cursor |> Option.get_or ~default:(-1))
+          + 1
+    in
+    Stores.Albums_store.add ~key:{ name; genres }
+      { idx; id = Jellyfin id; mbid; sort_name }
+      store
+    |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+    |> Request.fut
+  in
+  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->
+      match item with
+      | { Item.type_ = MusicAlbum; name; _ } as album -> (
+          let open Fut.Syntax in
+          let* result = sync_album album in
+          match result with
+          | Error error ->
+              (* This happens when the item is already in the database *)
+              Console.warn [ "Could not add album into the db: "; name ];
+              Console.warn [ Jv.Error.message error ];
             acc
         | Ok _ -> acc)
     | item ->
@@ -422,7 +514,8 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
   let* { Api.Items.start_index = _; items; _ } =
     query source (module Api.Items) req ()
   in
-  let+ _rest = sync_artists ~source items idb in
+  let* remaining = sync_artists ~source idb items in
+  let+ _remaining = sync_albums ~source idb remaining in
   if recursive then []
   else
     List.fold_left items ~init:[] ~f:(fun acc -> function
@@ -660,7 +753,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                                + 1
                          in
                          Stores.Albums_store.add ~key
-                           { idx; id; sort_name; genres }
+                           { idx; id; sort_name; mbid = None }
                            s_albums)
                   |> ignore
               | Audio ->

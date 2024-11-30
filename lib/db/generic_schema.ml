@@ -45,8 +45,8 @@ module Album = struct
     (* name : string; *)
     idx : int;
     id : Id.t;
+    mbid : string option;  (** Musicbrainz ID *)
     sort_name : string;
-    genres : int list;
   }
   [@@deriving yojson]
 
