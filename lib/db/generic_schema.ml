@@ -23,7 +23,13 @@ module Collection = struct
 end
 
 module Artist = struct
-  type t = { id : Id.t; name : string; canon : string; sort_name : string }
+  type t = {
+    id : Id.t;
+    mbid : string option;  (** Musicbrainz ID *)
+    name : string;
+    canon : string;
+    sort_name : string;
+  }
   [@@deriving yojson]
 
   type nonrec with_key = (int, t) with_key

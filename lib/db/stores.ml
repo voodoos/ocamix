@@ -223,6 +223,7 @@ end
 
 module Artists_store = Make_object_store (Artist) (Auto_increment)
 module Artists_by_id = Make_index (Artists_store) (Id_key)
+module Artists_by_mbid = Make_index (Artists_store) (String_key)
 
 module Album = struct
   type t = Album.t [@@deriving yojson]

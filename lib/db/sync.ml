@@ -354,7 +354,14 @@ let views_of_path (vfolders : view_paths list) path =
 
    TODO: updates ? *)
 
-let sync_artists items idb : (Item.t list, Jv.Error.t) Fut.result =
+let get_music_brainz_id external_urls =
+  List.find_map external_urls ~f:(fun { Source.Api.Item.name; url } ->
+      if String.equal_caseless "MusicBrainz" name then
+        (* https://musicbrainz.org/artist/d2e06763-1035-4b1a-82c7-b7c08e06ba48 *)
+        String.split_on_char ~by:'/' url |> List.last_opt
+      else None)
+
+let sync_artists ~source:_ items idb : (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
   let transaction =
@@ -364,14 +371,16 @@ let sync_artists items idb : (Item.t list, Jv.Error.t) Fut.result =
     Transaction.object_store (module Stores.Artists_store) transaction
   in
   List.fold_left items ~init:(Fut.ok []) ~f:(fun acc -> function
-    | { Item.type_ = MusicArtist; name; id; _ } -> (
+    | { Item.type_ = MusicArtist; name; id; external_urls; _ } -> (
+        (* TODO use Musicbrainz ids for dedup *)
+        let mbid = get_music_brainz_id external_urls in
         let canon = canonicalize_string name in
         (* TODO There is no sort name in jellyfin's db... *)
         let sort_name = "" in
         let open Fut.Syntax in
         let* result =
           Stores.Artists_store.add
-            { id = Jellyfin id; name; canon; sort_name }
+            { id = Jellyfin id; mbid; name; canon; sort_name }
             store
           |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
           |> Request.fut
@@ -379,6 +388,9 @@ let sync_artists items idb : (Item.t list, Jv.Error.t) Fut.result =
         match result with
         | Error _e ->
             (* This happens when the item is already in the database *)
+            (* TODO: It would be cleaner to check for dups before inserting.
+               Especially since none of the current indexes clearly states what's a
+               dup [<> musicbrainz id || <> jellyfin id] *)
             acc
         | Ok _ -> acc)
     | item ->
@@ -396,7 +408,7 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
         ids = [];
         parent_id = Some folder.id;
         user_id = source.auth_response.user.id;
-        fields = [ ParentId; Path; Genres; DateCreated ];
+        fields = [ ParentId; Path; Genres; DateCreated; ExternalUrls; Tags ];
         include_item_types = [ Source.Api.Item.MusicArtist; MusicAlbum; Audio ];
         start_index = None;
         limit = None;
@@ -410,7 +422,7 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
   let* { Api.Items.start_index = _; items; _ } =
     query source (module Api.Items) req ()
   in
-  let+ _rest = sync_artists items idb in
+  let+ _rest = sync_artists ~source items idb in
   if recursive then []
   else
     List.fold_left items ~init:[] ~f:(fun acc -> function
@@ -429,8 +441,8 @@ let sync_v2 ~(source : Source.connexion) idb =
   let workers : int Fut.t Queue.t = Queue.create () in
   let () =
     List.iter views ~f:(fun (collection_id, view) ->
-        (* if String.equal view.Item.name "Musique" then *)
-        Queue.add (collection_id, view) queue)
+        if String.equal view.Item.name "Musique" then
+          Queue.add (collection_id, view) queue)
   in
   let run_job ~worker ~worker_is_ready (collection_id, folder) =
     let+ children = sync_folder ~source ~collection_id ~folder idb in

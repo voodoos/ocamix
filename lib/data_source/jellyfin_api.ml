@@ -127,7 +127,6 @@ module Item = struct
 
   type field =
     | AirTime
-    | BasicSyncInfo
     | CanDelete
     | CanDownload
     | ChannelImage
@@ -189,6 +188,9 @@ module Item = struct
     | Width
   [@@deriving yojson]
 
+  type external_url = { name : string; [@key "Name"] url : string [@key "Url"] }
+  [@@deriving yojson]
+
   (* The [Type] field is actually a json string but we want to see it as a
      variant (which is a list of one string) *)
   type type_str = type_
@@ -203,6 +205,7 @@ module Item = struct
   type t = {
     name : string; [@key "Name"]
     sort_name : string option; [@yojson.option] [@key "SortName"]
+    external_urls : external_url list; [@default []] [@key "ExternalUrls"]
     id : string; [@key "Id"]
     path : string option; [@yojson.option] [@key "Path"]
     is_folder : bool; [@key "IsFolder"]
@@ -252,6 +255,25 @@ module Items = struct
 
   let method' = Get
   let endpoint _ = [ "Items" ]
+end
+
+(* Only for priviledged users... *)
+module Items_external_id_infos = struct
+  type path_params = { item_id : string }
+  type params = unit list [@@deriving yojson]
+
+  type info = {
+    name : string; [@key "Name"]
+    key : string; [@key "Key"]
+    type_ : string; [@key "Type"]
+    url_format_string : string; [@key "UrlFormatString"]
+  }
+  [@@deriving yojson]
+
+  type response = info list [@@deriving yojson]
+
+  let method' = Get
+  let endpoint { item_id } = [ "Items"; item_id; "ExternalIdInfos" ]
 end
 
 module Views = struct

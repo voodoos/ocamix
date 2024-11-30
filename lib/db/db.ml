@@ -75,9 +75,12 @@ let on_upgrade_needed e q =
          (Key_path.Identifier "canon")
   in
   let _artists =
-    Artists_store.create ~auto_increment:true db
-    |> Artists_by_id.create ~name:"by-id" (Key_path.Identifier "id")
-         ~unique:true
+    let store = Artists_store.create ~auto_increment:true db in
+    Artists_by_id.create ~name:"by-id" (Key_path.Identifier "id") ~unique:true
+      store
+    |> ignore;
+    Artists_by_id.create ~name:"by-mbid" (Key_path.Identifier "mbid")
+      ~unique:true store
   in
   let _albums =
     let store = Albums_store.create db in
