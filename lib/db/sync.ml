@@ -35,67 +35,14 @@ open Source.Api
      "Gets all user media folders." /Library/MediaFolders
 *)
 
-let chunk_size = 10000
-
-let include_item_types =
-  [ Source.Api.Item.MusicArtist; MusicAlbum; Audio; MusicGenre; Genre ]
-
-let sort_by = [ Source.Api.Types.DateCreated ]
-
-let fetch_total_item_count source =
-  let open Fut.Result_syntax in
-  let* res =
-    Source.query source
-      (module Source.Api.Items)
-      Source.Api.Items.
-        {
-          (* todo make sort explicit (by date added date)*)
-          ids = [];
-          parent_id = Some "43d6ea74e04389601bd171db1aa31edc";
-          user_id = source.auth_response.user.id;
-          fields = [];
-          include_item_types = [ MusicArtist; MusicAlbum ];
-          start_index = None;
-          limit = None;
-          sort_order = Some Ascending;
-          sort_by;
-          recursive = false;
-          enable_user_data = false;
-          enable_images = false;
-        }
-      ()
-  in
-  Console.log [ "FOUND #"; res.total_record_count; " albums" ];
-  let+ res =
-    Source.query source
-      (module Source.Api.Items)
-      Source.Api.Items.
-        {
-          (* todo make sort explicit (by date added date)*)
-          ids = [];
-          parent_id = None;
-          user_id = source.auth_response.user.id;
-          fields = [];
-          include_item_types;
-          start_index = None;
-          limit = Some 0;
-          sort_order = Some Ascending;
-          sort_by;
-          recursive = true;
-          enable_user_data = false;
-          enable_images = false;
-        }
-      ()
-  in
-  res.total_record_count
-
 type db_infos = {
   last_key : int option;
   last_value : Stores.Orderred_items.t option;
 }
+[@@warning "-69"]
 
 (* TODO this is wrong with the new DB schema. *)
-let get_db_infos idb =
+let _get_db_infos idb =
   let infos, set_infos = Fut.create () in
   let transaction = Database.transaction [ (module OI) ] ~mode:Readonly idb in
   let store = Transaction.object_store (module OI) transaction in
@@ -114,15 +61,6 @@ let get_db_infos idb =
             | _ -> OI.Cursor_with_value.continue cursor))
   in
   infos
-
-let is_db_consistent ~source:_ ~last_source_item_key db_sync_infos =
-  let last_key = Option.value ~default:(-1) db_sync_infos.last_key in
-  if last_key > last_source_item_key then
-    (* There are fewer items in the source than expected *)
-    false
-  else
-    (* Todo: check that the last known item is the same than in the source *)
-    true
 
 type status =
   | Unknown
@@ -183,47 +121,6 @@ let log_status = function
           "unfetched items";
         ]
 
-let check_status ~source idb =
-  let open Fut.Syntax in
-  let* db_infos = get_db_infos idb in
-  let open Fut.Result_syntax in
-  let+ total_item_count = fetch_total_item_count source in
-  (* Keys start at 0, it's natural to count item by starting with 0 *)
-  let last_source_item_key = total_item_count - 1 in
-  if not (is_db_consistent ~source ~last_source_item_key db_infos) then
-    Inconsistent
-  else
-    match db_infos with
-    | { last_key = None; last_value = None } ->
-        (* The db has not yet been populated with placeholders *)
-        New_items
-          {
-            first_missing_key = 0;
-            first_unfetched_key = 0;
-            last_source_item_key;
-          }
-    | { last_key = Some key; last_value = item } when key < last_source_item_key
-      ->
-        (* New items were added to the source since the last sync *)
-        let first_unfetched_key =
-          match item with None -> 0 | Some { id; _ } -> id + 1
-        in
-        New_items
-          {
-            first_missing_key = key + 1;
-            first_unfetched_key;
-            last_source_item_key;
-          }
-    | { last_key = Some key; last_value = item } when key = last_source_item_key
-      -> (
-        match item with
-        | Some { id; _ } when id = key -> In_sync
-        | Some { id; _ } ->
-            Partial_fetch { first_unfetched_key = id + 1; last_source_item_key }
-        | None ->
-            Partial_fetch { first_unfetched_key = 0; last_source_item_key })
-    | _ -> Inconsistent
-
 let update_collections source idb =
   let open Fut.Result_syntax in
   let* views =
@@ -271,7 +168,7 @@ let update_collections source idb =
 type folder_path = { folder_id : string; path : string }
 type view_paths = { view_id : string; paths : folder_path list }
 
-let deduce_virtual_folders_from_views source views =
+let _deduce_virtual_folders_from_views source views =
   let open Fut.Result_syntax in
   (* Immediate children of a music view are musicartists. But their parent field
      does not contain the view's id the a virtual folder's id. We gather these
@@ -338,7 +235,7 @@ let deduce_virtual_folders_from_views source views =
   in
   Result.flatten_l result
 
-let views_of_path (vfolders : view_paths list) path =
+let _views_of_path (vfolders : view_paths list) path =
   (* We look at the prefix of a path to determine which virtual_folder (and thus
      view) it's a part of. *)
   List.filter_map vfolders ~f:(fun { view_id; paths } ->
@@ -645,270 +542,12 @@ let sync_v2 ~(source : Source.connexion) idb =
   in
   sync_all ~threads:100
 
-let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
+let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
-  let make_placeholders first last =
-    (* todo: error handling *)
-    let transaction =
-      Database.transaction [ (module OI) ] ~mode:Readwrite idb
-    in
-    let store = Transaction.object_store (module OI) transaction in
-    for i = first to last do
-      ignore @@ OI.put { id = i; item = None } store
-    done
-  in
-  let fetch_missing_items first last =
-    let open Source in
-    let* views = update_collections source idb in
-    let* vfolders = deduce_virtual_folders_from_views source views in
-    let () = Console.info [ "Fetching items"; first; "to"; last; ":" ] in
-    let fetch_queue = Queue.create () in
-    let total = last - first + 1 in
-    let rec enqueue ~start_index todo =
-      if todo > 0 then (
-        let limit = min todo chunk_size in
-        let req =
-          Api.Items.
-            {
-              (* todo make sort explicit (by date added date) *)
-              ids = [];
-              parent_id = None;
-              user_id = source.auth_response.user.id;
-              fields = [ ParentId; Path; Genres; DateCreated ];
-              include_item_types;
-              start_index = Some start_index;
-              limit = Some limit;
-              sort_order = Some Ascending;
-              sort_by;
-              recursive = true;
-              enable_user_data = false;
-              enable_images = true;
-            }
-        in
-        Queue.add req fetch_queue;
-        enqueue ~start_index:(start_index + limit) (todo - limit))
-    in
-    enqueue ~start_index:first total;
-    let total_queries = Queue.length fetch_queue in
-    let rec run_queue ?(threads = 1) q =
-      assert (threads > 0);
-      let rec take_n acc n =
-        if n = 0 then List.rev acc
-        else
-          match Queue.take_opt q with
-          | None -> List.rev acc
-          | Some elt -> take_n (elt :: acc) (n - 1)
-      in
-      (* TODO requests are slow: the server takes 3.5 seconds when asking for
-         two times 2000 records and handling the result is slow (2~3 seconds).
-         We could send the next request while handling the previous results.
-         This should speed up the process a lot. (Also there might be
-         opportunities to speed up result handling.) *)
-      (* TODO: there's a stack overflow somewhere...*)
-      let f req =
-        let+ { Api.Items.start_index; items; _ } =
-          Console.log [ "Before query" ];
-          query source (module Api.Items) req ()
-        in
-        Console.log [ "Successfully decoded query"; List.length items ];
-        let () =
-          report
-          @@ Some
-               { total = total_queries; remaining = Queue.length fetch_queue }
-        in
-        let idb_put ~start_index items =
-          let open Brr_io.Indexed_db in
-          List.iteri items
-            ~f:(fun
-                index
-                ({ Api.Item.id; path; type_; name; album_id; server_id; _ } as
-                 item)
-              ->
-              let transaction =
-                Database.transaction
-                  [
-                    (module OI);
-                    (module I);
-                    (module Stores.Collections_store);
-                    (module Stores.Genres_store);
-                    (module Stores.Albums_store);
-                    (module Stores.Tracks_store);
-                  ]
-                  ~mode:Readwrite idb
-              in
-              let s_list = Transaction.object_store (module OI) transaction in
-              let s_items = Transaction.object_store (module I) transaction in
-              let s_collections =
-                Transaction.object_store
-                  (module Stores.Collections_store)
-                  transaction
-              in
-              let i_collections =
-                Stores.(
-                  Collections_store.index
-                    (module Collections_by_id)
-                    ~name:"by-id" s_collections)
-              in
-              let s_genres =
-                Transaction.object_store
-                  (module Stores.Genres_store)
-                  transaction
-              in
-              let i_genres =
-                Stores.Genres_store.index
-                  (module Stores.Genres_by_canonical_name)
-                  ~name:"genres_by_canon_name" s_genres
-              in
-              let s_albums =
-                Transaction.object_store
-                  (module Stores.Albums_store)
-                  transaction
-              in
-              let s_tracks =
-                Transaction.object_store
-                  (module Stores.Tracks_store)
-                  transaction
-              in
-              let get_or_set_genre (name, canon) =
-                Stores.Genres_by_canonical_name.get_key canon i_genres
-                |> Request.fut_exn
-                |> Fun.flip Fut.bind (function
-                     | Some key -> Fut.return key
-                     | None ->
-                         let genre = Generic_schema.{ Genre.name; canon } in
-                         Stores.Genres_store.add genre s_genres
-                         |> Request.fut_exn)
-              in
-              let prepare_genres genre_items =
-                List.concat_map genre_items
-                  ~f:(fun ({ name; _ } : Api.Item.genre_item) ->
-                    String.split_on_char ~by:';' name
-                    |> List.concat_map ~f:(String.split_on_char ~by:',')
-                    |> List.map ~f:(fun name ->
-                           (name, canonicalize_string name))
-                    |> List.uniq ~eq:(fun (_, c1) (_, c2) -> String.equal c1 c2)
-                    |> List.map ~f:get_or_set_genre)
-                |> Fut.of_list
-              in
-              let index = start_index + index in
-              let path = Option.value ~default:"" path in
-              let views = views_of_path vfolders path in
-              let sort_name = Option.value item.sort_name ~default:name in
-              ignore (OI.put { id = index; item = Some id } s_list);
-              match type_ with
-              | MusicAlbum ->
-                  prepare_genres item.genre_items
-                  |> Fut.map (fun genres ->
-                         let key = { Generic_schema.Album.Key.name; genres } in
-                         let id = Generic_schema.Id.Jellyfin id in
-                         let open Fut.Syntax in
-                         let+ idx =
-                           let albums_by_idx =
-                             Stores.Albums_store.index
-                               (module Stores.Albums_by_idx)
-                               ~name:"by-idx" s_albums
-                           in
-                           (* We get the last id for the manual auto-increent field *)
-                           (* TODO we should factor this out and do it only once *)
-                           let+ result =
-                             Stores.Albums_by_idx.open_key_cursor
-                               ~direction:Prev albums_by_idx
-                             |> Request.fut_exn
-                           in
-                           match result with
-                           | None -> 0
-                           | Some cursor ->
-                               (Stores.Albums_by_idx.Cursor.key cursor
-                               |> Option.get_or ~default:(-1))
-                               + 1
-                         in
-                         Stores.Albums_store.add ~key
-                           { idx; id; sort_name; mbid = None }
-                           s_albums)
-                  |> ignore
-              | Audio ->
-                  let views =
-                    List.map views ~f:(fun view ->
-                        Stores.Collections_by_id.get_key (Jellyfin view)
-                          i_collections
-                        |> Request.fut)
-                    |> Fut.of_list
-                    |> Fut.map
-                         (List.filter_map ~f:(Result.get_or ~default:None))
-                  in
-                  Fut.pair views @@ prepare_genres item.genre_items
-                  |> Fun.flip Fut.bind (fun (collections, genres) ->
-                         let key =
-                           {
-                             Generic_schema.Track.Key.name;
-                             genres;
-                             collections;
-                           }
-                         in
-                         let id = Generic_schema.Id.Jellyfin id in
-                         let server_id = Generic_schema.Id.Jellyfin server_id in
-                         let open Fut.Syntax in
-                         let+ album_id =
-                           match album_id with
-                           | Some id -> (
-                               let albums_by_id =
-                                 Stores.Albums_store.index
-                                   (module Stores.Albums_by_id)
-                                   ~name:"by-id" s_albums
-                               in
-                               let+ result =
-                                 Stores.Albums_by_id.get
-                                   (Generic_schema.Id.Jellyfin id) albums_by_id
-                                 |> Request.fut_exn
-                               in
-                               match result with
-                               | None -> None
-                               | Some { idx; _ } -> Some idx)
-                           | None -> Fut.return None
-                         in
-                         Stores.Tracks_store.add ~key
-                           { id; album_id; sort_name; server_id }
-                           s_tracks)
-                  |> ignore
-              | _ ->
-                  I.put
-                    { sorts = { date_added = index; views; sort_name }; item }
-                    s_items
-                  |> ignore)
-        in
-        idb_put ~start_index items
-      in
-      let reqs = take_n [] threads in
-      let open Fut.Syntax in
-      let* reqs = Fut.of_list (List.map ~f reqs) in
-      if List.is_empty reqs then Fut.ok () else run_queue q
-    in
-    run_queue fetch_queue
-  in
-  function
-  | New_items { first_missing_key; first_unfetched_key; last_source_item_key }
-    ->
-      make_placeholders first_missing_key last_source_item_key;
-      fetch_missing_items first_unfetched_key last_source_item_key
-  | Partial_fetch { first_unfetched_key; last_source_item_key } ->
-      fetch_missing_items first_unfetched_key last_source_item_key
-  | Inconsistent -> Fut.ok ()
-  | _ -> Fut.ok ()
-
-let _check_and_sync ?report ~source idb =
-  let open Fut.Result_syntax in
-  let* status = check_status ~source idb in
-  let initial = { initial_report with status } in
-  let report' =
-    Option.map
-      (fun report ->
+  let initial = initial_report in
         let () = (* Send a first report *) report initial in
-        fun sync_progress -> report { initial with sync_progress })
-      report
-  in
-  let+ () = sync ?report:report' ~source idb status in
-  Option.iter
-    (fun report -> report { status = In_sync; sync_progress = None })
-    report
+  let report' sync_progress = report { initial with sync_progress } in
+  let+ () = sync_v2 ~report:report' ~source idb in
 
-let check_and_sync ?report:_ ~source idb = sync_v2 ~source idb
+  Console.log [ "COUNT TRACKS"; !count_tracks ];
+  report { status = In_sync; sync_progress = None }
