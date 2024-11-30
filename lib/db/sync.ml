@@ -549,11 +549,11 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   let queue = Queue.create () in
   let max_queue_length = ref 0 in
   let workers : int Fut.t Queue.t = Queue.create () in
-  let () =
-    List.iter views ~f:(fun (collection_id, view) ->
-        let _ =
-          let* src_track_count = get_source_track_count source view in
+  let* _ =
+    List.map views ~f:(fun (collection_id, view) ->
+        let* src_track_count = get_source_track_count source view in
           let+ db_track_count = get_db_track_count idb ~collection_id in
+        let () =
           Console.log
             [
               "Collection ";
@@ -565,12 +565,18 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
               " in db)";
             ]
         in
-        if String.equal view.Item.name "Musique" then
-          Queue.add (collection_id, view) queue)
+        if
+          String.equal view.Item.name "Musique"
+          && src_track_count > db_track_count
+        then Queue.add (collection_id, view) queue)
+    |> Fut.of_list |> Fut.map Result.flatten_l
   in
+  let running_jobs = ref 0 in
   let run_job ~worker ~worker_is_ready (collection_id, folder) =
+    incr running_jobs;
     let+ children = sync_folder ~source ~collection_id ~folder idb in
     List.iter children ~f:(Fun.flip Queue.add queue);
+    decr running_jobs;
     worker_is_ready worker
   in
   let sync_all ~threads =
@@ -579,7 +585,6 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
         Queue.add (Fut.return i) workers
       done
     in
-    let running_jobs = ref 0 in
     let renaming () = Queue.length queue + !running_jobs in
     let rec assign_work () =
       max_queue_length := max !max_queue_length (Queue.length queue);
@@ -597,17 +602,16 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
               Fut.bind next_worker @@ fun worker ->
               let future_worker, worker_is_ready = Fut.create () in
               let () = Queue.add future_worker workers in
-              let _ =
-                incr running_jobs;
+              let* () =
                 let* () = run_job ~worker ~worker_is_ready job in
-                decr running_jobs;
                 (assign_work [@tailcall]) ()
               in
               (assign_work [@tailcall]) ())
     in
     assign_work ()
   in
-  sync_all ~threads:100
+  let+ () = sync_all ~threads:100 in
+  Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
@@ -615,6 +619,4 @@ let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let () = (* Send a first report *) report initial in
   let report' sync_progress = report { initial with sync_progress } in
   let+ () = sync_v2 ~report:report' ~source idb in
-
-  Console.log [ "COUNT TRACKS"; !count_tracks ];
   report { status = In_sync; sync_progress = None }
