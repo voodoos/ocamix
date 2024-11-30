@@ -249,12 +249,12 @@ let update_collections source idb =
 
       if String.equal "music" @@ Option.get_or ~default:"" item.collection_type
       then
-        let open Fut.Syntax in
+        let open Fut.Result_syntax in
         let+ collection_id =
           let* idx =
             Stores.Collections_by_id.get_key (Jellyfin item.id)
               collections_by_id
-            |> Request.fut_exn
+            |> Request.fut
           in
           match idx with
           | Some idx -> Fut.ok idx
@@ -264,7 +264,8 @@ let update_collections source idb =
                 s_collections
               |> Request.fut
         in
-        Ok ((collection_id, item) :: acc)
+
+        (collection_id, item) :: acc
       else Fut.ok acc)
 
 type folder_path = { folder_id : string; path : string }
@@ -443,9 +444,7 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
     (* TODO There is no sort name in jellyfin's db... *)
     let* genres = prepare_genres idb genre_items in
     let transaction =
-      Database.transaction
-        [ (module Stores.Albums_store); (module Stores.Genres_store) ]
-        ~mode:Readwrite idb
+      Database.transaction [ (module Stores.Albums_store) ] ~mode:Readwrite idb
     in
     let store =
       Transaction.object_store (module Stores.Albums_store) transaction
@@ -483,11 +482,81 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
               (* This happens when the item is already in the database *)
               Console.warn [ "Could not add album into the db: "; name ];
               Console.warn [ Jv.Error.message error ];
-            acc
-        | Ok _ -> acc)
-    | item ->
-        let+ acc = acc in
-        item :: acc)
+              acc
+          | Ok _ -> acc)
+      | item ->
+          let+ acc = acc in
+          item :: acc)
+
+let sync_tracks ~collection_id ~source:_ idb items :
+    (Item.t list, Jv.Error.t) Fut.result =
+  let open Fut.Result_syntax in
+  let open Brr_io.Indexed_db in
+  let sync_track
+      {
+        Source.Api.Item.name;
+        id;
+        sort_name;
+        genre_items;
+        server_id;
+        album_id;
+        _;
+      } =
+    (* TODO Artists *)
+    let sort_name = Option.value ~default:name sort_name in
+    (* TODO There is no sort name in jellyfin's db... *)
+    let* genres = prepare_genres idb genre_items in
+    let transaction =
+      Database.transaction
+        [ (module Stores.Tracks_store); (module Stores.Albums_store) ]
+        ~mode:Readwrite idb
+    in
+    let store =
+      Transaction.object_store (module Stores.Tracks_store) transaction
+    in
+    let albums_store =
+      Transaction.object_store (module Stores.Albums_store) transaction
+    in
+    let key =
+      (* TODO: can an item be part of multiple collections ? *)
+      { Generic_schema.Track.Key.name; genres; collections = [ collection_id ] }
+    in
+    let+ album_id =
+      match album_id with
+      | Some id -> (
+          let albums_by_id =
+            Stores.Albums_store.index
+              (module Stores.Albums_by_id)
+              ~name:"by-id" albums_store
+          in
+          let+ result =
+            Stores.Albums_by_id.get (Generic_schema.Id.Jellyfin id) albums_by_id
+            |> Request.fut
+          in
+          match result with None -> None | Some { idx; _ } -> Some idx)
+      | None -> Fut.ok None
+    in
+    Stores.Tracks_store.add ~key
+      { id = Jellyfin id; server_id = Jellyfin server_id; album_id; sort_name }
+      store
+    |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+    |> Request.fut
+  in
+  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->
+      match item with
+      | { Item.type_ = Audio; name; _ } as track -> (
+          let open Fut.Syntax in
+          let* result = sync_track track in
+          match result with
+          | Error error ->
+              (* This happens when the item is already in the database *)
+              Console.warn [ "Could not add track into the db: "; name ];
+              Console.warn [ Jv.Error.message error ];
+              acc
+          | Ok _ -> acc)
+      | item ->
+          let+ acc = acc in
+          item :: acc)
 
 let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
   let open Fut.Result_syntax in
@@ -515,7 +584,8 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
     query source (module Api.Items) req ()
   in
   let* remaining = sync_artists ~source idb items in
-  let+ _remaining = sync_albums ~source idb remaining in
+  let* remaining = sync_albums ~source idb remaining in
+  let+ _remaining = sync_tracks ~collection_id ~source idb remaining in
   if recursive then []
   else
     List.fold_left items ~init:[] ~f:(fun acc -> function
@@ -797,7 +867,7 @@ let sync ?(report = fun _ -> ()) ~(source : Source.connexion) idb =
                            | None -> Fut.return None
                          in
                          Stores.Tracks_store.add ~key
-                           { id; album_id; sort_name; genres; server_id }
+                           { id; album_id; sort_name; server_id }
                            s_tracks)
                   |> ignore
               | _ ->

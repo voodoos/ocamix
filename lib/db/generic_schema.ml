@@ -12,7 +12,7 @@ open! Std
 type ('key, 'value) with_key = { key : 'key; value : 'value }
 
 module Id = struct
-  type t = Jellyfin of string [@@deriving yojson]
+  type t = Jellyfin of string [@key "J"] [@@deriving yojson]
 
   let equal t t' =
     match (t, t') with Jellyfin id, Jellyfin id' -> String.equal id id'
@@ -61,7 +61,6 @@ module Track = struct
     id : Id.t;
     album_id : int option;
     sort_name : string;
-    genres : int list;
     server_id : Id.t;
         (* TODO this should not be here track -> collection -> server*)
   }
