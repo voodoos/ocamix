@@ -4,7 +4,7 @@
   "main": "bundle.js",
   "license": "MIT",
   "scripts": {
-    "build": "yarn exec -- esbuild main.bc.js --external:fs --external:constants --external:child_process --external:tty --bundle  --minify-syntax --minify-whitespace --sourcemap  --outfile=bundle.js "
+    "build": "yarn exec -- esbuild main.bc.js --external:node:fs --external:node:constants --external:node:child_process --external:node:tty --bundle  --minify-syntax --minify-whitespace --sourcemap  --outfile=bundle.js "
   },
   "dependencies": {
     "quill": "^2.0.2",
