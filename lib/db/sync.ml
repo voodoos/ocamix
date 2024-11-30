@@ -363,8 +363,9 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
           (Stores.Albums_by_idx.Cursor.key cursor |> Option.get_or ~default:(-1))
           + 1
     in
-    Stores.Albums_store.add ~key:{ name; genres }
-      { idx; id = Jellyfin id; mbid; sort_name }
+    let id = Generic_schema.Id.Jellyfin id in
+    Stores.Albums_store.add ~key:{ id; name; genres }
+      { idx; id; mbid; sort_name }
       store
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut
@@ -385,6 +386,8 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
           let+ acc = acc in
           item :: acc)
 
+let count_tracks = ref 0
+
 let sync_tracks ~collection_id ~source:_ idb items :
     (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
@@ -399,6 +402,7 @@ let sync_tracks ~collection_id ~source:_ idb items :
         album_id;
         _;
       } =
+    let () = incr count_tracks in
     (* TODO Artists *)
     let sort_name = Option.value ~default:name sort_name in
     (* TODO There is no sort name in jellyfin's db... *)
@@ -414,9 +418,15 @@ let sync_tracks ~collection_id ~source:_ idb items :
     let albums_store =
       Transaction.object_store (module Stores.Albums_store) transaction
     in
+    let id = Generic_schema.Id.Jellyfin id in
     let key =
       (* TODO: can an item be part of multiple collections ? *)
-      { Generic_schema.Track.Key.name; genres; collections = [ collection_id ] }
+      {
+        Generic_schema.Track.Key.id;
+        name;
+        genres;
+        collections = [ collection_id ];
+      }
     in
     let+ album_id =
       match album_id with
@@ -434,9 +444,12 @@ let sync_tracks ~collection_id ~source:_ idb items :
       | None -> Fut.ok None
     in
     Stores.Tracks_store.add ~key
-      { id = Jellyfin id; server_id = Jellyfin server_id; album_id; sort_name }
+      { id; server_id = Jellyfin server_id; album_id; sort_name }
       store
-    |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+    |> Request.on_error ~f:(fun e _ ->
+           (* This happens when the item is already in the database *)
+           Console.warn [ "Could not add album into the db: "; name ];
+           Ev.prevent_default e)
     |> Request.fut
   in
   List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->
@@ -489,10 +502,47 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
       | { Item.is_folder = true; _ } as item -> (collection_id, item) :: acc
       | _ -> acc)
 
+let get_source_track_count source view =
+  let open Fut.Result_syntax in
+  let open Source in
+  let req =
+    Api.Items.
+      {
+        ids = [];
+        parent_id = Some view.Item.id;
+        user_id = source.auth_response.user.id;
+        fields = [];
+        include_item_types = [ Audio ];
+        start_index = None;
+        limit = Some 0;
+        sort_by = [];
+        sort_order = None;
+        recursive = true;
+        enable_user_data = false;
+        enable_images = false;
+      }
+  in
+  let+ result = query source (module Api.Items) req () in
+  result.total_record_count
+
+let get_db_track_count idb ~collection_id =
+  let open Fut.Result_syntax in
+  let transaction =
+    Database.transaction [ (module Stores.Tracks_store) ] ~mode:Readonly idb
+  in
+  let store =
+    Transaction.object_store (module Stores.Tracks_store) transaction
+  in
+  let+ all_tracks = Stores.Tracks_store.get_all_keys store |> Request.fut in
+  Array.fold_left all_tracks ~init:0
+    ~f:(fun acc { Generic_schema.Track.Key.collections; _ } ->
+      if List.exists ~f:(Int.equal collection_id) collections then acc + 1
+      else acc)
+
 (* there is still too many recursion errors happening due to yojson:
-   (Std[21][2], runtime.caml_string_of_jsstring(json)); (might be fixed with cutting)
+   (Std[21][2], runtime.caml_string_of_jsstring(json)); (workarouned by cutting)
 *)
-let sync_v2 ~(source : Source.connexion) idb =
+let sync_v2 ~report ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   Console.info [ "Syncing database" ];
   let* views = update_collections source idb in
@@ -501,6 +551,20 @@ let sync_v2 ~(source : Source.connexion) idb =
   let workers : int Fut.t Queue.t = Queue.create () in
   let () =
     List.iter views ~f:(fun (collection_id, view) ->
+        let _ =
+          let* src_track_count = get_source_track_count source view in
+          let+ db_track_count = get_db_track_count idb ~collection_id in
+          Console.log
+            [
+              "Collection ";
+              view.name;
+              ": ";
+              src_track_count;
+              " tracks (";
+              db_track_count;
+              " in db)";
+            ]
+        in
         if String.equal view.Item.name "Musique" then
           Queue.add (collection_id, view) queue)
   in
@@ -516,9 +580,12 @@ let sync_v2 ~(source : Source.connexion) idb =
       done
     in
     let running_jobs = ref 0 in
+    let renaming () = Queue.length queue + !running_jobs in
     let rec assign_work () =
       max_queue_length := max !max_queue_length (Queue.length queue);
-      Console.log [ "Remaining: "; Queue.length queue; "/"; max_queue_length ];
+      let () =
+        report @@ Some { total = !max_queue_length; remaining = renaming () }
+      in
       match Queue.take_opt queue with
       | None -> Fut.ok ()
       | Some job -> (
@@ -545,7 +612,7 @@ let sync_v2 ~(source : Source.connexion) idb =
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
-        let () = (* Send a first report *) report initial in
+  let () = (* Send a first report *) report initial in
   let report' sync_progress = report { initial with sync_progress } in
   let+ () = sync_v2 ~report:report' ~source idb in
 

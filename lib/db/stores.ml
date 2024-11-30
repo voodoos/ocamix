@@ -239,17 +239,23 @@ module Albums_store =
     (struct
       include Generic_schema.Album.Key
 
-      let to_jv { name; genres } =
+      let to_jv { id; name; genres } =
+        let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
         let genres = Jv.of_list Jv.of_int genres in
-        Jv.of_jv_array [| name; genres |]
+        Jv.of_jv_array [| id; name; genres |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| name; genres |] ->
+        | [| id; name; genres |] ->
+            let id =
+              match String.split_on_char ~by:' ' @@ Jv.to_string id with
+              | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
+              | _ -> assert false
+            in
             let name = Jv.to_string name in
             let genres = Jv.to_list Jv.to_int genres in
-            { name; genres }
+            { id; name; genres }
         | _ -> assert false
     end)
 
@@ -268,18 +274,24 @@ module Tracks_store =
     (struct
       include Generic_schema.Track.Key
 
-      let to_jv { name; genres; collections } =
+      let to_jv { id; name; genres; collections } =
+        let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
         let genres = Jv.of_list Jv.of_int genres in
         let collections = Jv.of_list Jv.of_int collections in
-        Jv.of_jv_array [| name; genres; collections |]
+        Jv.of_jv_array [| id; name; genres; collections |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| name; genres; collections |] ->
+        | [| id; name; genres; collections |] ->
+            let id =
+              match String.split_on_char ~by:' ' @@ Jv.to_string id with
+              | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
+              | _ -> assert false
+            in
             let name = Jv.to_string name in
             let genres = Jv.to_list Jv.to_int genres in
             let collections = Jv.to_list Jv.to_int collections in
-            { name; genres; collections }
+            { id; name; genres; collections }
         | _ -> assert false
     end)

@@ -51,7 +51,8 @@ module Album = struct
   [@@deriving yojson]
 
   module Key = struct
-    type t = { name : string; genres : int list } [@@deriving yojson]
+    (* TODO: we would be better of we simple auto increment keys... *)
+    type t = { id : Id.t; name : string; genres : int list } [@@deriving yojson]
   end
 end
 
@@ -67,7 +68,13 @@ module Track = struct
   [@@deriving yojson]
 
   module Key = struct
-    type t = { name : string; genres : int list; collections : int list }
+    (* TODO: we would be better of we simple auto increment keys... *)
+    type t = {
+      id : Id.t;
+      name : string;
+      genres : int list;
+      collections : int list;
+    }
     [@@deriving yojson]
   end
 end
