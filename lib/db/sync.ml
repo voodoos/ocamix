@@ -37,6 +37,7 @@ open Source.Api
 
 type status =
   | Unknown
+  | Syncing
   | In_sync
   | Inconsistent
   | New_items of {
@@ -53,6 +54,7 @@ let initial_report = { status = Unknown; sync_progress = None }
 
 let status_to_string = function
   | Unknown -> "Unknown"
+  | Syncing -> "Syncing"
   | In_sync -> "Synchronized"
   | Inconsistent -> "Inconsistent"
   | New_items { first_missing_key; first_unfetched_key; last_source_item_key }
@@ -74,6 +76,7 @@ let pp_report fmt { status; sync_progress } =
 
 let log_status = function
   | Unknown -> Console.info [ "Database status is unknown" ]
+  | Syncing -> Console.info [ "Databae is being synchronized" ]
   | In_sync -> Console.info [ "Database is synchronized" ]
   | Inconsistent -> Console.warn [ "Database is out-of-sync" ]
   | New_items { first_missing_key; first_unfetched_key; last_source_item_key }
@@ -440,7 +443,6 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   Console.info [ "Syncing database" ];
   let* views = update_collections source idb in
   let queue = Queue.create () in
-  let max_queue_length = ref 0 in
   let workers : int Fut.t Queue.t = Queue.create () in
   let* _ =
     List.map views ~f:(fun (collection_id, view) ->
@@ -462,11 +464,16 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
           Queue.add (collection_id, view) queue)
     |> Fut.of_list |> Fut.map Result.flatten_l
   in
+  let max_queue_length = ref (Queue.length queue) in
+  let add_to_queue v =
+    max_queue_length := !max_queue_length + 1;
+    Queue.add v queue
+  in
   let running_jobs = ref 0 in
   let run_job ~worker ~worker_is_ready (collection_id, folder) =
     incr running_jobs;
     let+ children = sync_folder ~source ~collection_id ~folder idb in
-    List.iter children ~f:(Fun.flip Queue.add queue);
+    List.iter children ~f:add_to_queue;
     decr running_jobs;
     worker_is_ready worker
   in
@@ -484,16 +491,6 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
         let _ = G.set_timeout ~ms:125 (fun () -> timeout (Ok ())) in
         timer
       in
-      max_queue_length := max !max_queue_length (Queue.length queue);
-      let () =
-        report
-        @@ Some
-             {
-               total = !max_queue_length;
-               remaining = renaming ();
-               jobs = !running_jobs;
-             }
-      in
       (* Wait for a worker *)
       let next_worker = Queue.take_opt workers in
       match next_worker with
@@ -507,6 +504,15 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
               worker_is_ready worker;
               Fut.ok ()
           | Some job ->
+              let () =
+                report
+                @@ Some
+                     {
+                       total = !max_queue_length;
+                       remaining = renaming ();
+                       jobs = !running_jobs;
+                     }
+              in
               let worker =
                 let* () = run_job ~worker ~worker_is_ready job in
                 (assign_work [@tailcall]) ()
@@ -524,6 +530,6 @@ let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
   let () = (* Send a first report *) report initial in
-  let report' sync_progress = report { initial with sync_progress } in
+  let report' sync_progress = report { status = Syncing; sync_progress } in
   let+ () = sync_v2 ~report:report' ~source idb in
   report { status = In_sync; sync_progress = None }

@@ -389,23 +389,13 @@ let request (type pp p r) ~base_url ?token ?headers
   let* res = request @@ Request.v ~init url in
   let+ json = Response.as_body res |> Body.text in
 
-  (* We split the answer that can be very large because Jstr.to_string might stack overflow in mlBytes.js at:
-       //Provides: jsoo_is_ascii
-     function jsoo_is_ascii (s) {
-       // The regular expression gets better at around this point for all browsers
-       if (s.length < 24) {
-         // Spidermonkey gets much slower when s.length >= 24 (on 64 bit archs)
-         for (var i = 0; i < s.length; i++) if (s.charCodeAt(i) > 127) return false;
-         return true;
-       } else
-         return !/[^\x00-\x7f]/.test(s);
-     } *)
-  (* TODO: one way to improve performance might be to use a direct Jstr.t ->
-     Jv.t -> Yojson.Safe.t flow so that only strings in field would be converted
-     to caml strings, not the whole request. *)
-  let cuts = Jstr.cuts ~sep:(Jstr.v "{") json in
-  let json = List.map cuts ~f:Jstr.to_string |> String.concat ~sep:"{" in
-  let yojson = J.from_string json in
+  (* Ezjson uses jsonm that is able to detect the encoding of the input string
+     (here an UTF_16 javascript string). This removes the need from converting
+     it to an ocaml string which could lead to "too much recursion" errors in
+     some cases. *)
+  (* TODO Ezjson.value_from_src_result is still the main cause of slowdown
+     during the sychronization process. *)
+  let yojson = J.from_string (Jstr.binary_to_octets json) in
   try Q.response_of_yojson yojson
   with e ->
     Console.log [ "An error occured while decoding response: "; json ];

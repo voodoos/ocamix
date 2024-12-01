@@ -14,14 +14,11 @@ let connect (server_id, { connexion; status; refresh }) =
   let _ =
     Worker_client.listen Servers_status_update ~f:(fun (id, report) ->
         (* TODO: subscribe to a specific server's updates *)
-        let previous_status = Lwd.peek status in
         if String.equal server_id id then (
+                    let previous_status = Lwd.peek status in
           Lwd.set status report;
-          match (previous_status.sync_progress, report.sync_progress) with
-          | Some { remaining; _ }, Some { remaining = remaining'; _ }
-            when remaining <> remaining' ->
-              Lwd.set refresh ()
-          | Some _, None -> Lwd.set refresh ()
+          match (previous_status.status, report.status) with
+          | Syncing, In_sync -> Lwd.set refresh ()
           | _ -> ()))
   in
   ignore (Worker_client.query @@ Add_servers [ (server_id, connexion) ])

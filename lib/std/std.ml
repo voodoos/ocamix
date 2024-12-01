@@ -1,4 +1,5 @@
 include ContainersLabels
+module Brr_utils = Brr_utils
 
 module Int = struct
   include Int

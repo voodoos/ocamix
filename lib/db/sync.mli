@@ -31,6 +31,7 @@
 
 type status =
   | Unknown
+  | Syncing
   | In_sync
   | Inconsistent
   | New_items of {
