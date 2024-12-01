@@ -400,6 +400,9 @@ let request (type pp p r) ~base_url ?token ?headers
        } else
          return !/[^\x00-\x7f]/.test(s);
      } *)
+  (* TODO: one way to improve performance might be to use a direct Jstr.t ->
+     Jv.t -> Yojson.Safe.t flow so that only strings in field would be converted
+     to caml strings, not the whole request. *)
   let cuts = Jstr.cuts ~sep:(Jstr.v "{") json in
   let json = List.map cuts ~f:Jstr.to_string |> String.concat ~sep:"{" in
   let yojson = J.from_string json in
