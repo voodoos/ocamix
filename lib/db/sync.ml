@@ -383,12 +383,6 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
         enable_images = true;
       }
   in
-  (* Throttle queries *)
-  let* () =
-    let timer, timeout = Fut.create () in
-    let _ = G.set_timeout ~ms:50 (fun () -> timeout (Ok ())) in
-    timer
-  in
   let* { Api.Items.start_index = _; items; _ } =
     query source (module Api.Items) req ()
   in
@@ -484,6 +478,12 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
     in
     let renaming () = Queue.length queue + !running_jobs in
     let rec assign_work () =
+      (* Throttle queries *)
+      let* () =
+        let timer, timeout = Fut.create () in
+        let _ = G.set_timeout ~ms:125 (fun () -> timeout (Ok ())) in
+        timer
+      in
       max_queue_length := max !max_queue_length (Queue.length queue);
       let () =
         report
