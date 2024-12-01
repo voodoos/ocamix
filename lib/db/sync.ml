@@ -35,33 +35,6 @@ open Source.Api
      "Gets all user media folders." /Library/MediaFolders
 *)
 
-type db_infos = {
-  last_key : int option;
-  last_value : Stores.Orderred_items.t option;
-}
-[@@warning "-69"]
-
-(* TODO this is wrong with the new DB schema. *)
-let _get_db_infos idb =
-  let infos, set_infos = Fut.create () in
-  let transaction = Database.transaction [ (module OI) ] ~mode:Readonly idb in
-  let store = Transaction.object_store (module OI) transaction in
-  let req = OI.open_cursor ~direction:Prev store in
-  let last_key = ref None in
-  let _ =
-    Request.on_success req ~f:(fun _ q ->
-        match Request.result q with
-        | None -> set_infos { last_key = !last_key; last_value = None }
-        | Some cursor -> (
-            if Option.is_none !last_key then
-              last_key := OI.Cursor_with_value.key cursor;
-            match OI.Cursor_with_value.value cursor with
-            | Some ({ item = Some _; _ } as item) ->
-                set_infos { last_key = !last_key; last_value = Some item }
-            | _ -> OI.Cursor_with_value.continue cursor))
-  in
-  infos
-
 type status =
   | Unknown
   | In_sync
@@ -164,86 +137,6 @@ let update_collections source idb =
 
         (collection_id, item) :: acc
       else Fut.ok acc)
-
-type folder_path = { folder_id : string; path : string }
-type view_paths = { view_id : string; paths : folder_path list }
-
-let _deduce_virtual_folders_from_views source views =
-  let open Fut.Result_syntax in
-  (* Immediate children of a music view are musicartists. But their parent field
-     does not contain the view's id the a virtual folder's id. We gather these
-     virtual folder thar are required to deduce the view from an item. *)
-  let parent_ids_of_view_children id =
-    let+ res =
-      Source.query source
-        (module Source.Api.Items)
-        Source.Api.Items.
-          {
-            ids = [];
-            parent_id = Some id;
-            user_id = source.auth_response.user.id;
-            fields = [ ParentId ];
-            include_item_types = [];
-            start_index = None;
-            limit = None;
-            sort_order = None;
-            sort_by = [];
-            recursive = false;
-            enable_user_data = false;
-            enable_images = false;
-          }
-        ()
-    in
-    List.fold_left ~init:String.Set.empty res.items
-      ~f:(fun set { Item.parent_id; _ } ->
-        match parent_id with
-        | None | Some None -> set
-        | Some (Some parent_id) -> String.Set.add parent_id set)
-  in
-  let paths_of_parents parents =
-    let+ res =
-      Source.query source
-        (module Source.Api.Items)
-        Source.Api.Items.
-          {
-            ids = String.Set.to_list parents;
-            parent_id = None;
-            user_id = source.auth_response.user.id;
-            fields = [ Path ];
-            include_item_types = [];
-            start_index = None;
-            limit = None;
-            sort_order = None;
-            sort_by = [];
-            recursive = false;
-            enable_user_data = false;
-            enable_images = false;
-          }
-        ()
-    in
-    List.filter_map res.items ~f:(fun { Item.id; path; _ } ->
-        Option.map (fun path -> { folder_id = id; path }) path)
-  in
-  let open Fut.Syntax in
-  let+ result =
-    List.map views ~f:(fun (_, { Item.id; _ }) ->
-        let open Fut.Result_syntax in
-        let* parents = parent_ids_of_view_children id in
-        let+ paths = paths_of_parents parents in
-        { view_id = id; paths })
-    |> Fut.of_list
-  in
-  Result.flatten_l result
-
-let _views_of_path (vfolders : view_paths list) path =
-  (* We look at the prefix of a path to determine which virtual_folder (and thus
-     view) it's a part of. *)
-  List.filter_map vfolders ~f:(fun { view_id; paths } ->
-      if
-        List.exists paths ~f:(fun { folder_id = _; path = pre } ->
-            String.prefix ~pre path)
-      then Some view_id
-      else None)
 
 (* The new sync process is not based on the full list of items anymore since
    this is too slow. It's a classic recursive search. The queue is initially
