@@ -102,10 +102,10 @@ let ui_status server =
     Lwd.map (Lwd.get server.status) ~f:(fun { status; sync_progress } ->
         match (status, sync_progress) with
         | In_sync, None -> El.txt' "Synchronized"
-        | _, Some { Db.Sync.total; remaining } ->
+        | _, Some { Db.Sync.total; remaining; jobs } ->
             El.txt'
-            @@ Printf.sprintf "Sync in progress: %i/%i" (total - remaining)
-                 total
+            @@ Printf.sprintf "Sync in progress: %i/%i (%i jobs)"
+                 (total - remaining) total jobs
         | _ -> El.txt' "Desynchronized")
   in
   status
@@ -134,17 +134,13 @@ let servers_libraries =
   in
   Lwd_seq.map
     (fun (server_id, { refresh; _ }) ->
-      Console.log [ "NEW REF" ];
       let previous_value = ref None in
       let v =
         Lwd.bind (Lwd.get refresh) ~f:(fun () ->
             (* TODO: we should not do that here but in the ui *)
             Worker_client.query (Get_libraries ())
             |> Fut.map (Result.get_or ~default:[||])
-            |> Fut.map (fun l ->
-                   Console.log [ "GOT L="; l ];
-                   Array.to_list l)
-            |> Fut.map Lwd_seq.of_list
+            |> Fut.map Array.to_list |> Fut.map Lwd_seq.of_list
             (* FIXME: This is bad: we create a lwd var each time we refresh
                and thiq var had an empty seq value. This caused flickering
                when syncing. Having the correct initial value is not a much

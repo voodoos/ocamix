@@ -42,7 +42,7 @@ type status =
 
 val log_status : status -> unit
 
-type progress = { total : int; remaining : int }
+type progress = { total : int; remaining : int; jobs : int }
 type report = { status : status; sync_progress : progress option }
 
 val initial_report : report
