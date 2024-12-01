@@ -484,7 +484,7 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
       done
     in
     let renaming () = Queue.length queue + !running_jobs in
-    let rec assign_work () =
+    let rec assign_work acc () =
       (* Throttle queries *)
       let* () =
         let timer, timeout = Fut.create () in
@@ -494,7 +494,7 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
       (* Wait for a worker *)
       let next_worker = Queue.take_opt workers in
       match next_worker with
-      | None -> Fut.ok ()
+      | None -> acc
       | Some next_worker -> (
           let future_worker, worker_is_ready = Fut.create () in
           let () = Queue.add future_worker workers in
@@ -502,7 +502,7 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
           match Queue.take_opt queue with
           | None ->
               worker_is_ready worker;
-              Fut.ok ()
+              acc
           | Some job ->
               let () =
                 report
@@ -515,13 +515,11 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
               in
               let worker =
                 let* () = run_job ~worker ~worker_is_ready job in
-                (assign_work [@tailcall]) ()
+                (assign_work (Fut.ok ()) [@tailcall]) ()
               in
-              let* () = assign_work () in
-              let+ () = worker in
-              ())
+              (assign_work (Fut.bind acc (fun _ -> worker)) [@tailcall]) ())
     in
-    assign_work ()
+    assign_work (Fut.ok ()) ()
   in
   let+ () = sync_all ~threads:100 in
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
