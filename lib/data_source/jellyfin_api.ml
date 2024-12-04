@@ -7,7 +7,7 @@ type method' = Get | Post
 let jstr_of_method = function Get -> Jstr.v "GET" | Post -> Jstr.v "POST"
 
 module Types = struct
-  type order = Ascending | Descending [@@deriving yojson]
+  type order = Ascending | Descending [@@deriving yojson, jsont]
 
   type sort =
     | Album
@@ -29,7 +29,7 @@ module Types = struct
     | Random
     | Revenue
     | Runtime
-  [@@deriving yojson]
+  [@@deriving yojson, jsont]
 end
 
 type user = {
@@ -38,7 +38,7 @@ type user = {
   server_name : string option; [@default None] [@key "ServerName"]
   id : string; [@key "Id"]
 }
-[@@deriving yojson] [@@yojson.allow_extra_fields]
+[@@deriving yojson, jsont] [@@yojson.allow_extra_fields]
 
 module type Query = sig
   type path_params
