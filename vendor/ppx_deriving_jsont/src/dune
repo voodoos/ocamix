@@ -1,0 +1,10 @@
+(library
+ (name ppx_deriving_jsont)
+ (public_name ppx_deriving_jsont)
+ (synopsis "[@@deriving jsont]")
+ (libraries ppxlib ppx_deriving.api)
+ (preprocess
+  (pps ppxlib.metaquot))
+ (ppx_runtime_libraries jsont)
+ (modules ppx_deriving_jsont)
+ (kind ppx_deriver))
