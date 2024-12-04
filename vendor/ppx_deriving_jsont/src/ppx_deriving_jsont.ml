@@ -10,6 +10,11 @@ end
 
 let deriver = "jsont"
 
+let jsont_name type_name =
+  match type_name with
+  | "t" -> "jsont"
+  | _ -> Printf.sprintf "%s_jsont" type_name
+
 let jsont_enum ~loc ~kind assoc =
   let open Ast_builder.Default in
   pexp_apply ~loc (evar ~loc "Jsont.enum")
@@ -18,7 +23,6 @@ let jsont_enum ~loc ~kind assoc =
 let of_type_declaration ~loc
     ({ ptype_name = { txt = type_name; _ }; ptype_kind; _ } :
       Parsetree.type_declaration) =
-  let jsont_name = Printf.sprintf "%s_jsont" type_name in
   let type_name = String.capitalize_ascii type_name in
   match ptype_kind with
   | Ptype_variant constrs ->
@@ -35,7 +39,8 @@ let of_type_declaration ~loc
       [
         pstr_value ~loc Nonrecursive
           [
-            value_binding ~loc ~pat:(pvar ~loc jsont_name)
+            value_binding ~loc
+              ~pat:(pvar ~loc @@ jsont_name type_name)
               ~expr:(jsont_enum ~loc ~kind:type_name (elist ~loc all_constrs));
           ];
       ]
