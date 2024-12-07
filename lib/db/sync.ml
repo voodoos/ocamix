@@ -193,26 +193,38 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
         let+ acc = acc in
         item :: acc)
 
+let genres_memo = Hashtbl.create 256
+
 let prepare_genres idb genre_items =
-  let transaction =
-    Database.transaction [ (module Stores.Genres_store) ] ~mode:Readwrite idb
-  in
-  let s_genres =
-    Transaction.object_store (module Stores.Genres_store) transaction
-  in
-  let i_genres =
-    Stores.Genres_store.index
-      (module Stores.Genres_by_canonical_name)
-      ~name:"genres_by_canon_name" s_genres
-  in
   let get_or_set_genre (name, canon) =
-    Stores.Genres_by_canonical_name.get_key canon i_genres
-    |> Request.fut_exn
-    |> Fun.flip Fut.bind (function
-         | Some key -> Fut.ok key
-         | None ->
-             let genre = Generic_schema.{ Genre.name; canon } in
-             Stores.Genres_store.add genre s_genres |> Request.fut)
+    let open Fut.Result_syntax in
+    match Hashtbl.get genres_memo canon with
+    | Some key -> Fut.ok key
+    | None ->
+        let transaction =
+          Database.transaction
+            [ (module Stores.Genres_store) ]
+            ~mode:Readwrite idb
+        in
+        let s_genres =
+          Transaction.object_store (module Stores.Genres_store) transaction
+        in
+        let i_genres =
+          Stores.Genres_store.index
+            (module Stores.Genres_by_canonical_name)
+            ~name:"genres_by_canon_name" s_genres
+        in
+        let+ key =
+          Stores.Genres_by_canonical_name.get_key canon i_genres
+          |> Request.fut_exn
+          |> Fun.flip Fut.bind (function
+               | Some key -> Fut.ok key
+               | None ->
+                   let genre = Generic_schema.{ Genre.name; canon } in
+                   Stores.Genres_store.add genre s_genres |> Request.fut)
+        in
+        Hashtbl.add genres_memo canon key;
+        key
   in
   List.concat_map genre_items
     ~f:(fun ({ name; _ } : Source.Api.Item.genre_item) ->
@@ -515,7 +527,8 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
     in
     assign_work (Fut.ok ()) ()
   in
-  let+ () = sync_all ~threads:5 in
+  let+ () = sync_all ~threads:50 in
+  Hashtbl.reset genres_memo;
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
 let throttle () =
