@@ -26,6 +26,7 @@
   brr-lwd
   yojson
   ppx_yojson_conv
+  (jsont (>= "0.1.1"))
   ezjsonm
   json-data-encoding
   json-data-encoding-browser
