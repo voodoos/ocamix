@@ -194,18 +194,18 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
         item :: acc)
 
 let prepare_genres idb genre_items =
+  let transaction =
+    Database.transaction [ (module Stores.Genres_store) ] ~mode:Readwrite idb
+  in
+  let s_genres =
+    Transaction.object_store (module Stores.Genres_store) transaction
+  in
+  let i_genres =
+    Stores.Genres_store.index
+      (module Stores.Genres_by_canonical_name)
+      ~name:"genres_by_canon_name" s_genres
+  in
   let get_or_set_genre (name, canon) =
-    let transaction =
-      Database.transaction [ (module Stores.Genres_store) ] ~mode:Readwrite idb
-    in
-    let s_genres =
-      Transaction.object_store (module Stores.Genres_store) transaction
-    in
-    let i_genres =
-      Stores.Genres_store.index
-        (module Stores.Genres_by_canonical_name)
-        ~name:"genres_by_canon_name" s_genres
-    in
     Stores.Genres_by_canonical_name.get_key canon i_genres
     |> Request.fut_exn
     |> Fun.flip Fut.bind (function
@@ -485,12 +485,6 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
     in
     let renaming () = Queue.length queue + !running_jobs in
     let rec assign_work acc () =
-      (* Throttle queries *)
-      let* () =
-        let timer, timeout = Fut.create () in
-        let _ = G.set_timeout ~ms:125 (fun () -> timeout (Ok ())) in
-        timer
-      in
       (* Wait for a worker *)
       let next_worker = Queue.take_opt workers in
       match next_worker with
@@ -521,7 +515,7 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
     in
     assign_work (Fut.ok ()) ()
   in
-  let+ () = sync_all ~threads:100 in
+  let+ () = sync_all ~threads:5 in
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
