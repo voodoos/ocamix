@@ -92,7 +92,7 @@ let on_upgrade_needed e q =
   let _tracks = Tracks_store.create db in
   Console.info [ "Stores created:"; list; items; virtual_folders ]
 
-let schema_version = 3
+let schema_version = 4
 
 let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in
