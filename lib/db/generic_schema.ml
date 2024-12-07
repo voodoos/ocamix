@@ -12,14 +12,23 @@ open! Std
 type ('key, 'value) with_key = { key : 'key; value : 'value }
 
 module Id = struct
-  type t = Jellyfin of string [@key "J"] [@@deriving yojson]
+  type t = Jellyfin of string [@@deriving yojson]
+
+  let to_string = function Jellyfin id -> "J " ^ id
+
+  let of_string id =
+    match String.split_on_char ~by:' ' id with
+    | [ "J"; id ] -> Jellyfin id
+    | _ -> assert false
+
+  let jsont = Jsont.map ~dec:of_string ~enc:to_string Jsont.string
 
   let equal t t' =
     match (t, t') with Jellyfin id, Jellyfin id' -> String.equal id id'
 end
 
 module Collection = struct
-  type t = { id : Id.t; name : string } [@@deriving yojson]
+  type t = { id : Id.t; name : string } [@@deriving yojson, jsont]
 end
 
 module Artist = struct
@@ -30,13 +39,13 @@ module Artist = struct
     canon : string;
     sort_name : string;
   }
-  [@@deriving yojson]
+  [@@deriving yojson, jsont]
 
   type nonrec with_key = (int, t) with_key
 end
 
 module Genre = struct
-  type t = { name : string; canon : string } [@@deriving yojson]
+  type t = { name : string; canon : string } [@@deriving yojson, jsont]
   type nonrec with_key = (int, t) with_key
 end
 
@@ -48,11 +57,12 @@ module Album = struct
     mbid : string option;  (** Musicbrainz ID *)
     sort_name : string;
   }
-  [@@deriving yojson]
+  [@@deriving yojson, jsont]
 
   module Key = struct
     (* TODO: we would be better of we simple auto increment keys... *)
-    type t = { id : Id.t; name : string; genres : int list } [@@deriving yojson]
+    type t = { id : Id.t; name : string; genres : int list }
+    [@@deriving yojson, jsont]
   end
 end
 
@@ -65,7 +75,7 @@ module Track = struct
     server_id : Id.t;
         (* TODO this should not be here track -> collection -> server*)
   }
-  [@@deriving yojson]
+  [@@deriving yojson, jsont]
 
   module Key = struct
     (* TODO: we would be better of we simple auto increment keys... *)
@@ -75,6 +85,6 @@ module Track = struct
       genres : int list;
       collections : int list;
     }
-    [@@deriving yojson]
+    [@@deriving yojson, jsont]
   end
 end
