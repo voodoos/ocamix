@@ -77,7 +77,9 @@ let rec of_core_type (core_type : Parsetree.core_type) =
       [%expr Jsont.list [%e jsont]]
   | { ptyp_desc = Ptyp_constr ({ txt = lid; loc }, _args); _ } ->
       (* TODO: arguments ? quoting ? *)
-      Exp.ident (Loc.make ~loc (Ppx_deriving.mangle_lid (`Suffix "jsont") lid))
+      Exp.ident
+        (Loc.make ~loc
+           (Ppxlib.Expansion_helpers.mangle_lid (Suffix "jsont") lid))
   | ct ->
       let msg =
         Printf.sprintf "Not implemented: core_type %s"

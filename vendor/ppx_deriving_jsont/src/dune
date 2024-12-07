@@ -2,7 +2,7 @@
  (name ppx_deriving_jsont)
  (public_name ppx_deriving_jsont)
  (synopsis "[@@deriving jsont]")
- (libraries ppxlib ppx_deriving.api)
+ (libraries ppxlib)
  (preprocess
   (pps ppxlib.metaquot))
  (ppx_runtime_libraries jsont)
