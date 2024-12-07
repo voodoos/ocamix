@@ -11,6 +11,7 @@ module String = struct
   include String
   module Set = Set.Make (String)
   module Map = Map.Make (String)
+  module StdMap = Stdlib.Map.Make (Stdlib.String)
 end
 
 module Json = struct

@@ -12,23 +12,15 @@ module Api = Data_source.Jellyfin_api
 
     We could also tried to pre-process or compress the keys *)
 
-let t_to_jv encoder t =
-  encoder t |> Yojson.Safe.to_string |> Jstr.of_string |> Brr.Json.decode
-  |> Result.get_exn
-
-let jv_to_t decoder j =
-  let json = Brr.Json.encode j in
-  Ok (Jstr.to_string json |> Yojson.Safe.from_string |> decoder)
-
-module type Jsonable = sig
-  type t [@@deriving yojson]
+module type Jsontable = sig
+  type t [@@deriving jsont]
 end
 
-module Of_jsonable (M : Jsonable) = struct
+module Of_jsontable (M : Jsontable) = struct
   include M
 
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
+  let to_jv t = Jsont_brr.encode_jv M.jsont t |> Result.get_exn
+  let of_jv j = Jsont_brr.decode_jv M.jsont j |> Result.get_exn
 end
 
 module String_key = struct
@@ -45,10 +37,10 @@ module Int_key = struct
   let to_jv = Jv.of_int
 end
 
-module Id_key = Of_jsonable (Generic_schema.Id)
+module Id_key = Of_jsontable (Generic_schema.Id)
 
 module Orderred_items = struct
-  type t = { id : int; item : string option } [@@deriving yojson]
+  type t = { id : int; item : string option }
 
   let name = "items_by_date_added"
 
@@ -75,10 +67,12 @@ module Items = struct
   open Data_source.Jellyfin.Api
 
   type sorts = { date_added : int; views : string list; sort_name : string }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
-  type t = { sorts : sorts; item : Item.t } [@@deriving yojson]
+  type t = { sorts : sorts; item : Item.t } [@@deriving jsont]
 
+  let to_jv t = Jsont_brr.encode_jv jsont t |> Result.get_exn
+  let of_jv j = Jsont_brr.decode_jv jsont j |> Result.get_exn
   let compare t t' = String.compare t.sorts.sort_name t'.sorts.sort_name
 
   module Key_date_added = struct
@@ -124,19 +118,15 @@ module Items = struct
   end
 
   let name = "items"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Virtual_folder = struct
   open Data_source.Jellyfin_api
 
   (* todo: multiserver: we should add a server_id key *)
-  type t = Virtual_folders.virtual_folder [@@deriving yojson]
+  include Of_jsontable (Virtual_folders)
 
   let name = "virtual_folders"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Orderred_items_store =
@@ -184,7 +174,7 @@ module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
 open Generic_schema
 
 module Collection = struct
-  include Of_jsonable (Collection)
+  include Of_jsontable (Collection)
 
   let name = "collections"
 end
@@ -192,13 +182,13 @@ end
 module Collections_store = Make_object_store (Collection) (Auto_increment)
 
 module Collections_by_id =
-  Make_index (Collections_store) (Of_jsonable (Generic_schema.Id))
+  Make_index (Collections_store) (Of_jsontable (Generic_schema.Id))
 
 let collections_by_id store =
   Collections_store.index (module Collections_by_id) ~name:"by-id" store
 
 module Genres = struct
-  include Of_jsonable (Generic_schema.Genre)
+  include Of_jsontable (Generic_schema.Genre)
 
   let name = "genres"
 end
@@ -216,7 +206,7 @@ module Genres_by_canonical_name =
     end)
 
 module Artist = struct
-  include Of_jsonable (Generic_schema.Artist)
+  include Of_jsontable (Generic_schema.Artist)
 
   let name = "artists"
 end
@@ -226,11 +216,9 @@ module Artists_by_id = Make_index (Artists_store) (Id_key)
 module Artists_by_mbid = Make_index (Artists_store) (String_key)
 
 module Album = struct
-  type t = Album.t [@@deriving yojson]
+  include Of_jsontable (Album)
 
   let name = "albums"
-  let to_jv t = t_to_jv yojson_of_t t
-  let of_jv j = jv_to_t t_of_yojson j |> Result.get_exn
 end
 
 module Albums_store =
@@ -263,7 +251,7 @@ module Albums_by_id = Make_index (Albums_store) (Id_key)
 module Albums_by_idx = Make_index (Albums_store) (Int_key)
 
 module Track = struct
-  include Of_jsonable (Generic_schema.Track)
+  include Of_jsontable (Generic_schema.Track)
 
   let name = "tracks"
 end

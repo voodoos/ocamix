@@ -7,7 +7,7 @@ type method' = Get | Post
 let jstr_of_method = function Get -> Jstr.v "GET" | Post -> Jstr.v "POST"
 
 module Types = struct
-  type order = Ascending | Descending [@@deriving yojson, jsont]
+  type order = Ascending | Descending [@@deriving jsont]
 
   type sort =
     | Album
@@ -29,7 +29,7 @@ module Types = struct
     | Random
     | Revenue
     | Runtime
-  [@@deriving yojson, jsont]
+  [@@deriving jsont]
 end
 
 type user = {
@@ -38,12 +38,12 @@ type user = {
   server_name : string option; [@default None] [@key "ServerName"]
   id : string; [@key "Id"]
 }
-[@@deriving yojson, jsont] [@@yojson.allow_extra_fields]
+[@@deriving jsont]
 
 module type Query = sig
   type path_params
-  type params [@@deriving yojson]
-  type response [@@deriving yojson]
+  type params [@@deriving jsont]
+  type response [@@deriving jsont]
 
   val method' : method'
   val endpoint : path_params -> string list
@@ -53,37 +53,34 @@ module Authenticate_by_name = struct
   type path_params = unit
 
   type params = { username : string; [@key "Username"] pw : string [@key "Pw"] }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type response = {
     user : user; [@key "User"]
     access_token : string; [@key "AccessToken"]
     server_id : string; [@key "ServerId"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 
   let method' = Post
   let endpoint _ = [ "Users"; "AuthenticateByName" ]
 end
 
 module Item = struct
-  type image_blur_hash = (string * string) list
+  type image_blur_hash = string String.StdMap.t
 
-  let image_blur_hash_of_yojson y =
-    let assoc = Yojson.Safe.Util.to_assoc y in
-    List.map ~f:(fun (key, v) -> (key, Yojson.Safe.Util.to_string v)) assoc
-
-  let yojson_of_image_blur_hash i : Yojson.Safe.t =
-    let assoc = List.map ~f:(fun (key, v) -> (key, `String v)) i in
-    `Assoc assoc
+  let image_blur_hash_jsont = Jsont.Object.as_string_map Jsont.string
 
   type genre_item = { name : string; [@key "Name"] id : string [@key "Id"] }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type image_blur_hashes = {
-    primary : image_blur_hash option; [@yojson.option] [@key "Primary"]
+    primary : image_blur_hash;
+        [@default String.StdMap.empty]
+        [@omit String.StdMap.is_empty]
+        [@key "Primary"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 
   type type_ =
     | AggregateFolder
@@ -123,7 +120,7 @@ module Item = struct
     | UserView
     | Video
     | Year
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type field =
     | AirTime
@@ -186,72 +183,63 @@ module Item = struct
     | ThemeSongIds
     | ThemeVideoIds
     | Width
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type external_url = { name : string; [@key "Name"] url : string [@key "Url"] }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   (* The [Type] field is actually a json string but we want to see it as a
      variant (which is a list of one string) *)
   type type_str = type_
 
-  let type_str_of_yojson j =
-    let s = Yojson.Safe.Util.to_string j in
-    type__of_yojson (`List [ `String s ])
-
-  let yojson_of_type_str ts =
-    match yojson_of_type_ ts with `List [ json ] -> json | _ -> assert false
+  let type_str_jsont = type__jsont
 
   type t = {
     name : string; [@key "Name"]
-    sort_name : string option; [@yojson.option] [@key "SortName"]
+    sort_name : string option; [@option] [@key "SortName"]
     external_urls : external_url list; [@default []] [@key "ExternalUrls"]
     id : string; [@key "Id"]
-    path : string option; [@yojson.option] [@key "Path"]
+    path : string option; [@option] [@key "Path"]
     is_folder : bool; [@key "IsFolder"]
-    album_id : string option; [@yojson.option] [@key "AlbumId"]
+    album_id : string option; [@option] [@key "AlbumId"]
     parent_id : string option option;
         (* [ParentId] might absent, [null], or a string *)
-        [@yojson.option]
+        [@option]
         [@key "ParentId"]
     server_id : string; [@key "ServerId"]
-    image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"]
+    (* image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"] *)
     type_ : type_str; [@key "Type"]
     genre_items : genre_item list; [@default []] [@key "GenreItems"]
-    collection_type : string option;
-        [@default None]
-        [@yojson_drop_default Equal.poly]
-        [@key "CollectionType"]
+    collection_type : string option; [@option] [@key "CollectionType"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 end
 
 module Items = struct
   type path_params = unit
 
   type params = {
-    ids : string list;
-        [@default []] [@yojson_drop_default Equal.poly] [@key "ids"]
-    parent_id : string option; [@yojson.option] [@key "parentId"]
+    ids : string list; [@default []] [@omit List.is_empty] [@key "ids"]
+    parent_id : string option; [@option] [@key "parentId"]
     user_id : string; [@key "userId"]
     fields : Item.field list;
     include_item_types : Item.type_ list; [@key "includeItemTypes"]
-    start_index : int option; [@yojson.option] [@key "startIndex"]
-    limit : int option; [@yojson.option]
-    sort_order : Types.order option; [@yojson.option] [@key "sortOrder"]
+    start_index : int option; [@option] [@key "startIndex"]
+    limit : int option; [@option]
+    sort_order : Types.order option; [@option] [@key "sortOrder"]
     sort_by : Types.sort list; [@key "sortBy"]
     recursive : bool;
     enable_user_data : bool; [@key "enableUserData"]
     enable_images : bool; [@key "enableImages"]
   }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type response = {
     items : Item.t list; [@key "Items"]
     total_record_count : int; [@key "TotalRecordCount"]
     start_index : int; [@key "StartIndex"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 
   let method' = Get
   let endpoint _ = [ "Items" ]
@@ -268,9 +256,9 @@ module Items_external_id_infos = struct
     type_ : string; [@key "Type"]
     url_format_string : string; [@key "UrlFormatString"]
   }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
-  type response = info list [@@deriving yojson]
+  type response = info list [@@deriving jsont]
 
   let method' = Get
   let endpoint { item_id } = [ "Items"; item_id; "ExternalIdInfos" ]
@@ -282,14 +270,14 @@ module Views = struct
   type params = {
     include_external_content : bool; [@key "includeExternalContent"]
   }
-  [@@deriving yojson]
+  [@@deriving jsont]
 
   type response = {
     items : Item.t list; [@key "Items"]
     total_record_count : int; [@key "TotalRecordCount"]
     start_index : int; [@key "StartIndex"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 
   let method' = Get
   let endpoint pp = [ "Users"; pp.user_id; "Views" ]
@@ -297,16 +285,16 @@ end
 
 module Virtual_folders = struct
   type path_params = unit
-  type params = unit [@@deriving yojson]
+  type params = unit [@@deriving jsont]
 
-  type virtual_folder = {
+  type t = {
     name : string; [@key "Name"]
     locations : string list; [@key "Locations"]
     item_id : string; [@key "ItemId"]
   }
-  [@@deriving yojson] [@@yojson.allow_extra_fields]
+  [@@deriving jsont]
 
-  type response = virtual_folder list [@@deriving yojson]
+  type response = t list [@@deriving jsont]
 
   let method' = Get
   let endpoint _ = [ "Library"; "VirtualFolders" ]
@@ -315,7 +303,7 @@ end
 module System = struct
   module Info = struct
     type path_params = unit
-    type params = unit [@@deriving yojson]
+    type params = unit [@@deriving jsont]
 
     type response = {
       local_address : string option; [@default None] [@key "LocalAdress"]
@@ -324,7 +312,7 @@ module System = struct
       operating_system : string option; [@default None] [@key "OperatingSystem"]
       id : string; [@key "Id"]
     }
-    [@@deriving yojson] [@@yojson.allow_extra_fields]
+    [@@deriving jsont]
 
     let method' = Get
     let endpoint _ = [ "System"; "Info" ]
@@ -374,30 +362,27 @@ let request (type pp p r) ~base_url ?token ?headers
     match Q.method' with
     | Get ->
         let params =
-          params |> Q.yojson_of_params |> J.to_string |> Jstr.v |> Json.decode
+          params
+          |> Jsont_brr.encode_jv Q.params_jsont
           |> Result.get_exn |> Uri.Params.of_obj
         in
         let uri_with_params = Uri.with_query_params uri params in
         (Request.init ~headers ~method' (), Uri.to_jstr uri_with_params)
     | Post ->
         let body =
-          params |> Q.yojson_of_params |> J.to_string |> Jstr.v |> Body.of_jstr
+          params
+          |> Jsont_brr.encode Q.params_jsont
+          |> Result.get_exn |> Body.of_jstr
         in
         (Request.init ~headers ~method' ~body (), Uri.to_jstr uri)
   in
   let open Fut.Result_syntax in
   let* res = request @@ Request.v ~init url in
-  let+ json = Response.as_body res |> Body.text in
-
-  (* Ezjson uses jsonm that is able to detect the encoding of the input string
-     (here an UTF_16 javascript string). This removes the need from converting
-     it to an ocaml string which could lead to "too much recursion" errors in
-     some cases. *)
-  (* TODO Ezjson.value_from_src_result is still the main cause of slowdown
-     during the sychronization process. *)
-  let yojson = J.from_string (Jstr.binary_to_octets json) in
-  try Q.response_of_yojson yojson
-  with e ->
-    Console.log [ "An error occured while decoding response: "; json ];
-    Console.log [ e ];
-    raise e
+  let+ json = Response.as_body res |> Body.json in
+  let result = Jsont_brr.decode_jv Q.response_jsont json in
+  match result with
+  | Ok result -> result
+  | Error e ->
+      Console.log [ "An error occured while decoding response: "; json ];
+      Console.log [ Jv.Error.message e ];
+      raise (Jv.Error e)
