@@ -518,10 +518,29 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   let+ () = sync_all ~threads:5 in
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
+let throttle () =
+  (* We use [last_update] to have regular debounced updates and the
+     [timeout] to ensure that the last event is always taken into
+     account even it it happens during the debouncing interval. *)
+  let last_update = ref 0. in
+  let timer = ref (-1) in
+  fun ~delay_ms f ->
+    let now = Performance.now_ms G.performance in
+    if !timer >= 0 then G.stop_timer !timer;
+    timer := G.set_timeout ~ms:delay_ms (fun () -> f ());
+    if now -. !last_update >. float_of_int delay_ms then (
+      last_update := now;
+      f ())
+
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
   let () = (* Send a first report *) report initial in
-  let report' sync_progress = report { status = Syncing; sync_progress } in
+  let sync_report_throttler = throttle () ~delay_ms:250 in
+  let report' =
+   fun sync_progress ->
+    sync_report_throttler (fun () -> report { status = Syncing; sync_progress })
+  in
   let+ () = sync_v2 ~report:report' ~source idb in
-  report { status = In_sync; sync_progress = None }
+  sync_report_throttler (fun () ->
+      report { status = In_sync; sync_progress = None })
