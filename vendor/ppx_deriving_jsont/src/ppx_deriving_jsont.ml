@@ -63,18 +63,24 @@ let jsont_sig_item ~loc ~name type_ =
 
 let rec of_core_type (core_type : Parsetree.core_type) =
   let loc = core_type.ptyp_loc in
+  (* TODO we should provide finer user control for handling int and floats *)
   match core_type with
   | [%type: unit] -> [%expr Jsont.null ()]
   | [%type: string] -> [%expr Jsont.string]
   | [%type: bool] -> [%expr Jsont.bool]
-  | [%type: int] ->
-      (* TODO we should provide finer user control here *) [%expr Jsont.int]
+  | [%type: float] -> [%expr Jsont.number]
+  | [%type: int] -> [%expr Jsont.int]
+  | [%type: int32] -> [%expr Jsont.int32]
+  | [%type: int64] -> [%expr Jsont.int64]
   | [%type: [%t? typ] option] ->
       let jsont = of_core_type typ in
       [%expr Jsont.option [%e jsont]]
   | [%type: [%t? typ] list] ->
       let jsont = of_core_type typ in
       [%expr Jsont.list [%e jsont]]
+  | [%type: [%t? typ] array] ->
+      let jsont = of_core_type typ in
+      [%expr Jsont.array [%e jsont]]
   | { ptyp_desc = Ptyp_constr ({ txt = lid; loc }, _args); _ } ->
       (* TODO: arguments ? quoting ? *)
       Exp.ident
