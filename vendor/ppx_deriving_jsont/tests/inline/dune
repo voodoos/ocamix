@@ -1,0 +1,5 @@
+(test
+ (name variants)
+ (libraries jsont jsont.bytesrw)
+ (preprocess
+  (pps ppx_yojson_conv ppx_deriving_jsont)))

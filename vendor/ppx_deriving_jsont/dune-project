@@ -7,7 +7,7 @@
 
 (license AGPL-3.0)
 
-(authors "Ulysse G\195\169rard")
+(authors "Ulysse Gérard")
 
 (maintainers "")
 
@@ -16,4 +16,7 @@
  (name ppx_deriving_jsont)
  (synopsis "A ppx deriver for Jsont")
  (description "A _really_ long description")
- (depends ppxlib jsont))
+ (depends
+  ppxlib
+  jsont
+  (bytesrw :with-test)))
