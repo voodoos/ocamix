@@ -45,7 +45,7 @@ eventually contribute your improvements upstream. Alternatively, the development
 version can be installed in a switch using Opam's `pin` command:
 
 ```shell
-opam pin https://github.com/voodoos/ppx_deriving_jsont
+opam pin https://github.com/voodoos/ppx_deriving_jsont.git
 ```
 
 ## Configuration
