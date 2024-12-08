@@ -2,16 +2,16 @@
 
 This a very early take on writing a deriver for
 [Jsont](https://erratique.ch/software/jsont) that only support a very restricted
-subset of types. It can already be used to skip tedious mechanical work like
+subset of features. It can already be used to skip tedious mechanical work like
 describing large records and lists of variants, but it does not do justice to
 Jsont's fine control and flexibily over the resulting mappings (like choosing
 the way integers are mapped).
 
 Any kind of contribution (bug-report, PR, suggestions) is welcomed! It's missing
-a lot of features and I am in now way a PPX expert, so there might be a lot of
+a lot of features and I am in no way a PPX expert, so there might be a lot of
 non-idiomatic things here that I'd be happy to improve.
 
-## Features
+## Todo / Roadmap / Wishlist
 
 - [x] Basic support for variants without type parameters
 - [x] Basic support for records-as-objects
@@ -20,11 +20,11 @@ non-idiomatic things here that I'd be happy to improve.
 - [ ] Options (in the form of attributes)
     - [ ] for finer support of integers
     - [ ] for finer settings
-    - [ ] to also generate objects' Paths 
     - [ ] to provide `doc` comments
     - [ ] for other kinds of objects mappings (as sets for example) 
 - [ ] Handle some frequent pattern that do not map obvisousy from OCaml to JSON
   like variants with parameters (Yojson uses arrays).
+- [ ] A2lso generate objects' Paths 
 - [ ] Comprehensive testsuite
 
 # [@@deriving jsont]
@@ -42,7 +42,7 @@ descriptions when that is necessary.
 `ppx_deriving_jsont` is still experimental and has not been released to Opam
 yet. Given how incomplete it is right now you might want to vendor it and
 eventually contribute your improvements upstream. Alternatively, the development
-version can be installed in a switch with Opam's `pin` command:
+version can be installed in a switch using Opam's `pin` command:
 
 ```shell
 opam pin https://github.com/voodoos/ppx_deriving_jsont
