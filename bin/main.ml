@@ -36,6 +36,15 @@ module P = Player.Playback_controller (struct
   let fetch = fetch
 end)
 
+let fetch ranged_view i =
+  let data = fetch ranged_view i in
+  Array.mapi i ~f:(fun i _ ->
+      let open Fut.Result_syntax in
+      let* data = data in
+      match data.(i) with
+      | Some v -> Fut.ok v
+      | None -> Fut.error (`Msg "No result"))
+
 let app (db : Brr_io.Indexed_db.Database.t) =
   let status =
     Elwd.div

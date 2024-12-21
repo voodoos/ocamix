@@ -11,4 +11,8 @@ dev-env: _opam
 dev:
 	sh scripts/build_and_serve.sh
 
+.PHONY: fmt
+fmt:
+	opam exec -- dune fmt
+
 .DEFAULT_GOAL := dev

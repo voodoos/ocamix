@@ -15,7 +15,7 @@ let connect (server_id, { connexion; status; refresh }) =
     Worker_client.listen Servers_status_update ~f:(fun (id, report) ->
         (* TODO: subscribe to a specific server's updates *)
         if String.equal server_id id then (
-                    let previous_status = Lwd.peek status in
+          let previous_status = Lwd.peek status in
           Lwd.set status report;
           match (previous_status.status, report.status) with
           | Syncing, In_sync -> Lwd.set refresh ()
