@@ -47,6 +47,7 @@ module Make : functor (Q : Queries) -> sig
 
   (** Use [Make_worker] to generate the body of the worker. The generative
       functor given in parameter contian the program t be executed, and should
-      provide an [on_query] function to answer all messages defined by the API. *)
+      provide an [on_query] function to answer all messages defined by the API.
+  *)
   module Make_worker : functor (_ : Worker_impl) -> sig end
 end

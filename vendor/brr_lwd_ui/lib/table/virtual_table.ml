@@ -13,14 +13,11 @@ module FRef = Utils.Forward_ref
 
 let logger = Logger.for_section "virtual table"
 
-type 'a row_data = {
-  index : int;
-  content : 'a option;
-}
+type 'a row_data = { index : int; content : 'a Fut.t option }
 
 type ('data, 'error) data_source = {
   total_items : int Lwd.t;
-  fetch : (int array -> ('data option array, 'error) Fut.result) Lwd.t;
+  fetch : (int array -> ('data, 'error) Fut.result array) Lwd.t;
   render : (int -> 'data -> Elwd.t Elwd.col) Lwd.t;
 }
 
@@ -35,8 +32,6 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ?(scroll_target : int Lwd.t option)
     ({ total_items; fetch; render } : (data, _) data_source) =
-  ignore placeholder;
-
   let module State = struct
     (* The wrapper_div ref should be initialized with the correct element as
        soon as it is created. It is not reactive per se. *)
@@ -73,14 +68,14 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   let add ~fetch ?(max_items = 200) indexes =
     let cache = !cache_ref in
     let load indexes =
-      (let open Fut.Result_syntax in
-       let+ (data : data option array) = fetch indexes in
-       Array.iter2 indexes data ~f:(fun i data ->
+      (let data : (data, _) Fut.result array = fetch indexes in
+       Array.iter2 indexes data ~f:(fun i (data : (data, _) Fut.result) ->
            (let open Option.Infix in
             let* row = Hashtbl.get row_index i in
             let+ row_data = Lwd_table.get row in
             let data =
-              match data with Some data -> data | _ -> raise Not_found
+              data
+              |> Fut.map (function Ok data -> data | _ -> raise Not_found)
             in
             (* todo: let users provide comparison *)
             if not (Equal.poly row_data.content @@ Some data) then
@@ -187,9 +182,14 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     match content with
     | Some data ->
         let rendered_row =
-          Lwd.map render ~f:(fun render ->
-              Lwd_seq.of_list
-                (List.map (render index data) ~f:(fun elt -> Elwd.div [ elt ])))
+          let data = Utils.var_of_fut_opt data in
+          Lwd.map2 render (Lwd.get data) ~f:(fun render -> function
+            | Some data ->
+                Lwd_seq.of_list
+                  (List.map (render index data) ~f:(fun elt -> Elwd.div [ elt ]))
+            | None ->
+                Lwd_seq.of_list
+                  (List.map (placeholder index) ~f:(fun elt -> Elwd.div [ elt ])))
         in
         ( 0,
           Lwd_seq.element

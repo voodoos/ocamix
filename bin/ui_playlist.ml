@@ -71,7 +71,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
       `P (El.div [ El.span [ El.txt' name ] ]);
     ]
   in
-  let placeholder _i = [] in
+  let placeholder _i = [ `P (El.txt' "Loading...") ] in
   let ui_table =
     { Table.table = { columns = columns () }; row_height = Em 4. }
   in
