@@ -16,7 +16,6 @@ let logger = Logger.for_section "virtual table"
 type 'a row_data = {
   index : int;
   content : 'a option;
-  render : (int -> 'a -> Elwd.t Elwd.col) Lwd.t;
 }
 
 type ('data, 'error) data_source = {
@@ -133,7 +132,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     in
     List.init (last - first) ~f:(fun i -> first + i)
   in
-  let prepare ~total_items:total ~render =
+  let prepare ~total_items:total =
     let () = cache_ref := new_cache () in
     let i = ref 0 in
     let current_row = ref (Lwd_table.first table) in
@@ -142,13 +141,13 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
       | Some row ->
           if !i <= total - 1 then
             let () = Hashtbl.replace row_index !i row in
-            Lwd_table.set row { index = !i; content = None; render }
+            Lwd_table.set row { index = !i; content = None }
           else Lwd_table.unset row;
           incr i;
           current_row := Lwd_table.next row
       | None ->
           if !i <= total - 1 then (
-            let set = { index = !i; content = None; render } in
+            let set = { index = !i; content = None } in
             let row = Lwd_table.append ~set table in
             Hashtbl.add row_index !i row;
             incr i;
@@ -165,7 +164,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows)
     in
     Lwd.map2 total_items update ~f:(fun total_items update ->
-        prepare ~total_items ~render;
+        prepare ~total_items;
         update)
   in
   let () =
@@ -182,7 +181,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
   in
-  let render _row { content; index; render } =
+  let render _row { content; index } =
     let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
     let style = `P (At.style (Jstr.v height)) in
     match content with
