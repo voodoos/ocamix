@@ -80,16 +80,16 @@ module Worker () = struct
             ->
             let genres = Int.Set.of_list genres in
             List.fold_left filters ~init:true ~f:(fun acc -> function
-          | Db.View.Search sub when not (String.is_empty sub) ->
-              let sub = String.lowercase_ascii sub in
-              let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
+              | Db.View.Search sub when not (String.is_empty sub) ->
+                  let sub = String.lowercase_ascii sub in
+                  let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
                   let name = String.lowercase_ascii name in
                   acc && String.Find.find ~pattern name >= 0
-          | Genres (One_of one_of) ->
+              | Genres (One_of one_of) ->
                   acc
                   && (Int.Set.is_empty one_of
-                  || not (Int.Set.disjoint genres one_of))
-          | Genres (None_of none_of) ->
+                     || not (Int.Set.disjoint genres one_of))
+              | Genres (None_of none_of) ->
                   acc
                   && (Int.Set.is_empty none_of
                      || Int.Set.disjoint genres none_of)

@@ -9,7 +9,7 @@ let data =
     fetch =
       Lwd.pure (fun i ->
           (* Console.log [ "Loading"; Jv.of_array Jv.of_int i ]; *)
-          Fut.ok (Array.map (fun i -> Some (i * i)) i));
+          Array.map (fun i -> Fut.ok (i * i)) i);
     render =
       Lwd.pure (fun i data ->
           [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]);
