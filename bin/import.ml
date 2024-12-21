@@ -9,7 +9,6 @@ module IDB = Brr_io.Indexed_db
 module String = struct
   include String
   module MMap = CCMultiMap.Make (String)
-  module Items_MultiMap = MMap (Db.Stores.Items)
 end
 
 module Utils = struct
