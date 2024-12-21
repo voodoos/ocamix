@@ -8,7 +8,6 @@ module Attrs = Brr_lwd_ui.Attrs
 module String = struct
   include String
   module MMap = CCMultiMap.Make (String)
-  module Items_MultiMap = MMap (Db.Stores.Items)
 end
 
 module Utils = struct
