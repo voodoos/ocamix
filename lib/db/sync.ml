@@ -3,9 +3,6 @@ open Brrer
 open Brr
 open Brr_io.Indexed_db
 module Source = Data_source.Jellyfin
-module OI = Stores.Orderred_items_store
-module I = Stores.Items_store
-module VF = Stores.Virtual_folder_store
 open Source.Api
 
 (* Items Hierarchy
@@ -447,9 +444,6 @@ let get_db_track_count idb ~collection_id =
       if List.exists ~f:(Int.equal collection_id) collections then acc + 1
       else acc)
 
-(* there is still too many recursion errors happening due to yojson:
-   (Std[21][2], runtime.caml_string_of_jsstring(json)); (workarouned by cutting)
-*)
 let sync_v2 ~report ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   Console.info [ "Syncing database" ];

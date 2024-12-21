@@ -39,106 +39,6 @@ end
 
 module Id_key = Of_jsontable (Generic_schema.Id)
 
-module Orderred_items = struct
-  type t = { id : int; item : string option }
-
-  let name = "items_by_date_added"
-
-  let to_jv t =
-    let obj =
-      Jv.obj
-        [|
-          ("id", Jv.of_int t.id);
-          ("item", Jv.of_option ~none:Jv.null Jv.of_string t.item);
-        |]
-    in
-    obj
-
-  let of_jv j =
-    {
-      id = Jv.get j "id" |> Jv.to_int;
-      item = Jv.get j "item" |> Jv.to_option Jv.to_string;
-    }
-
-  let get_key t = t.id
-end
-
-module Items = struct
-  open Data_source.Jellyfin.Api
-
-  type sorts = { date_added : int; views : string list; sort_name : string }
-  [@@deriving jsont]
-
-  type t = { sorts : sorts; item : Item.t } [@@deriving jsont]
-
-  let to_jv t = Jsont_brr.encode_jv jsont t |> Result.get_exn
-  let of_jv j = Jsont_brr.decode_jv jsont j |> Result.get_exn
-  let compare t t' = String.compare t.sorts.sort_name t'.sorts.sort_name
-
-  module Key_date_added = struct
-    type t = int
-
-    let to_jv k = Jv.of_int k
-    let of_jv j = Jv.to_int j
-  end
-
-  module Key_id = struct
-    type t = string
-
-    let to_jv k = Jv.of_string k
-    let of_jv j = Jv.to_string j
-  end
-
-  module Key_view_kind = struct
-    (* todo: use a enum for kinds *)
-    type t = { type' : string; views : string list }
-
-    let to_jv _k = assert false
-
-    let of_jv j =
-      match Jv.(to_jv_array j) with
-      | [| type'; views |] ->
-          { type' = Jv.to_string type'; views = Jv.(to_list to_string views) }
-      | _ -> assert false
-  end
-
-  module Key_type_name = struct
-    type t = { collection_type : string; sort_name : string }
-
-    let to_jv _t = assert false
-
-    let of_jv j =
-      match Jv.(to_jv_array j) with
-      | [| collection_type; sort_name |] ->
-          {
-            collection_type = Jv.to_string collection_type;
-            sort_name = Jv.to_string sort_name;
-          }
-      | _ -> assert false
-  end
-
-  let name = "items"
-end
-
-module Virtual_folder = struct
-  open Data_source.Jellyfin_api
-
-  (* todo: multiserver: we should add a server_id key *)
-  include Of_jsontable (Virtual_folders)
-
-  let name = "virtual_folders"
-end
-
-module Orderred_items_store =
-  Make_object_store
-    (Orderred_items)
-    (struct
-      type t = int
-
-      let to_jv k = Jv.of_int k
-      let of_jv j = Jv.to_int j
-    end)
-
 module Items_store_key = struct
   type t = { id : string; sort_name : string; views : string list }
 
@@ -157,16 +57,6 @@ module Items_store_key = struct
         { id; sort_name; views }
     | _ -> assert false
 end
-
-module Items_store = Make_object_store (Items) (Items_store_key)
-module Virtual_folder_store = Make_object_store (Virtual_folder) (String_key)
-
-module ItemsByDateAdded =
-  Make_index (Orderred_items_store) (Items.Key_date_added)
-
-module ItemsByViewAndKind = Make_index (Items_store) (Items.Key_view_kind)
-module ItemsById = Make_index (Items_store) (Items.Key_id)
-module ItemsByTypeAndName = Make_index (Items_store) (Items.Key_type_name)
 
 (* WIP New generic database schema:
    - Instead of storing Jellyfin specific items we process them to fit a more
