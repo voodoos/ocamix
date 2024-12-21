@@ -210,7 +210,8 @@ end
 module Make_object_store
     (Content : Store_content_intf)
     (* TODO: at that step do we really need the content's type ?*)
-    (Primary_key : Key) : sig
+     (Primary_key :
+      Key) : sig
   include module type of Content_access (Content) (Primary_key) (Primary_key)
 
   include
