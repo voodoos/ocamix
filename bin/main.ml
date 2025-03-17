@@ -1,6 +1,8 @@
 open Import
 open Brr
 
+let () = Random.self_init ()
+
 (* The session uuid is stored to the local storage and used to identify a user
    session. This is required by Jellyfin authorization scheme. *)
 (* The official client does it like this:
