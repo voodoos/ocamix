@@ -111,7 +111,13 @@ let app =
           At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
     in
     let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
-    Elwd.div ~at [ `R (Elwd.div ~at:[ `R (Lwd.join style) ] []) ]
+    Elwd.div ~at
+      [
+        `R
+          (Elwd.div
+             ~at:[ `R (Lwd.join style) ]
+             [ `R (Elwd.div ~at:[ `R (Lwd.join style) ] []) ]);
+      ]
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
