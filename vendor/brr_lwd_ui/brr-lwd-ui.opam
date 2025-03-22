@@ -4,7 +4,7 @@ synopsis: "UI components for use with with brr_lwd"
 description: "A _really_ long description"
 maintainer: [""]
 authors: ["Ulysse Gérard"]
-license: "AGPL-3.0"
+license: "MIT"
 homepage: "https://github.com/voodoos/brr-lwd-ui"
 bug-reports: "https://github.com/voodoos/brr-lwd-ui/issues"
 depends: [
