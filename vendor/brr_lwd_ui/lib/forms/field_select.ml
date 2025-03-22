@@ -22,6 +22,7 @@ let make ?(persist = true) ?(at = []) ?(ev = [])
   in
   let () = on_change ~init:true @@ Lwd.peek value in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
+  let element = ref None in
   let field =
     let at =
       let open Attrs in
@@ -44,12 +45,18 @@ let make ?(persist = true) ?(at = []) ?(ev = [])
           let at = v (`P (A (At.value @@ Jstr.v value'))) in
           let selected =
             Lwd.map (Lwd.get value) ~f:(fun selected ->
-                A (At.if' (Equal.poly selected value') At.selected))
+              let selected = String.equal selected value' in
+                A (At.if' selected At.selected))
           in
           let at = `R selected @:: at in
           Elwd.option ~at [ `P (El.txt' name) ])
         options
     in
-    Elwd.select ~at ~ev [ `S (Lwd_seq.lift options) ]
+    Elwd.select ~at ~ev ~on_create:(fun e -> element := Some e) [ `S (Lwd_seq.lift options) ]
+  in
+  let () = Utils.listen ~f:(fun v ->
+    Option.iter (fun select ->
+    Jv.set (El.to_jv select) "value" (Jv.of_string v)) !element )
+     @@ Lwd.get value
   in
   { field; label; value }
