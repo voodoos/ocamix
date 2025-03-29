@@ -278,7 +278,10 @@ struct
           let album_title =
             Lwd.map (Lwd.get album_title) ~f:(fun title -> El.txt' title)
           in
-          [ `R (Elwd.span [ `R txt ]); `R (Elwd.span [ `R album_title ]) ]
+          [
+            `R Elwd.(div [ `R (span [ `R txt ]) ]);
+            `R Elwd.(div [ `R (span [ `R album_title ]) ]);
+          ]
         in
         Elwd.div ~at details
       in
