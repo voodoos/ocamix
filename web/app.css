@@ -111,6 +111,11 @@ body {
                 & > * {
                     height: 1.5em;
                     flex-grow: 0;
+                    mask-image: linear-gradient(to right, rgba(0,0,0,1) 90%, rgba(0,0,0,0) 100%);
+
+                    &:hover {
+                        mask-image:none;
+                    }
                 }
 
                 & span {
