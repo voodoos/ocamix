@@ -83,6 +83,7 @@ body {
             flex-direction: row;
             flex-grow: 1;
             max-width: 30rem;
+            width: 100%;
             height: 5rem;
             padding: 0;
             gap: 0.5rem;
@@ -105,19 +106,29 @@ body {
                 flex-direction: column;
 
                 flex-grow: 1;
-                overflow: hidden;
+                min-width: 0;
+
+                & > * {
+                    height: 1.5em;
+                    flex-grow: 0;
+                }
 
                 & span {
                     display: inline-block;
+                    border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
+
+                    width: 100%;
                     height: 1.5em;
                     overflow: hidden;
+                    white-space: nowrap;
                 }
 
                 & span:hover {
-                    position: absolute;
-                    border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
                     background-color: var(--dark-bg-color);
                     padding-right: 0.5em;
+                    width: auto;
+                    height: 1.5em;
+                    overflow: visible;
                 }
             }
         }
