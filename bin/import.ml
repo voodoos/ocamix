@@ -4,6 +4,7 @@ module Elwd = Brr_lwd.Elwd
 module Ui_utils = Brr_lwd_ui.Utils
 module View = Db.View
 module Attrs = Brr_lwd_ui.Attrs
+module IDB = Brr_io.Indexed_db
 
 module String = struct
   include String

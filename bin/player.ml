@@ -128,7 +128,7 @@ struct
     Lwd.set playstate.playlist (Some playlist);
     Lwd.set playstate.current_index 0
 
-  let make () =
+  let make idb () =
     let audio_elt =
       El.audio
         ~at:
@@ -247,15 +247,40 @@ struct
       in
       let track_details =
         let at = Attrs.add At.Name.class' (`P "now-playing-details") [] in
-        let title =
+        let default_album_title = "Unknown album" in
+        let album_title = Lwd.var default_album_title in
+        let update_album_title album_id =
+          match album_id with
+          | None -> Lwd.set album_title default_album_title
+          | Some album_id ->
+              let open Db.Stores in
+              let index =
+                IDB.Database.transaction
+                  [ (module Albums_store) ]
+                  ~mode:Readonly idb
+                |> IDB.Transaction.object_store (module Albums_store)
+                |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
+              in
+              let album = Albums_by_idx.get_key album_id index in
+              let result = IDB.Request.fut_exn album in
+              Fut.await result
+                (Option.iter (fun { Db.Generic_schema.Album.Key.name; _ } ->
+                     Lwd.set album_title name))
+        in
+        let details =
           let txt =
             Lwd.map (Lwd.get now_playing) ~f:(function
               | None -> El.txt' "Nothing playing"
-              | Some { item = { name; _ }, _; _ } -> El.txt' name)
+              | Some { item = { name; _ }, { album_id; _ }; _ } ->
+                  update_album_title album_id;
+                  El.txt' name)
           in
-          Elwd.span [ `R txt ]
+          let album_title =
+            Lwd.map (Lwd.get album_title) ~f:(fun title -> El.txt' title)
+          in
+          [ `R (Elwd.span [ `R txt ]); `R (Elwd.span [ `R album_title ]) ]
         in
-        Elwd.div ~at [ `R title ]
+        Elwd.div ~at details
       in
       let at =
         Attrs.(

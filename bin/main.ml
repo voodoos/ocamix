@@ -36,14 +36,14 @@ module P = Player.Playback_controller (struct
   let fetch = fetch
 end)
 
-let app =
+let app (db : Brr_io.Indexed_db.Database.t) =
   let status =
     Elwd.div
       ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ]
       [ `P (El.h1 [ El.txt' "Welcome to OCAMIX" ]); `R (Servers.ui ()) ]
   in
   let player_ui =
-    let player = P.make () in
+    let player = P.make db () in
     Elwd.div ~at:[ `P (At.style (Jstr.v "grid-column:1/-1")) ] [ `R player ]
   in
   let main_view =
@@ -138,12 +138,13 @@ let is_storage_persistent =
 let _ =
   let on_load _ =
     Console.log [ "Persist ?"; is_storage_persistent ];
-    let app = Lwd.observe @@ app in
-    let on_invalidate _ =
-      ignore @@ G.request_animation_frame
-      @@ fun _ -> ignore @@ Lwd.quick_sample app
-    in
-    El.append_children (Document.body G.document) [ Lwd.quick_sample app ];
-    Lwd.set_on_invalidate app on_invalidate
+    Db.with_idb (fun idb ->
+        let app = Lwd.observe @@ app idb in
+        let on_invalidate _ =
+          ignore @@ G.request_animation_frame
+          @@ fun _ -> ignore @@ Lwd.quick_sample app
+        in
+        El.append_children (Document.body G.document) [ Lwd.quick_sample app ];
+        Lwd.set_on_invalidate app on_invalidate)
   in
   Ev.listen Ev.dom_content_loaded on_load (Window.as_target G.window)
