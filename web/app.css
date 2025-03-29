@@ -1,205 +1,205 @@
 :root {
-    --dark-bg-color: #2c2f32;
-    --light-bg-color: #3c4146;
-    --border-radius: 0.5rem;
+  --dark-bg-color: #2c2f32;
+  --light-bg-color: #3c4146;
+  --border-radius: 0.5rem;
 }
 
 html,
 body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .box {
-    border-radius: var(--border-radius);
-    background-color: var(--light-bg-color);
-    padding: 0.5rem;
+  border-radius: var(--border-radius);
+  background-color: var(--light-bg-color);
+  padding: 0.5rem;
 }
 
 #main-layout {
-    display: grid;
+  display: grid;
 
-    box-sizing: border-box;
+  box-sizing: border-box;
 
-    grid-template-columns: 2fr 1fr;
-    grid-template-rows: auto 1fr;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: auto 1fr;
 
-    @media screen and (max-width: 512px) {
-        grid-template-columns: 1fr;
-    }
+  @media screen and (max-width: 512px) {
+    grid-template-columns: 1fr;
+  }
 
-    gap: 1.5rem;
-    padding: 1.5rem;
+  gap: 1.5rem;
+  padding: 1.5rem;
 
-    justify-items: stretch;
+  justify-items: stretch;
+  align-items: stretch;
+
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+
+  & .item-list,
+  & .playlist {
+    display: flex;
+    position: relative;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
     align-items: stretch;
 
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
 
-    & .item-list,
+    &>div:last-child {
+      flex-grow: 1;
+    }
+  }
+
+  @media screen and (max-width: 512px) {
     & .playlist {
-        display: flex;
-        position: relative;
-        flex-direction: column;
+      display: none;
+    }
+  }
+
+  & .playlist div.row:has(div.playing) {
+    filter: brightness(120%);
+  }
+
+  & .player-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+
+    & audio {
+      border-radius: 0.5rem;
+      flex-grow: 1;
+    }
+
+    & .now-playing-display.box {
+      position: relative;
+      display: flex;
+      flex-direction: row;
+      flex-grow: 1;
+      max-width: 30rem;
+      width: 100%;
+      height: 5rem;
+      padding: 0;
+      gap: 0.5rem;
+      border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
+      background-color: var(--dark-bg-color);
+
+      & .now-playing-cover {
         height: 100%;
-        overflow: hidden;
-        align-items: stretch;
+        aspect-ratio: 1 / 1;
+        box-shadow: 0px 0px 0px 1px var(--dark-bg-color) inset;
+        border-top-left-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
+        border-bottom-left-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
+        background-size: cover;
+        background-position: center;
+        background-color: var(--light-bg-color);
+      }
 
-
-        &>div:last-child {
-            flex-grow: 1;
-        }
-    }
-
-    @media screen and (max-width: 512px) {
-        & .playlist {
-            display: none;
-        }
-    }
-
-    & .playlist div.row:has(div.playing) {
-        filter: brightness(120%);
-    }
-
-    & .player-wrapper {
+      & .now-playing-details {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        width: 100%;
+        flex-direction: column;
 
-        & audio {
-            border-radius: 0.5rem;
-            flex-grow: 1;
+        flex-grow: 1;
+        min-width: 0;
+
+        & > * {
+          height: 1.5em;
+          flex-grow: 0;
+          mask-image: linear-gradient(to right, rgba(0,0,0,1) 90%, rgba(0,0,0,0) 100%);
+
+          &:hover {
+            mask-image:none;
+          }
         }
 
-        & .now-playing-display.box {
-            position: relative;
-            display: flex;
-            flex-direction: row;
-            flex-grow: 1;
-            max-width: 30rem;
-            width: 100%;
-            height: 5rem;
-            padding: 0;
-            gap: 0.5rem;
-            border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
-            background-color: var(--dark-bg-color);
+        & span {
+          display: inline-block;
+          border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
 
-            & .now-playing-cover {
-                height: 100%;
-                aspect-ratio: 1 / 1;
-                box-shadow: 0px 0px 0px 1px var(--dark-bg-color) inset;
-                border-top-left-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
-                border-bottom-left-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
-                background-size: cover;
-                background-position: center;
-                background-color: var(--light-bg-color);
-            }
-
-            & .now-playing-details {
-                display: flex;
-                flex-direction: column;
-
-                flex-grow: 1;
-                min-width: 0;
-
-                & > * {
-                    height: 1.5em;
-                    flex-grow: 0;
-                    mask-image: linear-gradient(to right, rgba(0,0,0,1) 90%, rgba(0,0,0,0) 100%);
-
-                    &:hover {
-                        mask-image:none;
-                    }
-                }
-
-                & span {
-                    display: inline-block;
-                    border-radius: calc(max(var(--border-radius) - 0.5rem, 0.2rem));
-
-                    width: 100%;
-                    height: 1.5em;
-                    overflow: hidden;
-                    white-space: nowrap;
-                }
-
-                & span:hover {
-                    background-color: var(--dark-bg-color);
-                    padding-right: 0.5em;
-                    width: auto;
-                    height: 1.5em;
-                    overflow: visible;
-                }
-            }
+          width: 100%;
+          height: 1.5em;
+          overflow: hidden;
+          white-space: nowrap;
         }
+
+        & span:hover {
+          background-color: var(--dark-bg-color);
+          padding-right: 0.5em;
+          width: auto;
+          height: 1.5em;
+          overflow: visible;
+        }
+      }
     }
+  }
 }
 
 
 .big-cover {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  z-index: 100;
+  background-color: var(--light-bg-color);
+
+  & div {
     width: 100%;
     height: 100%;
-    position: absolute;
-    z-index: 100;
-    background-color: var(--light-bg-color);
+    background-size: 125%;
+    background-repeat: no-repeat;
+    background-position: center;
 
     & div {
-        width: 100%;
-        height: 100%;
-        background-size: 125%;
-        background-repeat: no-repeat;
-        background-position: center;
-
-        & div {
-            width: 100%;
-            height: 100%;
-            backdrop-filter: blur(16px);
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        }
+      width: 100%;
+      height: 100%;
+      backdrop-filter: blur(16px);
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
     }
+  }
 }
 
 .filters-container {
+  display: flex;
+  flex-direction: column;
+
+  & .filters-row {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
 
-    & .filters-row {
-        display: flex;
-        flex-direction: row;
-
-        &>* {
-            flex-shrink: 0;
-            margin: 0.5rem;
-        }
-
-        &>.genres-picker {
-            flex-shrink: 1;
-        }
+    &>* {
+      flex-shrink: 0;
+      margin: 0.5rem;
     }
+
+    &>.genres-picker {
+      flex-shrink: 1;
+    }
+  }
 }
 
 .vertical-picker {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 
-    max-height: 5rem;
-    overflow-y: auto;
+  max-height: 5rem;
+  overflow-y: auto;
 
 
-    & label {
-        padding-right: 0.35rem;
-        padding-left: 0.35rem;
-    }
+  & label {
+    padding-right: 0.35rem;
+    padding-left: 0.35rem;
+  }
 
-    .genres-picker & {
-        flex-direction: row;
-        flex-wrap: wrap;
-    }
+  .genres-picker & {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
