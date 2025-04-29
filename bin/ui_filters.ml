@@ -30,19 +30,19 @@ let view =
         item_count = 0;
       }
 
-(* TODO: "+rock +jap" means "rock" AND "jap"
-    - "+rock +jap" => "rock" AND "jap"
-    - "+(rock +jap)" => "rock" OR "jap"
+(* TODO: query language ?
+    "rock jap"          = "rock" OR "jap"
+    "rock + jap"        = "rock" AND "jap"
+    "rock + jap punk"   = ("rock" AND "jap") OR "PUNK"
+    "rock + (jap punk)" = "rock" AND ("jap" OR "PUNK")
+    - rock              = NOT "rock"
+    - rock - punk       = NOT "rock" AND NOT "punk" ????
+    punk - rock         = "punk" AND NOT "rock" ????
+    punk - rock jazz    = "punk" AND NOT "rock" OR JAZZ
 *)
-let genre_filter_of_formula ~genres formula =
+let genre_filter_of_formula ~matcher formula =
   let open View.Selection in
   let string_of_chars chars = String.of_list (List.rev chars) in
-  let matching_genres ~name =
-    let canon_name = canonicalize_string name in
-    List.filter_map genres ~f:(fun (key, name) ->
-        if String.find ~sub:canon_name name >= 0 then Some key else None)
-    |> Int.Set.of_list
-  in
   String.fold_left formula ~init:[] ~f:(fun acc char ->
       match (char, acc) with
       | '+', _ -> `One_of [] :: acc
@@ -53,13 +53,10 @@ let genre_filter_of_formula ~genres formula =
   |> List.filter_map ~f:(function
        | `One_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then None
-           else Some (One_of (matching_genres ~name))
+           if String.is_empty name then None else Some (One_of (matcher ~name))
        | `None_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then None
-           else Some (None_of (matching_genres ~name)))
-  |> List.map ~f:(fun f -> View.Genres f)
+           if String.is_empty name then None else Some (None_of (matcher ~name)))
 
 let filter1_changed () =
   let open View in
@@ -74,9 +71,15 @@ let filter1_changed () =
       Lwd.peek view0_genres
       |> List.map ~f:(fun (k, (_, g)) -> (k, g.Genre.canon))
     in
-    genre_filter_of_formula ~genres (Lwd.peek genre_formula)
+    let matcher ~name =
+      let canon_name = canonicalize_string name in
+      List.filter_map genres ~f:(fun (key, name) ->
+          if String.find ~sub:canon_name name >= 0 then Some key else None)
+      |> Int.Set.of_list
+    in
+    genre_filter_of_formula ~matcher (Lwd.peek genre_formula)
   in
-  let filters = Search (Lwd.peek name_filter) :: genres in
+  let filters = [ Search (Lwd.peek name_filter); Genres genres ] in
   let req = { kind = Audio; src_views; sort; filters } in
   let open Fut.Result_syntax in
   let+ view' = Worker_client.query (Create_view req) in

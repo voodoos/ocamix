@@ -49,6 +49,13 @@ module Worker () = struct
   let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
     Hashtbl.create 64
 
+  let match_filter ~filter elements =
+    List.fold_left filter ~init:true ~f:(fun acc -> function
+      | Db.View.Selection.All -> acc && true
+      | One_of one_of -> acc && not (Int.Set.disjoint elements one_of)
+      | None_of none_of ->
+          acc && (Int.Set.is_empty none_of || Int.Set.disjoint elements none_of))
+
   let get_view_keys store
       ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
@@ -80,20 +87,13 @@ module Worker () = struct
             ->
             let genres = Int.Set.of_list genres in
             List.fold_left filters ~init:true ~f:(fun acc -> function
-              | Db.View.Search sub when not (String.is_empty sub) ->
+              | Db.View.Search "" -> true
+              | Search sub ->
                   let sub = String.lowercase_ascii sub in
                   let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
                   let name = String.lowercase_ascii name in
                   acc && String.Find.find ~pattern name >= 0
-              | Genres (One_of one_of) ->
-                  acc
-                  && (Int.Set.is_empty one_of
-                     || not (Int.Set.disjoint genres one_of))
-              | Genres (None_of none_of) ->
-                  acc
-                  && (Int.Set.is_empty none_of
-                     || Int.Set.disjoint genres none_of)
-              | _ -> true))
+              | Genres filter -> acc && match_filter ~filter genres
       in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
