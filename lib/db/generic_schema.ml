@@ -10,6 +10,7 @@ open! Std
    an array within an array. *)
 
 type ('key, 'value) with_key = { key : 'key; value : 'value }
+type 'a info = { count : int; v : 'a }
 
 module Id = struct
   type t = Jellyfin of string [@@deriving yojson]
@@ -61,7 +62,7 @@ module Album = struct
 
   module Key = struct
     (* TODO: we would be better of we simple auto increment keys... *)
-    type t = { id : Id.t; name : string; genres : int list }
+    type t = { id : Id.t; name : string; genres : int list; artists : int list }
     [@@deriving yojson, jsont]
   end
 end
@@ -83,6 +84,7 @@ module Track = struct
       id : Id.t;
       name : string;
       genres : int list;
+      artists : int list;
       collections : int list;
     }
     [@@deriving yojson, jsont]

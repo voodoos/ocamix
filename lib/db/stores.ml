@@ -117,15 +117,16 @@ module Albums_store =
     (struct
       include Generic_schema.Album.Key
 
-      let to_jv { id; name; genres } =
+      let to_jv { id; name; genres; artists } =
         let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
         let genres = Jv.of_list Jv.of_int genres in
-        Jv.of_jv_array [| id; name; genres |]
+        let artists = Jv.of_list Jv.of_int artists in
+        Jv.of_jv_array [| id; name; genres; artists |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| id; name; genres |] ->
+        | [| id; name; genres; artists |] ->
             let id =
               match String.split_on_char ~by:' ' @@ Jv.to_string id with
               | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
@@ -133,7 +134,8 @@ module Albums_store =
             in
             let name = Jv.to_string name in
             let genres = Jv.to_list Jv.to_int genres in
-            { id; name; genres }
+            let artists = Jv.to_list Jv.to_int artists in
+            { id; name; genres; artists }
         | _ -> assert false
     end)
 
@@ -152,16 +154,17 @@ module Tracks_store =
     (struct
       include Generic_schema.Track.Key
 
-      let to_jv { id; name; genres; collections } =
+      let to_jv { id; name; genres; collections; artists } =
         let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
         let genres = Jv.of_list Jv.of_int genres in
+        let artists = Jv.of_list Jv.of_int artists in
         let collections = Jv.of_list Jv.of_int collections in
-        Jv.of_jv_array [| id; name; genres; collections |]
+        Jv.of_jv_array [| id; name; genres; collections; artists |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| id; name; genres; collections |] ->
+        | [| id; name; genres; collections; artists |] ->
             let id =
               match String.split_on_char ~by:' ' @@ Jv.to_string id with
               | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
@@ -169,7 +172,8 @@ module Tracks_store =
             in
             let name = Jv.to_string name in
             let genres = Jv.to_list Jv.to_int genres in
+            let artists = Jv.to_list Jv.to_int artists in
             let collections = Jv.to_list Jv.to_int collections in
-            { id; name; genres; collections }
+            { id; name; genres; collections; artists }
         | _ -> assert false
     end)

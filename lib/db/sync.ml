@@ -143,7 +143,8 @@ let update_collections source idb =
    populated with the top-level views and each time new folders are found they are
    added to the queue. The synchronization process ends when the queue is empty.
 
-   TODO: updates ? *)
+   Additionnal queries to find missing artists are performed on demand by the
+   [find_artists_idx] function *)
 
 let get_music_brainz_id external_urls =
   List.find_map external_urls ~f:(fun { Source.Api.Item.name; url } ->
@@ -151,6 +152,114 @@ let get_music_brainz_id external_urls =
         (* https://musicbrainz.org/artist/d2e06763-1035-4b1a-82c7-b7c08e06ba48 *)
         String.split_on_char ~by:'/' url |> List.last_opt
       else None)
+
+let store_artist store { Item.type_; name; id; external_urls; _ } =
+  if not (Equal.poly type_ MusicArtist) then (
+    Console.error [ "store_artist: not an artist! "; id ];
+    Fut.error (Jv.Error.v (Jstr.v "Wrong argument: not an artist")))
+  else
+    let mbid = get_music_brainz_id external_urls in
+    let canon = canonicalize_string name in
+    if String.equal name "ABBA" then Console.error [ "FOUND "; name; id ];
+    (* TODO There is no sort name in jellyfin's db... *)
+    let sort_name = "" in
+    Stores.Artists_store.add
+      { id = Jellyfin id; mbid; name; canon; sort_name }
+      store
+    |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+    |> Request.fut
+
+(* Todo: that's okay for the prototype, but there are alternative to these global
+   tables:
+      - Thread a map through the folds
+      - Query the DB itself *)
+let artists_ids : (string, int option Fut.t) Hashtbl.t = Hashtbl.create 128
+let genres_memo = Hashtbl.create 256
+
+(* Only album arstis are accessible via the recursive traversal. Other artists
+   items have no parent and must be fetch specifically. *)
+let find_artists_idx source idb artist_items =
+  (* Some artists might already have been queried for, others not *)
+  let ready, todo =
+    List.partition_map_either artist_items
+      ~f:(fun ({ id; _ } : Item.artist_item) ->
+        match Hashtbl.get artists_ids id with
+        | None -> Right id
+        | Some fut -> Left fut)
+  in
+  let open Fut.Syntax in
+  let newly_queried =
+    let todo_n = List.length todo in
+    if Int.equal 0 todo_n then []
+    else
+      let open Source in
+      let user_id = source.auth_response.user.id in
+      let now_futures : (string, int option -> unit) Hashtbl.t =
+        Hashtbl.create todo_n
+      in
+      let futs =
+        List.map todo ~f:(fun id ->
+            let fut, set = Fut.create () in
+            let set v =
+              (* We remove elements when set to track stalled ones *)
+              Hashtbl.remove now_futures id;
+              set v
+            in
+            Hashtbl.add artists_ids id fut;
+            Hashtbl.add now_futures id set;
+            fut)
+      in
+      let params =
+        {
+          Api.Items.ids = todo;
+          parent_id = None;
+          user_id;
+          fields = [];
+          include_item_types = [ MusicArtist ];
+          start_index = None;
+          limit = None;
+          sort_order = None;
+          sort_by = [];
+          recursive = false;
+          enable_user_data = false;
+          enable_images = false;
+        }
+      in
+      Fut.await
+        (query source (module Api.Items) params ())
+        (function
+          | Ok { items; _ } ->
+              let transaction =
+                Database.transaction
+                  [ (module Stores.Artists_store) ]
+                  ~mode:Readwrite idb
+              in
+              let store =
+                Transaction.object_store
+                  (module Stores.Artists_store)
+                  transaction
+              in
+              let store_operation =
+                List.map items ~f:(fun (artist : Item.t) ->
+                    let set = Hashtbl.find now_futures artist.id in
+                    store_artist store artist
+                    |> Fut.map @@ function
+                       | Error err ->
+                           Console.warn [ "Store artist:"; artist.name; err ];
+                           set None
+                       | Ok idx -> set (Some idx))
+                |> Fut.of_list
+              in
+              (* We invalidate remaining futures *)
+              Fut.await store_operation (fun _ ->
+                  Hashtbl.iter (fun _ set -> set None) now_futures)
+          | Error err ->
+              Console.error [ "Artists fetch failed: "; err ];
+              Hashtbl.iter (fun _ set -> set None) now_futures);
+      futs
+  in
+  let+ all = Fut.of_list (List.rev_append ready newly_queried) in
+  List.filter_map ~f:Fun.id all
 
 let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
@@ -162,20 +271,9 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
     Transaction.object_store (module Stores.Artists_store) transaction
   in
   List.fold_left items ~init:(Fut.ok []) ~f:(fun acc -> function
-    | { Item.type_ = MusicArtist; name; id; external_urls; _ } -> (
-        (* TODO use Musicbrainz ids for dedup *)
-        let mbid = get_music_brainz_id external_urls in
-        let canon = canonicalize_string name in
-        (* TODO There is no sort name in jellyfin's db... *)
-        let sort_name = "" in
+    | { Item.type_ = MusicArtist; name; id; _ } as artist -> (
         let open Fut.Syntax in
-        let* result =
-          Stores.Artists_store.add
-            { id = Jellyfin id; mbid; name; canon; sort_name }
-            store
-          |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
-          |> Request.fut
-        in
+        let* result = store_artist store artist in
         match result with
         | Error error ->
             (* This happens when the item is already in the database *)
@@ -185,12 +283,12 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
             Console.warn [ "Could not add artist into the db: "; name ];
             Console.warn [ Jv.Error.message error ];
             acc
-        | Ok _ -> acc)
+        | Ok idx ->
+            Hashtbl.add artists_ids id (Fut.return (Some idx));
+            acc)
     | item ->
         let+ acc = acc in
         item :: acc)
-
-let genres_memo = Hashtbl.create 256
 
 let prepare_genres idb genre_items =
   let get_or_set_genre (name, canon) =
@@ -234,16 +332,26 @@ let prepare_genres idb genre_items =
       |> List.map ~f:get_or_set_genre)
   |> Fut.of_list |> Fut.map Result.flatten_l
 
-let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
+let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
   let sync_album
-      { Source.Api.Item.name; id; external_urls; sort_name; genre_items; _ } =
-    (* TODO Artists *)
+      {
+        Source.Api.Item.name;
+        id;
+        external_urls;
+        sort_name;
+        genre_items;
+        album_artists = artist_items;
+        _;
+      } =
+    let open Fut.Syntax in
+    let* artists = find_artists_idx source idb artist_items in
     (* TODO use Musicbrainz ids for dedup *)
     let mbid = get_music_brainz_id external_urls in
     let sort_name = Option.value ~default:name sort_name in
     (* TODO There is no sort name in jellyfin's db... *)
+    let open Fut.Result_syntax in
     let* genres = prepare_genres idb genre_items in
     let transaction =
       Database.transaction [ (module Stores.Albums_store) ] ~mode:Readwrite idb
@@ -269,7 +377,8 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
           + 1
     in
     let id = Generic_schema.Id.Jellyfin id in
-    Stores.Albums_store.add ~key:{ id; name; genres }
+    Stores.Albums_store.add
+      ~key:{ id; name; genres; artists }
       { idx; id; mbid; sort_name }
       store
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
@@ -293,7 +402,7 @@ let sync_albums ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
 
 let count_tracks = ref 0
 
-let sync_tracks ~collection_id ~source:_ idb items :
+let sync_tracks ~collection_id ~source idb items :
     (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
@@ -303,14 +412,18 @@ let sync_tracks ~collection_id ~source:_ idb items :
         id;
         sort_name;
         genre_items;
+        artist_items;
         server_id;
         album_id;
         _;
       } =
     let () = incr count_tracks in
+    let open Fut.Syntax in
+    let* artists = find_artists_idx source idb artist_items in
     (* TODO Artists *)
     let sort_name = Option.value ~default:name sort_name in
     (* TODO There is no sort name in jellyfin's db... *)
+    let open Fut.Result_syntax in
     let* genres = prepare_genres idb genre_items in
     let transaction =
       Database.transaction
@@ -330,6 +443,7 @@ let sync_tracks ~collection_id ~source:_ idb items :
         Generic_schema.Track.Key.id;
         name;
         genres;
+        artists;
         collections = [ collection_id ];
       }
     in
@@ -523,27 +637,28 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   in
   let+ () = sync_all ~threads:50 in
   Hashtbl.reset genres_memo;
+  Hashtbl.reset artists_ids;
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
-let throttle () =
+let throttle ~delay_ms =
   (* We use [last_update] to have regular debounced updates and the
      [timeout] to ensure that the last event is always taken into
      account even it it happens during the debouncing interval. *)
   let last_update = ref 0. in
   let timer = ref (-1) in
-  fun ~delay_ms f ->
+  fun f ->
     let now = Performance.now_ms G.performance in
     if !timer >= 0 then G.stop_timer !timer;
-    timer := G.set_timeout ~ms:delay_ms (fun () -> f ());
     if now -. !last_update >. float_of_int delay_ms then (
       last_update := now;
       f ())
+    else timer := G.set_timeout ~ms:delay_ms f
 
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
   let () = (* Send a first report *) report initial in
-  let sync_report_throttler = throttle () ~delay_ms:250 in
+  let sync_report_throttler = throttle ~delay_ms:250 in
   let report' =
    fun sync_progress ->
     sync_report_throttler (fun () -> report { status = Syncing; sync_progress })

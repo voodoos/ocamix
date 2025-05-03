@@ -163,6 +163,7 @@ module type Store_intf = sig
   module Primary_key : Key
 
   val add : Content.t -> ?key:Primary_key.t -> t -> Primary_key.t Request.t
+  (** Add content to the store. Returns the associated [Primary_key.t] *)
 
   val create_index :
     (module Index_intf with type t = 't) ->

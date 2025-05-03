@@ -74,6 +74,9 @@ module Item = struct
   type genre_item = { name : string; [@key "Name"] id : string [@key "Id"] }
   [@@deriving jsont]
 
+  type artist_item = { name : string; [@key "Name"] id : string [@key "Id"] }
+  [@@deriving jsont]
+
   type image_blur_hashes = {
     primary : image_blur_hash;
         [@default String.StdMap.empty]
@@ -200,7 +203,7 @@ module Item = struct
     external_urls : external_url list; [@default []] [@key "ExternalUrls"]
     id : string; [@key "Id"]
     path : string option; [@option] [@key "Path"]
-    is_folder : bool; [@key "IsFolder"]
+    is_folder : bool; [@default false] [@key "IsFolder"]
     album_id : string option; [@option] [@key "AlbumId"]
     parent_id : string option option;
         (* [ParentId] might absent, [null], or a string *)
@@ -210,6 +213,8 @@ module Item = struct
     (* image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"] *)
     type_ : type_str; [@key "Type"]
     genre_items : genre_item list; [@default []] [@key "GenreItems"]
+    artist_items : artist_item list; [@default []] [@key "ArtistItems"]
+    album_artists : artist_item list; [@default []] [@key "AlbumArtists"]
     collection_type : string option; [@option] [@key "CollectionType"]
   }
   [@@deriving jsont]
@@ -243,6 +248,15 @@ module Items = struct
 
   let method' = Get
   let endpoint _ = [ "Items" ]
+end
+
+module User_item = struct
+  type path_params = { user_id : string; item_id : string }
+  type params = unit [@@deriving jsont]
+  type response = Item.t [@@deriving jsont]
+
+  let method' = Get
+  let endpoint pp = [ "Users"; pp.user_id; "Items"; pp.item_id ]
 end
 
 (* Only for priviledged users... *)
@@ -383,6 +397,6 @@ let request (type pp p r) ~base_url ?token ?headers
   match result with
   | Ok result -> result
   | Error e ->
-      Console.log [ "An error occured while decoding response: "; json ];
-      Console.log [ Jv.Error.message e ];
+      Console.error [ "An error occured while decoding response: "; json ];
+      Console.error [ Jv.Error.message e ];
       raise (Jv.Error e)
