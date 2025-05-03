@@ -237,7 +237,7 @@ let search_and_sort =
       if not init then ignore @@ request_refresh ~delay:25 ()
     in
     make ~on_change
-      { name = "view-order"; default = "desc"; label = [] }
+      { name = "view-order"; default = "random"; label = [] }
       options
   in
   let item_count =
