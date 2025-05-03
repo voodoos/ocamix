@@ -248,24 +248,48 @@ struct
       let track_details =
         let at = Attrs.add At.Name.class' (`P "now-playing-details") [] in
         let default_album_title = "Unknown album" in
+        let default_artist_name = "Unknown artist" in
         let album_title = Lwd.var default_album_title in
+        let artist_name = Lwd.var default_artist_name in
         let update_album_title album_id =
           match album_id with
           | None -> Lwd.set album_title default_album_title
           | Some album_id ->
               let open Db.Stores in
-              let index =
+              let album_index =
                 IDB.Database.transaction
                   [ (module Albums_store) ]
                   ~mode:Readonly idb
                 |> IDB.Transaction.object_store (module Albums_store)
                 |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
               in
-              let album = Albums_by_idx.get_key album_id index in
-              let result = IDB.Request.fut_exn album in
-              Fut.await result
-                (Option.iter (fun { Db.Generic_schema.Album.Key.name; _ } ->
-                     Lwd.set album_title name))
+              let album =
+                Albums_by_idx.get_key album_id album_index
+                |> IDB.Request.fut_exn
+              in
+              Fut.await album
+                (Option.iter
+                   (fun { Db.Generic_schema.Album.Key.name; artists; _ } ->
+                     Lwd.set album_title name;
+                     let artist =
+                       match artists with
+                       | artist_id :: _ ->
+                           let artist_store =
+                             IDB.Database.transaction
+                               [ (module Artists_store) ]
+                               ~mode:Readonly idb
+                             |> IDB.Transaction.object_store
+                                  (module Artists_store)
+                           in
+                           Artists_store.get artist_id artist_store
+                           |> IDB.Request.fut_exn
+                       | _ -> Fut.return None
+                     in
+                     Fut.await artist (fun artist ->
+                         Lwd.set artist_name
+                         @@ Option.map_or ~default:default_artist_name
+                              (fun { Db.Generic_schema.Artist.name; _ } -> name)
+                              artist)))
         in
         let details =
           let txt =
@@ -278,9 +302,13 @@ struct
           let album_title =
             Lwd.map (Lwd.get album_title) ~f:(fun title -> El.txt' title)
           in
+          let artist_name =
+            Lwd.map (Lwd.get artist_name) ~f:(fun title -> El.txt' title)
+          in
           [
             `R Elwd.(div [ `R (span [ `R txt ]) ]);
             `R Elwd.(div [ `R (span [ `R album_title ]) ]);
+            `R Elwd.(div [ `R (span [ `R artist_name ]) ]);
           ]
         in
         Elwd.div ~at details
