@@ -16,12 +16,26 @@ module type Jsontable = sig
   type t [@@deriving jsont]
 end
 
-module Of_jsontable (M : Jsontable) = struct
+module Jvable (M : Jsontable) = struct
   include M
 
   let to_jv t = Jsont_brr.encode_jv M.jsont t |> Result.get_exn
   let of_jv j = Jsont_brr.decode_jv M.jsont j |> Result.get_exn
 end
+
+module Jsonable (M : Jsontable) = struct
+  include M
+
+  let to_jv t = Jsont_brr.encode M.jsont t |> Result.get_exn |> Jv.of_jstr
+  let of_jv j = Jsont_brr.decode M.jsont (Jv.to_jstr j) |> Result.get_exn
+end
+
+(* module Magic (M : Jsontable) = struct
+  include M
+
+  let to_jv (t : t) = Jv.repr t
+  let of_jv j : t = Obj.magic j
+end *)
 
 module String_key = struct
   type t = string
@@ -37,7 +51,7 @@ module Int_key = struct
   let to_jv = Jv.of_int
 end
 
-module Id_key = Of_jsontable (Generic_schema.Id)
+module Id_key = Jvable (Generic_schema.Id)
 
 module Items_store_key = struct
   type t = { id : string; sort_name : string; views : string list }
@@ -64,7 +78,7 @@ end
 open Generic_schema
 
 module Collection = struct
-  include Of_jsontable (Collection)
+  include Jvable (Collection)
 
   let name = "collections"
 end
@@ -72,13 +86,13 @@ end
 module Collections_store = Make_object_store (Collection) (Auto_increment)
 
 module Collections_by_id =
-  Make_index (Collections_store) (Of_jsontable (Generic_schema.Id))
+  Make_index (Collections_store) (Jvable (Generic_schema.Id))
 
 let collections_by_id store =
   Collections_store.index (module Collections_by_id) ~name:"by-id" store
 
 module Genres = struct
-  include Of_jsontable (Generic_schema.Genre)
+  include Jvable (Generic_schema.Genre)
 
   let name = "genres"
 end
@@ -96,7 +110,7 @@ module Genres_by_canonical_name =
     end)
 
 module Artist = struct
-  include Of_jsontable (Generic_schema.Artist)
+  include Jvable (Generic_schema.Artist)
 
   let name = "artists"
 end
@@ -106,7 +120,7 @@ module Artists_by_id = Make_index (Artists_store) (Id_key)
 module Artists_by_mbid = Make_index (Artists_store) (String_key)
 
 module Album = struct
-  include Of_jsontable (Album)
+  include Jvable (Album)
 
   let name = "albums"
 end
@@ -143,7 +157,7 @@ module Albums_by_id = Make_index (Albums_store) (Id_key)
 module Albums_by_idx = Make_index (Albums_store) (Int_key)
 
 module Track = struct
-  include Of_jsontable (Generic_schema.Track)
+  include Jvable (Generic_schema.Track)
 
   let name = "tracks"
 end
@@ -153,18 +167,26 @@ module Tracks_store =
     (Track)
     (struct
       include Generic_schema.Track.Key
+      (* TODO Stringifying keys from JSON is convenient but quite slow. Using
+         that process for tracks keys is a major bottleneck. Magic is better
+         but cursed. It's probable that the correct solution is tp stop relying
+         so much on data stored in keys for filtering.
 
-      let to_jv { id; name; genres; collections; artists } =
+         Meanwhile, manual conversion is the best compromise. *)
+
+      let to_jv { id; name; genres; collections; artists; album_artists } =
         let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
         let genres = Jv.of_list Jv.of_int genres in
         let artists = Jv.of_list Jv.of_int artists in
+        let album_artists = Jv.of_list Jv.of_int album_artists in
         let collections = Jv.of_list Jv.of_int collections in
-        Jv.of_jv_array [| id; name; genres; collections; artists |]
+        Jv.of_jv_array
+          [| id; name; genres; collections; artists; album_artists |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| id; name; genres; collections; artists |] ->
+        | [| id; name; genres; collections; artists; album_artists |] ->
             let id =
               match String.split_on_char ~by:' ' @@ Jv.to_string id with
               | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
@@ -173,7 +195,8 @@ module Tracks_store =
             let name = Jv.to_string name in
             let genres = Jv.to_list Jv.to_int genres in
             let artists = Jv.to_list Jv.to_int artists in
+            let album_artists = Jv.to_list Jv.to_int album_artists in
             let collections = Jv.to_list Jv.to_int collections in
-            { id; name; genres; collections; artists }
+            { id; name; genres; collections; artists; album_artists }
         | _ -> assert false
     end)

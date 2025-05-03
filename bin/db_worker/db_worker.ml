@@ -83,11 +83,15 @@ module Worker () = struct
                 Db.Generic_schema.Track.Key.name;
                 Db.Generic_schema.Track.Key.genres;
                 Db.Generic_schema.Track.Key.artists;
+                Db.Generic_schema.Track.Key.album_artists;
                 _;
               }
             ->
             let genres = Int.Set.of_list genres in
-            let artists = Int.Set.of_list artists in
+            let artists =
+              let track = Int.Set.of_list artists in
+              Int.Set.add_list track album_artists
+            in
             List.fold_left filters ~init:true ~f:(fun acc -> function
               | Db.View.Search "" -> true
               | Search sub ->
@@ -169,7 +173,9 @@ module Worker () = struct
         let* s_artists = get_store (module Artists_store) () in
         let+ artists = Artists_store.get_all s_artists |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
-          ~f:(fun acc { Db.Generic_schema.Track.Key.artists; _ } ->
+          ~f:(fun
+              acc { Db.Generic_schema.Track.Key.artists; album_artists; _ } ->
+            let artists = List.rev_append album_artists artists in
             Int.Map.add_list_with
               ~f:(fun _ -> ( + ))
               acc

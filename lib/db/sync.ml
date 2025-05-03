@@ -413,13 +413,15 @@ let sync_tracks ~collection_id ~source idb items :
         sort_name;
         genre_items;
         artist_items;
+        album_artists;
         server_id;
         album_id;
         _;
       } =
     let () = incr count_tracks in
     let open Fut.Syntax in
-    let* artists = find_artists_idx source idb artist_items in
+    let* artists = find_artists_idx source idb artist_items
+    and* album_artists = find_artists_idx source idb album_artists in
     (* TODO Artists *)
     let sort_name = Option.value ~default:name sort_name in
     (* TODO There is no sort name in jellyfin's db... *)
@@ -444,6 +446,7 @@ let sync_tracks ~collection_id ~source idb items :
         name;
         genres;
         artists;
+        album_artists;
         collections = [ collection_id ];
       }
     in

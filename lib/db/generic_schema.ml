@@ -85,6 +85,7 @@ module Track = struct
       name : string;
       genres : int list;
       artists : int list;
+      album_artists : int list;
       collections : int list;
     }
     [@@deriving yojson, jsont]
