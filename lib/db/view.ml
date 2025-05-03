@@ -45,7 +45,11 @@ end
 open Selection
 
 type kind = Audio
-type filter = Search of string | Genres of Int.Set.t Selection.t list
+
+type filter =
+  | Search of string
+  | Genres of Int.Set.t Selection.t list
+  | Artists of Int.Set.t Selection.t list
 
 type req = {
   kind : kind;
@@ -55,22 +59,23 @@ type req = {
 }
 
 let hash { kind; src_views; sort; filters } =
+  let filter l =
+    List.map l ~f:(function
+      | All -> "all"
+      | One_of s ->
+          String.concat ~sep:";"
+          @@ ("oneof" :: (Int.Set.to_list s |> List.map ~f:string_of_int))
+      | None_of s ->
+          String.concat ~sep:";"
+          @@ ("noneof" :: (Int.Set.to_list s |> List.map ~f:string_of_int)))
+    |> String.concat ~sep:";"
+  in
   let filters =
     List.map filters ~f:(fun f ->
         match f with
         | Search s -> s
-        | Genres l ->
-            List.map l ~f:(function
-              | All -> "all"
-              | One_of s ->
-                  String.concat ~sep:";"
-                  @@ "oneof"
-                     :: (Int.Set.to_list s |> List.map ~f:string_of_int)
-              | None_of s ->
-                  String.concat ~sep:";"
-                  @@ "noneof"
-                     :: (Int.Set.to_list s |> List.map ~f:string_of_int))
-            |> String.concat ~sep:";")
+        | Genres l -> "genres" ^ filter l
+        | Artists l -> "artists" ^ filter l)
   in
   Hash.poly (kind, src_views, sort, filters)
 

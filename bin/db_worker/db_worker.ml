@@ -82,10 +82,12 @@ module Worker () = struct
               {
                 Db.Generic_schema.Track.Key.name;
                 Db.Generic_schema.Track.Key.genres;
+                Db.Generic_schema.Track.Key.artists;
                 _;
               }
             ->
             let genres = Int.Set.of_list genres in
+            let artists = Int.Set.of_list artists in
             List.fold_left filters ~init:true ~f:(fun acc -> function
               | Db.View.Search "" -> true
               | Search sub ->
@@ -94,6 +96,7 @@ module Worker () = struct
                   let name = String.lowercase_ascii name in
                   acc && String.Find.find ~pattern name >= 0
               | Genres filter -> acc && match_filter ~filter genres
+              | Artists filter -> acc && match_filter ~filter artists))
       in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
@@ -158,6 +161,22 @@ module Worker () = struct
         |> Int.Map.mapi (fun key usage_count ->
                try
                  (usage_count, genres.(key - 1))
+                 (* Indexeddb auto increments starts at 1 *)
+               with Invalid_argument _ -> failwith "Unknown genre")
+    | Get_view_artists view ->
+        let* store = get_store (module Tracks_store) () in
+        let* keys = get_view_keys store view.request in
+        let* s_artists = get_store (module Artists_store) () in
+        let+ artists = Artists_store.get_all s_artists |> as_fut in
+        Array.fold_left keys ~init:Int.Map.empty
+          ~f:(fun acc { Db.Generic_schema.Track.Key.artists; _ } ->
+            Int.Map.add_list_with
+              ~f:(fun _ -> ( + ))
+              acc
+              (List.map artists ~f:(fun g -> (g, 1))))
+        |> Int.Map.mapi (fun key count ->
+               try
+                 { Db.Generic_schema.count; v = artists.(key - 1) }
                  (* Indexeddb auto increments starts at 1 *)
                with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->
