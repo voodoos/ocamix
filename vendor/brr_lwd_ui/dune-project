@@ -5,7 +5,7 @@
 (source
  (github voodoos/brr-lwd-ui))
 
-(license AGPL-3.0)
+(license MIT)
 
 (authors "Ulysse G\195\169rard")
 
