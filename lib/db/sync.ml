@@ -643,25 +643,11 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   Hashtbl.reset artists_ids;
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
-let throttle ~delay_ms =
-  (* We use [last_update] to have regular debounced updates and the
-     [timeout] to ensure that the last event is always taken into
-     account even it it happens during the debouncing interval. *)
-  let last_update = ref 0. in
-  let timer = ref (-1) in
-  fun f ->
-    let now = Performance.now_ms G.performance in
-    if !timer >= 0 then G.stop_timer !timer;
-    if now -. !last_update >. float_of_int delay_ms then (
-      last_update := now;
-      f ())
-    else timer := G.set_timeout ~ms:delay_ms f
-
 let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
   let () = (* Send a first report *) report initial in
-  let sync_report_throttler = throttle ~delay_ms:250 in
+  let sync_report_throttler = Brr_utils.throttle ~delay_ms:250 in
   let report' =
    fun sync_progress ->
     sync_report_throttler (fun () -> report { status = Syncing; sync_progress })

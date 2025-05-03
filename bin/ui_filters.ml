@@ -127,10 +127,10 @@ let filter0_changed () =
   filter1_changed ()
 
 let request_refresh =
-  let timer = ref (-1) in
-  fun ?(delay = 250) () ->
-    if !timer >= 0 then G.stop_timer !timer;
-    timer := G.set_timeout ~ms:delay (fun () -> filter1_changed () |> ignore)
+  (* TODO a better model would be to move throttling to the inputs themselves
+     and have a more nature form flow with lwd values.*)
+  let throttler = Brr_utils.throttle ~delay_ms:250 ~delay:true in
+  fun () -> throttler (fun () -> filter1_changed () |> ignore)
 
 let libraries_choices =
   let open Field_checkboxes in
@@ -181,7 +181,7 @@ let genre_formula =
   let open Field_textinput in
   let on_change ~init v =
     Lwd.set genre_formula v;
-    if not init then ignore @@ request_refresh ()
+    if not init then request_refresh ()
   in
   let placeholder = "+classi -opera" in
   (make ~on_change ~placeholder
@@ -192,7 +192,7 @@ let artist_formula =
   let open Field_textinput in
   let on_change ~init v =
     Lwd.set artist_formula v;
-    if not init then ignore @@ request_refresh ()
+    if not init then request_refresh ()
   in
   let placeholder = "+john -lennon" in
   (make ~on_change ~placeholder
@@ -207,7 +207,7 @@ let search_and_sort =
     let open Field_textinput in
     let on_change ~init v =
       Lwd.set name_filter v;
-      if not init then ignore @@ request_refresh ()
+      if not init then request_refresh ()
     in
     make ~on_change { name = "pouet"; default = None; label = [] }
   in
@@ -219,7 +219,7 @@ let search_and_sort =
     in
     let on_change ~init v =
       Lwd.set selected_sort v;
-      if not init then ignore @@ request_refresh ~delay:25 ()
+      if not init then request_refresh ()
     in
     make ~on_change
       { name = "view-sort"; default = "date_added"; label = [] }
@@ -234,7 +234,7 @@ let search_and_sort =
     in
     let on_change ~init v =
       Lwd.set selected_order v;
-      if not init then ignore @@ request_refresh ~delay:25 ()
+      if not init then request_refresh ()
     in
     make ~on_change
       { name = "view-order"; default = "random"; label = [] }
