@@ -46,7 +46,12 @@ let on_upgrade_needed e q =
     Albums_by_idx.create ~name:"by-idx" (Key_path.Identifier "idx") store
     |> ignore
   in
-  let _tracks = Tracks_store.create db in
+  let _tracks =
+    let store = Tracks_store.create db in
+    Tracks_by_id.create ~unique:true ~name:"by-id" (Key_path.Identifier "id")
+      store
+    |> ignore
+  in
   ()
 
 let schema_version = 6

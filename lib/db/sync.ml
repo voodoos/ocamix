@@ -179,36 +179,36 @@ let genres_memo = Hashtbl.create 256
 (* Only album arstis are accessible via the recursive traversal. Other artists
    items have no parent and must be fetch specifically. *)
 let find_artists_idx source idb artist_items =
-  (* Some artists might already have been queried for, others not *)
-  let ready, todo =
-    List.partition_map_either artist_items
-      ~f:(fun ({ id; _ } : Item.artist_item) ->
-        match Hashtbl.get artists_ids id with
-        | None -> Right id
-        | Some fut -> Left fut)
+  (* Some artists might already have been queried for, others not. Note that it
+     is important to preserve the order of the initial list. Order matters in
+     the original files metadata and hopefully Jellyfin preserves it. *)
+  let now_futures : (string, int option -> unit) Hashtbl.t =
+    Hashtbl.create 16
   in
-  let open Fut.Syntax in
-  let newly_queried =
-    let todo_n = List.length todo in
-    if Int.equal 0 todo_n then []
-    else
-      let open Source in
-      let user_id = source.auth_response.user.id in
-      let now_futures : (string, int option -> unit) Hashtbl.t =
-        Hashtbl.create todo_n
-      in
-      let futs =
-        List.map todo ~f:(fun id ->
+  let future_artists =
+    List.map artist_items ~f:(fun ({ id; _ } : Item.artist_item) ->
+        match Hashtbl.get artists_ids id with
+        | Some fut -> fut
+        | None ->
             let fut, set = Fut.create () in
             let set v =
-              (* We remove elements when set to track stalled ones *)
+              (* We remove elements when set. That allows us to tracked stalled
+                 queries by looking at the remaining elements in the table. *)
               Hashtbl.remove now_futures id;
               set v
             in
             Hashtbl.add artists_ids id fut;
             Hashtbl.add now_futures id set;
             fut)
-      in
+  in
+  let open Fut.Syntax in
+  let () =
+    let todo = Hashtbl.keys_list now_futures in
+    let todo_n = List.length todo in
+    if Int.equal 0 todo_n then ()
+    else
+      let open Source in
+      let user_id = source.auth_response.user.id in
       let params =
         {
           Api.Items.ids = todo;
@@ -255,10 +255,9 @@ let find_artists_idx source idb artist_items =
                   Hashtbl.iter (fun _ set -> set None) now_futures)
           | Error err ->
               Console.error [ "Artists fetch failed: "; err ];
-              Hashtbl.iter (fun _ set -> set None) now_futures);
-      futs
+              Hashtbl.iter (fun _ set -> set None) now_futures)
   in
-  let+ all = Fut.of_list (List.rev_append ready newly_queried) in
+  let+ all = Fut.of_list future_artists in
   List.filter_map ~f:Fun.id all
 
 let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =

@@ -204,3 +204,5 @@ module Tracks_store =
             { id; name; genres; collections; artists; album_artists; duration }
         | _ -> assert false
     end)
+
+module Tracks_by_id = Make_index (Tracks_store) (Id_key)
