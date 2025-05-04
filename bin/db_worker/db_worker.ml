@@ -49,6 +49,13 @@ module Worker () = struct
   let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
     Hashtbl.create 64
 
+  let match_filter ~filter elements =
+    List.fold_left filter ~init:true ~f:(fun acc -> function
+      | Db.View.Selection.All -> acc && true
+      | One_of one_of -> acc && not (Int.Set.disjoint elements one_of)
+      | None_of none_of ->
+          acc && (Int.Set.is_empty none_of || Int.Set.disjoint elements none_of))
+
   let get_view_keys store
       ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
@@ -75,25 +82,25 @@ module Worker () = struct
               {
                 Db.Generic_schema.Track.Key.name;
                 Db.Generic_schema.Track.Key.genres;
+                Db.Generic_schema.Track.Key.artists;
+                Db.Generic_schema.Track.Key.album_artists;
                 _;
               }
             ->
             let genres = Int.Set.of_list genres in
+            let artists =
+              let track = Int.Set.of_list artists in
+              Int.Set.add_list track album_artists
+            in
             List.fold_left filters ~init:true ~f:(fun acc -> function
-              | Db.View.Search sub when not (String.is_empty sub) ->
+              | Db.View.Search "" -> true
+              | Search sub ->
                   let sub = String.lowercase_ascii sub in
                   let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
                   let name = String.lowercase_ascii name in
                   acc && String.Find.find ~pattern name >= 0
-              | Genres (One_of one_of) ->
-                  acc
-                  && (Int.Set.is_empty one_of
-                     || not (Int.Set.disjoint genres one_of))
-              | Genres (None_of none_of) ->
-                  acc
-                  && (Int.Set.is_empty none_of
-                     || Int.Set.disjoint genres none_of)
-              | _ -> true))
+              | Genres filter -> acc && match_filter ~filter genres
+              | Artists filter -> acc && match_filter ~filter artists))
       in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
@@ -158,6 +165,24 @@ module Worker () = struct
         |> Int.Map.mapi (fun key usage_count ->
                try
                  (usage_count, genres.(key - 1))
+                 (* Indexeddb auto increments starts at 1 *)
+               with Invalid_argument _ -> failwith "Unknown genre")
+    | Get_view_artists view ->
+        let* store = get_store (module Tracks_store) () in
+        let* keys = get_view_keys store view.request in
+        let* s_artists = get_store (module Artists_store) () in
+        let+ artists = Artists_store.get_all s_artists |> as_fut in
+        Array.fold_left keys ~init:Int.Map.empty
+          ~f:(fun
+              acc { Db.Generic_schema.Track.Key.artists; album_artists; _ } ->
+            let artists = List.rev_append album_artists artists in
+            Int.Map.add_list_with
+              ~f:(fun _ -> ( + ))
+              acc
+              (List.map artists ~f:(fun g -> (g, 1))))
+        |> Int.Map.mapi (fun key count ->
+               try
+                 { Db.Generic_schema.count; v = artists.(key - 1) }
                  (* Indexeddb auto increments starts at 1 *)
                with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->

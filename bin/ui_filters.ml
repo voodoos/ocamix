@@ -9,11 +9,17 @@ open Db.Generic_schema
 let selected_libraries = Lwd.var Lwd_seq.empty
 let view0 = Lwd.var None
 let view0_genres : (int * (int * Genre.t)) list Lwd.var = Lwd.var []
+let view0_artists : (int * Artist.t info) list Lwd.var = Lwd.var []
 let selected_genres = Lwd.var Int.Set.empty
 let genre_formula = Lwd.var ""
+let artist_formula = Lwd.var ""
 let selected_sort = Lwd.var "date_added"
 let selected_order = Lwd.var "desc"
 let name_filter = Lwd.var ""
+
+type status = Refreshing | Ready of int
+
+let status = Lwd.var Refreshing
 
 let view =
   Lwd.var
@@ -30,19 +36,19 @@ let view =
         item_count = 0;
       }
 
-(* TODO: "+rock +jap" means "rock" AND "jap"
-    - "+rock +jap" => "rock" AND "jap"
-    - "+(rock +jap)" => "rock" OR "jap"
+(* TODO: query language ?
+    "rock jap"          = "rock" OR "jap"
+    "rock + jap"        = "rock" AND "jap"
+    "rock + jap punk"   = ("rock" AND "jap") OR "PUNK"
+    "rock + (jap punk)" = "rock" AND ("jap" OR "PUNK")
+    - rock              = NOT "rock"
+    - rock - punk       = NOT "rock" AND NOT "punk" ????
+    punk - rock         = "punk" AND NOT "rock" ????
+    punk - rock jazz    = "punk" AND NOT "rock" OR JAZZ
 *)
-let genre_filter_of_formula ~genres formula =
+let filter_of_formula ~matcher formula =
   let open View.Selection in
   let string_of_chars chars = String.of_list (List.rev chars) in
-  let matching_genres ~name =
-    let canon_name = canonicalize_string name in
-    List.filter_map genres ~f:(fun (key, name) ->
-        if String.find ~sub:canon_name name >= 0 then Some key else None)
-    |> Int.Set.of_list
-  in
   String.fold_left formula ~init:[] ~f:(fun acc char ->
       match (char, acc) with
       | '+', _ -> `One_of [] :: acc
@@ -53,13 +59,10 @@ let genre_filter_of_formula ~genres formula =
   |> List.filter_map ~f:(function
        | `One_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then None
-           else Some (One_of (matching_genres ~name))
+           if String.is_empty name then None else Some (One_of (matcher ~name))
        | `None_of chars ->
            let name = string_of_chars chars in
-           if String.is_empty name then None
-           else Some (None_of (matching_genres ~name)))
-  |> List.map ~f:(fun f -> View.Genres f)
+           if String.is_empty name then None else Some (None_of (matcher ~name)))
 
 let filter1_changed () =
   let open View in
@@ -74,12 +77,39 @@ let filter1_changed () =
       Lwd.peek view0_genres
       |> List.map ~f:(fun (k, (_, g)) -> (k, g.Genre.canon))
     in
-    genre_filter_of_formula ~genres (Lwd.peek genre_formula)
+    let matcher ~name =
+      let canon_name = canonicalize_string name in
+      List.filter_map genres ~f:(fun (key, name) ->
+          if String.find ~sub:canon_name name >= 0 then Some key else None)
+      |> Int.Set.of_list
+    in
+    filter_of_formula ~matcher (Lwd.peek genre_formula)
   in
-  let filters = Search (Lwd.peek name_filter) :: genres in
+  let artists =
+    let artists =
+      Lwd.peek view0_artists
+      |> List.map ~f:(fun (count, { v; _ }) -> (count, v.Artist.canon))
+    in
+    let matcher ~name =
+      let canon_name = canonicalize_string name in
+      List.filter_map artists ~f:(fun (key, name) ->
+          if String.find ~sub:canon_name name >= 0 then Some key else None)
+      |> Int.Set.of_list
+    in
+    filter_of_formula ~matcher (Lwd.peek artist_formula)
+  in
+  let filters =
+    [ Search (Lwd.peek name_filter); Genres genres; Artists artists ]
+  in
   let req = { kind = Audio; src_views; sort; filters } in
   let open Fut.Result_syntax in
+  let start_time = Performance.now_ms G.performance in
+  Lwd.set status Refreshing;
   let+ view' = Worker_client.query (Create_view req) in
+  let request_time =
+    Float.to_int (Performance.now_ms G.performance -. start_time)
+  in
+  Lwd.set status (Ready request_time);
   Lwd.set view view'
 
 let filter0_changed () =
@@ -91,19 +121,26 @@ let filter0_changed () =
   let open Fut.Result_syntax in
   let+ view = Worker_client.query (Create_view req) in
   let+ genres = Worker_client.query (Get_view_genres view) in
+  let+ artists = Worker_client.query (Get_view_artists view) in
   let sorted_genres =
     Int.Map.to_list genres
     |> List.sort ~cmp:(fun (_, (c1, _)) (_, (c2, _)) -> Int.compare c2 c1)
   in
+  let sorted_artists =
+    Int.Map.to_list artists
+    |> List.sort ~cmp:(fun (_, { count = c1; _ }) (_, { count = c2; _ }) ->
+           Int.compare c2 c1)
+  in
   Lwd.set view0 (Some view);
   Lwd.set view0_genres sorted_genres;
+  Lwd.set view0_artists sorted_artists;
   filter1_changed ()
 
 let request_refresh =
-  let timer = ref (-1) in
-  fun ?(delay = 250) () ->
-    if !timer >= 0 then G.stop_timer !timer;
-    timer := G.set_timeout ~ms:delay (fun () -> filter1_changed () |> ignore)
+  (* TODO a better model would be to move throttling to the inputs themselves
+     and have a more nature form flow with lwd values.*)
+  let throttler = Brr_utils.throttle ~delay_ms:250 ~delay:true in
+  fun () -> throttler (fun () -> filter1_changed () |> ignore)
 
 let libraries_choices =
   let open Field_checkboxes in
@@ -154,22 +191,30 @@ let genre_formula =
   let open Field_textinput in
   let on_change ~init v =
     Lwd.set genre_formula v;
-    if not init then ignore @@ request_refresh ()
+    if not init then request_refresh ()
   in
   let placeholder = "+classi -opera" in
   (make ~on_change ~placeholder
      { name = "genre-formula"; default = None; label = [] })
     .field
 
-let item_count =
-  Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } -> item_count)
+let artist_formula =
+  let open Field_textinput in
+  let on_change ~init v =
+    Lwd.set artist_formula v;
+    if not init then request_refresh ()
+  in
+  let placeholder = "+john -lennon" in
+  (make ~on_change ~placeholder
+     { name = "artist-formula"; default = None; label = [] })
+    .field
 
 let search_and_sort =
   let f_search =
     let open Field_textinput in
     let on_change ~init v =
       Lwd.set name_filter v;
-      if not init then ignore @@ request_refresh ()
+      if not init then request_refresh ()
     in
     make ~on_change { name = "pouet"; default = None; label = [] }
   in
@@ -181,7 +226,7 @@ let search_and_sort =
     in
     let on_change ~init v =
       Lwd.set selected_sort v;
-      if not init then ignore @@ request_refresh ~delay:25 ()
+      if not init then request_refresh ()
     in
     make ~on_change
       { name = "view-sort"; default = "date_added"; label = [] }
@@ -196,17 +241,13 @@ let search_and_sort =
     in
     let on_change ~init v =
       Lwd.set selected_order v;
-      if not init then ignore @@ request_refresh ~delay:25 ()
+      if not init then request_refresh ()
     in
     make ~on_change
-      { name = "view-order"; default = "desc"; label = [] }
+      { name = "view-order"; default = "random"; label = [] }
       options
   in
-  let item_count =
-    Lwd.map item_count ~f:(fun i -> El.txt' @@ Printf.sprintf "%i results" i)
-    |> fun txt -> Elwd.div [ `R txt ]
-  in
-  [ `R f_sort.field; `R f_order.field; `R f_search.field; `R item_count ]
+  [ `R f_sort.field; `R f_order.field; `R f_search.field ]
 
 let library_chooser =
   let at = Attrs.O.(v (`P (C "vertical-picker"))) in
@@ -216,9 +257,36 @@ let genre_chooser =
   let at = Attrs.O.(v (`P (C "genres-picker"))) in
   Elwd.div ~at [ `P (El.txt' "Filter by genre: "); `R genre_formula ]
 
+let artist_chooser =
+  let at = Attrs.O.(v (`P (C "artists-picker"))) in
+  Elwd.div ~at [ `P (El.txt' " by artist: "); `R artist_formula ]
+
+let status =
+  let spinner =
+    Lwd.map (Lwd.get status) ~f:(function
+      | Refreshing -> El.txt' "Refreshing"
+      | Ready i ->
+          let duration =
+            if i > 1100 then
+              let seconds = Float.of_int i /. 1000. in
+              Printf.sprintf "%.*f s" 2 seconds
+            else Printf.sprintf "%i ms" i
+          in
+          El.txt' @@ Printf.sprintf "in %s" duration)
+    |> fun txt -> Elwd.div [ `R txt ]
+  in
+  let item_count =
+    Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } ->
+        El.txt' @@ Printf.sprintf "%i results" item_count)
+    |> fun txt -> Elwd.div [ `R txt ]
+  in
+  [ `R item_count; `R spinner ]
+
 let bar =
   let at = Attrs.O.(v (`P (C "filters-row"))) in
-  let first_row = Elwd.div ~at [ `R library_chooser; `R genre_chooser ] in
-  let second_row = Elwd.div ~at search_and_sort in
+  let first_row =
+    Elwd.div ~at [ `R library_chooser; `R genre_chooser; `R artist_chooser ]
+  in
+  let second_row = Elwd.div ~at (search_and_sort @ status) in
   let at = Attrs.O.(v (`P (C "filters-container"))) in
   Elwd.div ~at [ `R first_row; `R second_row ]
