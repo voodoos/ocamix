@@ -17,6 +17,10 @@ let selected_sort = Lwd.var "date_added"
 let selected_order = Lwd.var "desc"
 let name_filter = Lwd.var ""
 
+type status = Refreshing | Ready of int
+
+let status = Lwd.var Refreshing
+
 let view =
   Lwd.var
     View.
@@ -99,7 +103,13 @@ let filter1_changed () =
   in
   let req = { kind = Audio; src_views; sort; filters } in
   let open Fut.Result_syntax in
+  let start_time = Performance.now_ms G.performance in
+  Lwd.set status Refreshing;
   let+ view' = Worker_client.query (Create_view req) in
+  let request_time =
+    Float.to_int (Performance.now_ms G.performance -. start_time)
+  in
+  Lwd.set status (Ready request_time);
   Lwd.set view view'
 
 let filter0_changed () =
@@ -199,9 +209,6 @@ let artist_formula =
      { name = "artist-formula"; default = None; label = [] })
     .field
 
-let item_count =
-  Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } -> item_count)
-
 let search_and_sort =
   let f_search =
     let open Field_textinput in
@@ -240,11 +247,7 @@ let search_and_sort =
       { name = "view-order"; default = "random"; label = [] }
       options
   in
-  let item_count =
-    Lwd.map item_count ~f:(fun i -> El.txt' @@ Printf.sprintf "%i results" i)
-    |> fun txt -> Elwd.div [ `R txt ]
-  in
-  [ `R f_sort.field; `R f_order.field; `R f_search.field; `R item_count ]
+  [ `R f_sort.field; `R f_order.field; `R f_search.field ]
 
 let library_chooser =
   let at = Attrs.O.(v (`P (C "vertical-picker"))) in
@@ -258,11 +261,32 @@ let artist_chooser =
   let at = Attrs.O.(v (`P (C "artists-picker"))) in
   Elwd.div ~at [ `P (El.txt' " by artist: "); `R artist_formula ]
 
+let status =
+  let spinner =
+    Lwd.map (Lwd.get status) ~f:(function
+      | Refreshing -> El.txt' "Refreshing"
+      | Ready i ->
+          let duration =
+            if i > 1100 then
+              let seconds = Float.of_int i /. 1000. in
+              Printf.sprintf "%.*f s" 2 seconds
+            else Printf.sprintf "%i ms" i
+          in
+          El.txt' @@ Printf.sprintf "in %s" duration)
+    |> fun txt -> Elwd.div [ `R txt ]
+  in
+  let item_count =
+    Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } ->
+        El.txt' @@ Printf.sprintf "%i results" item_count)
+    |> fun txt -> Elwd.div [ `R txt ]
+  in
+  [ `R item_count; `R spinner ]
+
 let bar =
   let at = Attrs.O.(v (`P (C "filters-row"))) in
   let first_row =
     Elwd.div ~at [ `R library_chooser; `R genre_chooser; `R artist_chooser ]
   in
-  let second_row = Elwd.div ~at search_and_sort in
+  let second_row = Elwd.div ~at (search_and_sort @ status) in
   let at = Attrs.O.(v (`P (C "filters-container"))) in
   Elwd.div ~at [ `R first_row; `R second_row ]
