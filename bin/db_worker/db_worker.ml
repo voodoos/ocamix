@@ -150,7 +150,12 @@ module Worker () = struct
         let* store = get_store (module Db.Stores.Tracks_store) () in
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
-        { Db.View.request; start_offset = 0; item_count }
+        let duration =
+          Array.fold_left keys ~init:0.
+            ~f:(fun acc { Db.Generic_schema.Track.Key.duration; _ } ->
+              acc +. duration)
+        in
+        { Db.View.request; start_offset = 0; item_count; duration }
     | Get_view_genres view ->
         let* store = get_store (module Tracks_store) () in
         let* keys = get_view_keys store view.request in

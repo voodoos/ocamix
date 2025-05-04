@@ -16,6 +16,7 @@ let columns () =
            v "Order" "5rem" @@ [ `P (El.txt' "#") ];
            v "Cover" "5rem" @@ [ `P (El.txt' "Cover") ];
            v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
+           v "Duration" "5rem" @@ [ `P (El.txt' "Duration") ];
          |]
 
 let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
@@ -36,7 +37,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
   in
   let render (ranged : View.ranged Lwd.t) start_index
       Db.Generic_schema.Track.(
-        ( { Key.name; _ },
+        ( { Key.name; duration; _ },
           { id = Jellyfin id; server_id = Jellyfin server_id; album_id; _ } )) =
     let play_from (ranged : View.ranged Lwd.t) =
       Lwd.map ranged ~f:(fun ranged _ ->
@@ -62,6 +63,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
             El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "|>" ]
         | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
     in
+    let duration = Duration.pp_track_duration duration in
     [
       `R status;
       `R
@@ -69,6 +71,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
            ~ev:[ `R play_on_click ]
            [ `R (Elwd.img ~at:[ `R img_url; `P (At.width 50) ] ()) ]);
       `P (El.div [ El.span [ El.txt' name ] ]);
+      `P (El.div [ El.span [ El.txt' duration ] ]);
     ]
   in
   let placeholder _i = [ `P (El.txt' "Loading...") ] in

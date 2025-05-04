@@ -203,6 +203,7 @@ module Item = struct
     external_urls : external_url list; [@default []] [@key "ExternalUrls"]
     id : string; [@key "Id"]
     path : string option; [@option] [@key "Path"]
+    run_time_ticks : float; [@default 0.] [@key "RunTimeTicks"]
     is_folder : bool; [@default false] [@key "IsFolder"]
     album_id : string option; [@option] [@key "AlbumId"]
     parent_id : string option option;

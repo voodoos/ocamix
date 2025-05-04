@@ -34,6 +34,7 @@ let view =
           };
         start_offset = 0;
         item_count = 0;
+        duration = 0.;
       }
 
 (* TODO: query language ?
@@ -276,8 +277,9 @@ let status =
     |> fun txt -> Elwd.div [ `R txt ]
   in
   let item_count =
-    Lwd.map (Lwd.get view) ~f:(fun { View.item_count; _ } ->
-        El.txt' @@ Printf.sprintf "%i results" item_count)
+    Lwd.map (Lwd.get view) ~f:(fun { View.item_count; duration; _ } ->
+        let duration = Duration.pp_approx_duration duration in
+        El.txt' @@ Printf.sprintf "%i results, %s" item_count duration)
     |> fun txt -> Elwd.div [ `R txt ]
   in
   [ `R item_count; `R spinner ]

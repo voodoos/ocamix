@@ -1,6 +1,6 @@
 (library
- (name db)
- (libraries std duration brr-lwd-ui.brrer yojson data_source worker_api)
+ (name duration)
+ (libraries std)
  (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)
  (preprocess
   (pps ppx_yojson_conv ppx_deriving_jsont)))

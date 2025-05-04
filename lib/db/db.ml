@@ -49,7 +49,7 @@ let on_upgrade_needed e q =
   let _tracks = Tracks_store.create db in
   ()
 
-let schema_version = 5
+let schema_version = 6
 
 let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in

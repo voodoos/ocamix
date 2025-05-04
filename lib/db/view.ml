@@ -79,7 +79,13 @@ let hash { kind; src_views; sort; filters } =
   in
   Hash.poly (kind, src_views, sort, filters)
 
-type t = { request : req; start_offset : int; item_count : int }
+type t = {
+  request : req;
+  start_offset : int;
+  item_count : int;
+  duration : Duration.t;
+}
+
 type ranged = { view : t; first : int; last : int; order : Order.t }
 
 let item_count t = t.item_count - t.start_offset

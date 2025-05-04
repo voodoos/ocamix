@@ -87,6 +87,7 @@ module Track = struct
       artists : int list;
       album_artists : int list;
       collections : int list;
+      duration : Duration.t; (* 10^-7 seconds *)
     }
     [@@deriving yojson, jsont]
   end

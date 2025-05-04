@@ -10,4 +10,4 @@ type ordered = {
 let to_view view =
   Ui_utils.map3 view.request view.start_offset view.item_count
     ~f:(fun request start_offset item_count ->
-      { View.request; start_offset; item_count })
+      { View.request; start_offset; item_count; duration = 0. })

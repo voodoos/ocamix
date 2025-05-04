@@ -416,6 +416,7 @@ let sync_tracks ~collection_id ~source idb items :
         album_artists;
         server_id;
         album_id;
+        run_time_ticks;
         _;
       } =
     let () = incr count_tracks in
@@ -448,6 +449,7 @@ let sync_tracks ~collection_id ~source idb items :
         artists;
         album_artists;
         collections = [ collection_id ];
+        duration = run_time_ticks;
       }
     in
     let+ album_id =
