@@ -57,10 +57,11 @@ module Unit = struct
         f *. font_size
 end
 
-let listen ~f t =
+let listen ?(initial_trigger = false) ~f t =
   let root = Lwd.observe t in
   Lwd.set_on_invalidate root (fun _ -> f (Lwd.quick_sample root));
-  Lwd.quick_sample root |> ignore
+  let first_sample = Lwd.quick_sample root in
+  if initial_trigger then f first_sample
 
 let map3 ~f a b c =
   Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)

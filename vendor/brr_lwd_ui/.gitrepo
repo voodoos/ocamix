@@ -6,7 +6,7 @@
 [subrepo]
 	remote = git@github.com:voodoos/brr-lwd-ui.git
 	branch = main
-	commit = 6810dc06f19255a84a3b46980658b7f27a011ab3
+	commit = dddb23d6ab2b203d85bf76f44d39a9b8fc854c11
 	method = merge
 	cmdver = 0.4.5
 	parent = 98c982371f6307469975d2dc4322130a3a01441f

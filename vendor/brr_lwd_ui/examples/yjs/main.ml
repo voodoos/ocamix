@@ -809,10 +809,17 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
            | `Bool ->
                field
                  (Lwd.map name ~f:(fun _name ->
-                      let elt, value =
-                        Forms.Field_checkboxes.make_single "" "" [] false
+                      let { element; desc = Check { state = value; _ } } =
+                        Forms.Field_checkboxes.make_single
+                          {
+                            value = "";
+                            id = "";
+                            name = "";
+                            label = [];
+                            state = false;
+                          }
                       in
-                      { Field.elt; value; validate = (fun v -> Ok v) }))
+                      { Field.elt = element; value; validate = (fun v -> Ok v) }))
                  (fun t v ->
                    let v =
                      Field.map_validation
