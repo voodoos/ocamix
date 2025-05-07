@@ -237,13 +237,17 @@ struct
             |> add At.Name.style (`R style))
         in
         let on_click =
-          Elwd.handler Ev.click (fun _ ->
+          Elwd.handler Ev.click (fun e ->
+              Ev.prevent_default e;
               (match Lwd.peek App_state.active_layout with
               | Kiosk -> Main
               | Main -> Kiosk)
               |> Lwd.set App_state.active_layout)
         in
-        Elwd.div ~at ~ev:[ `P on_click ] []
+        Elwd.a
+          ~ev:[ `P on_click ]
+          ~at:[ `P (At.href (Jstr.v "#")) ]
+          [ `R (Elwd.div ~at []) ]
       in
       let track_details =
         let at = Attrs.add At.Name.class' (`P "now-playing-details") [] in
@@ -302,13 +306,28 @@ struct
           let album_title =
             Lwd.map (Lwd.get album_title) ~f:(fun title -> El.txt' title)
           in
-          let artist_name =
+          let artist_txt =
             Lwd.map (Lwd.get artist_name) ~f:(fun title -> El.txt' title)
+          in
+          let on_click =
+            Lwd.map (Lwd.get artist_name) ~f:(fun name ->
+                Elwd.handler Ev.click (fun e ->
+                    Ev.prevent_default e;
+                    Lwd.set Ui_filters.artist_formula.value (Some ("+" ^ name))))
           in
           [
             `R Elwd.(div [ `R (span [ `R txt ]) ]);
             `R Elwd.(div [ `R (span [ `R album_title ]) ]);
-            `R Elwd.(div [ `R (span [ `R artist_name ]) ]);
+            `R
+              Elwd.(
+                div
+                  [
+                    `R
+                      (Elwd.a
+                         ~ev:[ `R on_click ]
+                         ~at:[ `P (At.href (Jstr.v "#")) ]
+                         [ `R (span [ `R artist_txt ]) ]);
+                  ]);
           ]
         in
         Elwd.div ~at details

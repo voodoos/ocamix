@@ -214,9 +214,8 @@ let artist_formula =
     if not init then request_refresh ()
   in
   let placeholder = "+john -lennon" in
-  (make ~on_change ~placeholder
-     { name = "artist-formula"; default = None; label = [] })
-    .field
+  make ~on_change ~placeholder
+    { name = "artist-formula"; default = None; label = [] }
 
 let search_and_sort =
   let f_search =
@@ -268,7 +267,7 @@ let genre_chooser =
 
 let artist_chooser =
   let at = Attrs.O.(v (`P (C "artists-picker"))) in
-  Elwd.div ~at [ `P (El.txt' " by artist: "); `R artist_formula ]
+  Elwd.div ~at [ `P (El.txt' " by artist: "); `R artist_formula.field ]
 
 let status =
   let spinner =
