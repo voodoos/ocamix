@@ -20,6 +20,7 @@ let make ?(at = []) ?(ev = []) ?placeholder ?(on_change = fun ~init:_ -> ignore)
   let value = Persistent.var ~key:id desc.default in
   let () = Lwd.peek value |> Option.iter (on_change ~init:true) in
   let label = Elwd.label ~at:[ `P (At.for' (Jstr.v id)) ] desc.label in
+  let element = ref None in
   let field =
     let at =
       let open Attrs in
@@ -41,6 +42,17 @@ let make ?(at = []) ?(ev = []) ?placeholder ?(on_change = fun ~init:_ -> ignore)
           Lwd.set value (Some value'))
     in
     let ev = `P on_change :: ev in
-    Elwd.input ~at ~ev ()
+    Elwd.input ~at ~ev ~on_create:(fun e -> element := Some e) ()
+  in
+  let () =
+    (* React to direct control of the var *)
+    Utils.listen ~f:(fun v ->
+        let text = Option.value ~default:"" v in
+        Option.iter
+          (fun text_input ->
+            Jv.set (El.to_jv text_input) "value" (Jv.of_string text);
+            on_change ~init:false text)
+          !element)
+    @@ Lwd.get value
   in
   { field; label; value }
