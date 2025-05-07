@@ -815,7 +815,7 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
                             value = "";
                             id = "";
                             name = "";
-                            label = [];
+                            label = (fun () -> []);
                             state = false;
                           }
                       in

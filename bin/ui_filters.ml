@@ -150,15 +150,23 @@ let libraries_choices =
       (fun (_, l) ->
         Lwd_seq.map
           (fun ((key, l) : int * Db.Generic_schema.Collection.t) ->
-            Check (key, [ `P (El.txt' l.name) ], true))
+            Check
+              {
+                value = key;
+                id = l.name ^ "-ck-id";
+                name = l.name ^ "-ck";
+                label = (fun () -> [ `P (El.txt' l.name) ]);
+                state = true;
+              })
           l)
       (Lwd.return Lwd_seq.empty, Lwd.map2 ~f:Lwd_seq.concat)
       Servers.servers_libraries
   in
-  let { field; value } =
+  let { field; value; _ } =
     make { name = "library-selection"; desc = Lwd.join choices }
   in
   let value =
+    let value = Lwd_seq.map (fun (v, _) -> v) value in
     Lwd.map value ~f:(fun v ->
         Lwd.set selected_libraries v;
         ignore @@ filter0_changed ();
