@@ -130,7 +130,6 @@ let app (db : Brr_io.Indexed_db.Database.t) =
           At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
     in
     let src_front = Lwd.map src ~f:(fun (src, _) -> At.src (Jstr.v src)) in
-    let src_back = Lwd.map src ~f:(fun (_, src) -> At.src (Jstr.v src)) in
     let backdrop_blur elts =
       let filter_style =
         At.style
@@ -147,12 +146,19 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         Elwd.img ~at:[ `R src_front; `P (At.class' (Jstr.v "face front")) ] ()
       in
       let back =
-        Elwd.img ~at:[ `R src_back; `P (At.class' (Jstr.v "face back")) ] ()
+        Lwd.map src ~f:(fun (_, src) ->
+            Brr_lwd_ui.Img.make
+              ~at:[ `P (At.class' (Jstr.v "face back")) ]
+              ~placeholder:"track.png" src)
       in
+      let back_img = Lwd.bind back ~f:fst in
+      let back_status = Lwd.bind back ~f:(fun (_, status) -> Lwd.get status) in
       let flipped =
-        Lwd.map (Lwd.get App_state.kiosk_cover) ~f:(function
-          | Back -> At.class' (Jstr.v "flip")
-          | Front -> At.void)
+        Lwd.map2 (Lwd.get App_state.kiosk_cover) back_status
+          ~f:(fun view status ->
+            match (view, status) with
+            | Back, Ok -> At.class' (Jstr.v "flip")
+            | _, _ -> At.void)
       in
       let on_click =
         Elwd.handler Ev.click (fun e ->
@@ -165,7 +171,7 @@ let app (db : Brr_io.Indexed_db.Database.t) =
       Elwd.div
         ~ev:[ `P on_click ]
         ~at:[ `P (At.class' (Jstr.v "two-face-cover")); `R flipped ]
-        [ `R back; `R front ]
+        [ `R back_img; `R front ]
     in
     let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
     Elwd.div ~at [ `R (backdrop_blur [ `R cover ]) ]
