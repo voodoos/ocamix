@@ -147,16 +147,25 @@ let app (db : Brr_io.Indexed_db.Database.t) =
       in
       let back =
         Lwd.map src ~f:(fun (_, src) ->
-            Brr_lwd_ui.Img.make
-              ~at:[ `P (At.class' (Jstr.v "face back")) ]
-              ~placeholder:"track.png" src)
+            let hold, fetch = Fut.create () in
+            ( Brr_lwd_ui.Img.make
+                ~at:[ `P (At.class' (Jstr.v "face back")) ]
+                ~placeholder:"track.png" ~hold src,
+              fetch ))
       in
-      let back_img = Lwd.bind back ~f:fst in
-      let back_status = Lwd.bind back ~f:(fun (_, status) -> Lwd.get status) in
+      let back_img = Lwd.bind back ~f:(fun ((elt, _), _) -> elt) in
+      let back_status =
+        Lwd.bind back ~f:(fun ((_, status), _) -> Lwd.get status)
+      in
+      let back_fetch = Lwd.map back ~f:(fun (_, fetch) -> fetch) in
+      let back = Lwd.pair back_status back_fetch in
       let flipped =
-        Lwd.map2 (Lwd.get App_state.kiosk_cover) back_status
-          ~f:(fun view status ->
+        Lwd.map2 (Lwd.get App_state.kiosk_cover) back
+          ~f:(fun view (status, fetch) ->
             match (view, status) with
+            | Back, Ready ->
+                ignore (fetch ());
+                At.void
             | Back, Ok -> At.class' (Jstr.v "flip")
             | _, _ -> At.void)
       in
