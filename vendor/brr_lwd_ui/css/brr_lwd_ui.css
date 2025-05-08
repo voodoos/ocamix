@@ -211,6 +211,8 @@ html {
     transform-style: preserve-3d;
     transition: all 0.5s ease-in;
 
+    cursor: pointer;
+
     &.flip {
         transform: rotateY(180deg);
     }
