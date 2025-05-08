@@ -146,23 +146,19 @@ body {
   height: 100%;
   position: absolute;
   z-index: 100;
-  background-color: var(--light-bg-color);
 
-  & div {
+  & > div {
+    /* background cover */
     width: 100%;
     height: 100%;
     background-size: 125%;
     background-repeat: no-repeat;
     background-position: center;
+  }
 
-    & div {
-      width: 100%;
-      height: 100%;
-      backdrop-filter: blur(16px);
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-    }
+  & .two-face-cover {
+    width: 100%;
+    height: 100%;
   }
 }
 

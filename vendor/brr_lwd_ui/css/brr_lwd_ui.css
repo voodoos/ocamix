@@ -204,3 +204,29 @@ html {
         background-color: darkgrey;
     }
 }
+
+.two-face-cover {
+
+    position: relative;
+    transform-style: preserve-3d;
+    transition: all 0.5s ease-in;
+
+    &.flip {
+        transform: rotateY(180deg);
+    }
+
+    & .face {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        backface-visibility: hidden;
+        font-size: 60px;
+        color: white;
+        object-fit: contain;
+    }
+
+    & .back {
+        transform: rotateY(180deg);
+    }
+
+}

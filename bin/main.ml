@@ -97,12 +97,12 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         | Main -> At.class' (Jstr.v "display-none")
         | Kiosk -> At.void)
     in
-    let style =
+    let src =
       Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
           let open Lwd_infix in
           let$ src =
             match np with
-            | None -> Lwd.pure "track.png"
+            | None -> Lwd.pure ("track.png", "track.png")
             | Some
                 {
                   item =
@@ -112,21 +112,63 @@ let app (db : Brr_io.Indexed_db.Database.t) =
                 } ->
                 let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
                 let connexion : DS.connexion = List.assq server_id servers in
-                Lwd.get
-                @@ Player.cover_var ~base_url:connexion.base_url ~size:1024
-                     ~album_id
+                let front =
+                  Player.cover_var ~base_url:connexion.base_url ~size:1024
+                    ~album_id ~cover_type:Front
+                in
+                let back =
+                  Player.cover_var ~base_url:connexion.base_url ~size:1024
+                    ~album_id ~cover_type:Back
+                in
+                Lwd.pair (Lwd.get front) (Lwd.get back)
           in
-
+          src)
+      |> Lwd.join
+    in
+    let background =
+      Lwd.map src ~f:(fun (src, _) ->
           At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
     in
+    let src_front = Lwd.map src ~f:(fun (src, _) -> At.src (Jstr.v src)) in
+    let src_back = Lwd.map src ~f:(fun (_, src) -> At.src (Jstr.v src)) in
+    let backdrop_blur elts =
+      let filter_style =
+        At.style
+          (Jstr.v
+             "position: relative; width: 100%; height: 100%; backdrop-filter: \
+              blur(16px);")
+      in
+      Elwd.div
+        ~at:[ `R background ]
+        [ `R (Elwd.div ~at:[ `P filter_style ] elts) ]
+    in
+    let cover =
+      let front =
+        Elwd.img ~at:[ `R src_front; `P (At.class' (Jstr.v "face front")) ] ()
+      in
+      let back =
+        Elwd.img ~at:[ `R src_back; `P (At.class' (Jstr.v "face back")) ] ()
+      in
+      let flipped =
+        Lwd.map (Lwd.get App_state.kiosk_cover) ~f:(function
+          | Back -> At.class' (Jstr.v "flip")
+          | Front -> At.void)
+      in
+      let on_click =
+        Elwd.handler Ev.click (fun e ->
+            Ev.prevent_default e;
+            (match Lwd.peek App_state.kiosk_cover with
+            | Front -> Back
+            | Back -> Front)
+            |> Lwd.set App_state.kiosk_cover)
+      in
+      Elwd.div
+        ~ev:[ `P on_click ]
+        ~at:[ `P (At.class' (Jstr.v "two-face-cover")); `R flipped ]
+        [ `R back; `R front ]
+    in
     let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
-    Elwd.div ~at
-      [
-        `R
-          (Elwd.div
-             ~at:[ `R (Lwd.join style) ]
-             [ `R (Elwd.div ~at:[ `R (Lwd.join style) ] []) ]);
-      ]
+    Elwd.div ~at [ `R (backdrop_blur [ `R cover ]) ]
   in
   Elwd.div
     ~at:Brr_lwd_ui.Attrs.(to_at ~id:"main-layout" @@ classes [])
