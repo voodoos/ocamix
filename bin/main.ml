@@ -97,12 +97,12 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         | Main -> At.class' (Jstr.v "display-none")
         | Kiosk -> At.void)
     in
-    let src =
-      Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
+    let src_front =
+      Lwd.bind (Lwd.get Player.now_playing) ~f:(fun np ->
           let open Lwd_infix in
           let$ src =
             match np with
-            | None -> Lwd.pure ("track.png", "track.png")
+            | None -> Lwd.pure "track.png"
             | Some
                 {
                   item =
@@ -112,24 +112,34 @@ let app (db : Brr_io.Indexed_db.Database.t) =
                 } ->
                 let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
                 let connexion : DS.connexion = List.assq server_id servers in
-                let front =
-                  Player.cover_var ~base_url:connexion.base_url ~size:1024
-                    ~album_id ~cover_type:Front
-                in
-                let back =
-                  Player.cover_var ~base_url:connexion.base_url ~size:1024
-                    ~album_id ~cover_type:Back
-                in
-                Lwd.pair (Lwd.get front) (Lwd.get back)
+                Player.cover_var ~base_url:connexion.base_url ~size:1024
+                  ~album_id ~cover_type:Front
+                |> Lwd.get
+            (* We don't want Lwd vars here but futures *)
           in
           src)
-      |> Lwd.join
+    in
+    let src_back =
+      Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
+          match np with
+          | None -> Fut.return None
+          | Some
+              {
+                item =
+                  Db.Generic_schema.Track.(
+                    _, { server_id = Jellyfin server_id; album_id; _ });
+                _;
+              } ->
+              let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+              let connexion : DS.connexion = List.assq server_id servers in
+              Player.get_album_cover_link ~base_url:connexion.base_url
+                ~size:1024 ~album_id ~cover_type:Back
+              |> Fut.map Option.some)
     in
     let background =
-      Lwd.map src ~f:(fun (src, _) ->
+      Lwd.map src_front ~f:(fun src ->
           At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
     in
-    let src_front = Lwd.map src ~f:(fun (src, _) -> At.src (Jstr.v src)) in
     let backdrop_blur elts =
       let filter_style =
         At.style
@@ -142,31 +152,33 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         [ `R (Elwd.div ~at:[ `P filter_style ] elts) ]
     in
     let cover =
-      let front =
-        Elwd.img ~at:[ `R src_front; `P (At.class' (Jstr.v "face front")) ] ()
+      let front_img, front_status =
+        Brr_lwd_ui.Img.make
+          ~at:[ `P (At.class' (Jstr.v "face front")) ]
+          (Lwd.map src_front ~f:Option.some)
       in
-      let back =
-        Lwd.map src ~f:(fun (_, src) ->
-            let hold, fetch = Fut.create () in
-            ( Brr_lwd_ui.Img.make
-                ~at:[ `P (At.class' (Jstr.v "face back")) ]
-                ~placeholder:"track.png" ~hold src,
-              fetch ))
+      let (back_img, back_status), back_fetch =
+        let url =
+          Lwd.bind src_back ~f:(fun src ->
+              Brr_lwd_ui.Utils.var_of_fut ~init:None src |> Lwd.get)
+        in
+        let hold, fetch = Fut.create () in
+        ( Brr_lwd_ui.Img.make
+            ~at:[ `P (At.class' (Jstr.v "face back")) ]
+            ~hold url,
+          fetch )
       in
-      let back_img = Lwd.bind back ~f:(fun ((elt, _), _) -> elt) in
-      let back_status =
-        Lwd.bind back ~f:(fun ((_, status), _) -> Lwd.get status)
-      in
-      let back_fetch = Lwd.map back ~f:(fun (_, fetch) -> fetch) in
-      let back = Lwd.pair back_status back_fetch in
       let flipped =
-        Lwd.map2 (Lwd.get App_state.kiosk_cover) back
-          ~f:(fun view (status, fetch) ->
+        Lwd.map2 (Lwd.get App_state.kiosk_cover) (Lwd.get back_status)
+          ~f:(fun view status ->
             match (view, status) with
             | Back, Ready ->
-                ignore (fetch ());
+                Console.log [ "FETCH" ];
+                ignore (back_fetch ());
                 At.void
-            | Back, Ok -> At.class' (Jstr.v "flip")
+            | Back, Ok ->
+                Console.log [ "FLIP" ];
+                At.class' (Jstr.v "flip")
             | _, _ -> At.void)
       in
       let on_click =
@@ -177,10 +189,20 @@ let app (db : Brr_io.Indexed_db.Database.t) =
             | Back -> Front)
             |> Lwd.set App_state.kiosk_cover)
       in
+      let loading =
+        Lwd.map (Lwd.get front_status) ~f:(fun status ->
+            match status with
+            | Loading -> At.class' (Jstr.v "loading")
+            | _ -> At.void)
+      in
+      let classes = Lwd.return @@ Lwd_seq.of_list [ loading; flipped ] in
       Elwd.div
         ~ev:[ `P on_click ]
-        ~at:[ `P (At.class' (Jstr.v "two-face-cover")); `R flipped ]
-        [ `R back_img; `R front ]
+        ~at:
+          [
+            `P (At.class' (Jstr.v "two-face-cover")); `S (Lwd_seq.lift classes);
+          ]
+        [ `R back_img; `R front_img ]
     in
     let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
     Elwd.div ~at [ `R (backdrop_blur [ `R cover ]) ]
