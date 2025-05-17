@@ -32,6 +32,8 @@ module Brr = struct
 
     let draggable s = v Name.draggable s
   end
+
+  module Url = Url
 end
 
 module Brr_io = struct

@@ -32,6 +32,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
     let url =
       let connexion : DS.connexion = List.assq server_id servers in
       Player.cover_var ~base_url:connexion.base_url ~size:50 ~album_id
+        ~cover_type:Front
     in
     Lwd.map (Lwd.get url) ~f:(fun url -> At.src (Jstr.v url))
   in

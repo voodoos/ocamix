@@ -26,6 +26,11 @@ module Worker () = struct
   let last_view : (int * Db.Generic_schema.Track.Key.t array) ref =
     ref (-1, [||])
 
+  let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
+    Hashtbl.create 64
+
+  let invalidate_cache () = Hashtbl.reset view_memo
+
   let check_db idb source =
     let server_id, source = source in
     let report status =
@@ -33,6 +38,9 @@ module Worker () = struct
       dispatch_event Servers_status_update (server_id, status)
     in
     Db.Sync.check_and_sync ~report ~source idb
+    |> Fut.map (fun res ->
+           invalidate_cache ();
+           res)
 
   let idb =
     let idb, set_idb = Fut.create () in
@@ -45,9 +53,6 @@ module Worker () = struct
     let+ idb = idb in
     IDB.Database.transaction [ (module Store) ] ~mode idb
     |> IDB.Transaction.object_store (module Store)
-
-  let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
-    Hashtbl.create 64
 
   let match_filter ~filter elements =
     List.fold_left filter ~init:true ~f:(fun acc -> function
