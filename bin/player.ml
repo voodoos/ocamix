@@ -37,12 +37,12 @@ let idb =
   let _ = Db.with_idb @@ fun idb -> ignore (set_idb idb) in
   idb
 
-let get_album_cover_link ~base_url ~size ~album_id ~cover_type =
+let get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type =
   (* Todo for better user experience we should pre-fetch the images before
      updating the DOM. This is especially true for back covers that come from
      the coverart archive which can be slow to download. *)
   match album_id with
-  | None -> Fut.return "track.png"
+  | None -> Fut.return None
   | Some album_id ->
       let open Brr_io.Indexed_db in
       let open Db.Stores in
@@ -66,7 +66,10 @@ let get_album_cover_link ~base_url ~size ~album_id ~cover_type =
                 Printf.sprintf
                   "https://coverartarchive.org/release/%s/back-1200" mbid)
               mbid)
-      |> Option.value ~default:"track.png"
+
+let get_album_cover_link ~base_url ~size ~album_id ~cover_type =
+  get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type
+  |> Fut.map (Option.value ~default:"track.png")
 
 let cover_var ~base_url ~size ~album_id ~cover_type =
   Brr_lwd_ui.Utils.var_of_fut ~init:"track.png"

@@ -98,47 +98,47 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         | Kiosk -> At.void)
     in
     let src_front =
-      Lwd.bind (Lwd.get Player.now_playing) ~f:(fun np ->
-          let open Lwd_infix in
-          let$ src =
-            match np with
-            | None -> Lwd.pure "track.png"
-            | Some
+      Lwd.map (Lwd.get Player.now_playing) ~f:(function
+        | None -> Fut.return (Some "track.png")
+        | Some
+            {
+              item =
+                Db.Generic_schema.Track.(
+                  _, { server_id = Jellyfin server_id; album_id; _ });
+              _;
+            } ->
+            let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+            let connexion : DS.connexion = List.assq server_id servers in
+            Player.get_album_cover_link_opt ~base_url:connexion.base_url
+              ~size:1024 ~album_id ~cover_type:Front)
+    in
+    let src_back =
+      Lwd.map2 (Lwd.get Player.now_playing) (Lwd.get App_state.kiosk_cover)
+        ~f:(fun np back ->
+          match (np, back) with
+          | ( Some
                 {
                   item =
                     Db.Generic_schema.Track.(
                       _, { server_id = Jellyfin server_id; album_id; _ });
                   _;
-                } ->
-                let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
-                let connexion : DS.connexion = List.assq server_id servers in
-                Player.cover_var ~base_url:connexion.base_url ~size:1024
-                  ~album_id ~cover_type:Front
-                |> Lwd.get
-            (* We don't want Lwd vars here but futures *)
-          in
-          src)
-    in
-    let src_back =
-      Lwd.map (Lwd.get Player.now_playing) ~f:(fun np ->
-          match np with
-          | None -> Fut.return None
-          | Some
-              {
-                item =
-                  Db.Generic_schema.Track.(
-                    _, { server_id = Jellyfin server_id; album_id; _ });
-                _;
-              } ->
+                },
+              Back ) ->
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
               Player.get_album_cover_link ~base_url:connexion.base_url
                 ~size:1024 ~album_id ~cover_type:Back
-              |> Fut.map Option.some)
+              |> Fut.map Option.some
+          | _, _ -> Fut.return None)
     in
+    let front_image_preloader = Brr_lwd_ui.Img.preloader src_front in
+    let back_image_preloader = Brr_lwd_ui.Img.preloader src_back in
+    let front_image_status = Brr_lwd_ui.Img.status front_image_preloader in
+    let back_image_status = Brr_lwd_ui.Img.status back_image_preloader in
     let background =
-      Lwd.map src_front ~f:(fun src ->
-          At.style (Jstr.v (Printf.sprintf "background-image: url(%S)" src)))
+      Lwd.map (Brr_lwd_ui.Img.object_url front_image_preloader) ~f:(fun src ->
+          let src = Option.value ~default:"track.png" src in
+          At.style (Jstr.v (Printf.sprintf "background-image: url(%s)" src)))
     in
     let backdrop_blur elts =
       let filter_style =
@@ -152,34 +152,29 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         [ `R (Elwd.div ~at:[ `P filter_style ] elts) ]
     in
     let cover =
-      let front_img, front_status =
-        Brr_lwd_ui.Img.make
+      let front_img =
+        Brr_lwd_ui.Img.render_img ~revoke_on_load:true
           ~at:[ `P (At.class' (Jstr.v "face front")) ]
-          (Lwd.map src_front ~f:Option.some)
+          front_image_preloader
       in
-      let (back_img, back_status), back_fetch =
-        let url =
-          Lwd.bind src_back ~f:(fun src ->
-              Brr_lwd_ui.Utils.var_of_fut ~init:None src |> Lwd.get)
-        in
-        let hold, fetch = Fut.create () in
-        ( Brr_lwd_ui.Img.make
-            ~at:[ `P (At.class' (Jstr.v "face back")) ]
-            ~hold url,
-          fetch )
+      let back_img =
+        Brr_lwd_ui.Img.render_img ~revoke_on_load:true
+          ~at:[ `P (At.class' (Jstr.v "face back")) ]
+          back_image_preloader
       in
       let flipped =
-        Lwd.map2 (Lwd.get App_state.kiosk_cover) (Lwd.get back_status)
+        (* We need to keep track of previous state to debounce flippling *)
+        let is_flipped = ref false in
+        Lwd.map2 (Lwd.get App_state.kiosk_cover) back_image_status
           ~f:(fun view status ->
             match (view, status) with
-            | Back, Ready ->
-                Console.log [ "FETCH" ];
-                ignore (back_fetch ());
-                At.void
             | Back, Ok ->
-                Console.log [ "FLIP" ];
+                is_flipped := true;
                 At.class' (Jstr.v "flip")
-            | _, _ -> At.void)
+            | Back, Loading when !is_flipped -> At.class' (Jstr.v "flip")
+            | _, _ ->
+                is_flipped := false;
+                At.void)
       in
       let on_click =
         Elwd.handler Ev.click (fun e ->
@@ -189,22 +184,32 @@ let app (db : Brr_io.Indexed_db.Database.t) =
             | Back -> Front)
             |> Lwd.set App_state.kiosk_cover)
       in
-      let loading =
-        Lwd.map (Lwd.get front_status) ~f:(fun status ->
-            match status with
-            | Loading -> At.class' (Jstr.v "loading")
-            | _ -> At.void)
-      in
-      let classes = Lwd.return @@ Lwd_seq.of_list [ loading; flipped ] in
       Elwd.div
         ~ev:[ `P on_click ]
-        ~at:
-          [
-            `P (At.class' (Jstr.v "two-face-cover")); `S (Lwd_seq.lift classes);
-          ]
+        ~at:[ `P (At.class' (Jstr.v "two-face-cover")); `R flipped ]
         [ `R back_img; `R front_img ]
     in
-    let at = [ `R display_none; `P (At.class' (Jstr.v "big-cover")) ] in
+    let loading =
+      Lwd.map2 front_image_status back_image_status ~f:(fun s1 s2 ->
+          match (s1, s2) with
+          | Loading, _ | _, Loading -> At.class' (Jstr.v "loading")
+          | _ -> At.void)
+    in
+    let no_back_image =
+      Lwd.map2 (Lwd.get App_state.kiosk_cover) back_image_status
+        ~f:(fun v status ->
+          match (v, status) with
+          | Back, Error -> At.class' (Jstr.v "no-back")
+          | _ -> At.void)
+    in
+    let more_classes =
+      (* TODO It looks like a Brr_lwd issue that we need a seq to have multiple
+         reactive classes.*)
+      Lwd.pure @@ Lwd_seq.of_list [ display_none; no_back_image; loading ]
+    in
+    let at =
+      [ `P (At.class' (Jstr.v "big-cover")); `S (Lwd_seq.lift more_classes) ]
+    in
     Elwd.div ~at [ `R (backdrop_blur [ `R cover ]) ]
   in
   Elwd.div

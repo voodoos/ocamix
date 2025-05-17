@@ -111,7 +111,7 @@ module Lwd_map = struct
     let map = Hashtbl.create size in
     { table; map }
 
-  let set t key value =
+  let front_image_preloader t key value =
     let row =
       match Hashtbl.find_opt t.map key with
       | Some row_var -> row_var
@@ -257,7 +257,7 @@ let lwd_of_yjs_map (type value) ~(f : key:string -> Yjs.Map.value -> value) map
   let lwd_map : value Lwd_map.t = Lwd_map.make () in
   ignore
     (Map.fold_entries map
-       ~f:(fun key v () -> Lwd_map.set lwd_map key (f ~key v))
+       ~f:(fun key v () -> Lwd_map.front_image_preloader lwd_map key (f ~key v))
        ~init:());
 
   (* Observe changes *)
@@ -272,7 +272,7 @@ let lwd_of_yjs_map (type value) ~(f : key:string -> Yjs.Map.value -> value) map
             old_value = _;
           } ->
             let new_value = f ~key new_value in
-            Lwd_map.set lwd_map key new_value
+            Lwd_map.front_image_preloader lwd_map key new_value
         | { Map.Event.action = Delete; old_value; _ } ->
             Console.debug
               [ "Key:"; key; "Action: delete"; "Old value:"; old_value ]
