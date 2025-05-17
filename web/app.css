@@ -140,12 +140,43 @@ body {
   }
 }
 
+@keyframes spinner {
+  to { transform: rotate(360deg); }
+}
 
 .big-cover {
   width: 100%;
   height: 100%;
   position: absolute;
   z-index: 100;
+
+  &.no-back::after {
+    content: "NO BⒶCK IMAGE";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    background-color: crimson;
+    border-radius: 13px;
+    padding: 0.3em 0.5em;
+    margin: 0.3em;
+    color: whitesmoke;
+  }
+
+  &.loading::after {
+    content: "";
+    background-image: url('data:image/svg+xml,<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg"><circle class="spin" cx="400" cy="400" fill="none" r="200" stroke-width="50" stroke="white" stroke-dasharray="608 1400" stroke-linecap="round" /></svg>');;
+    animation: spinner 1.5s linear infinite;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    border-radius: 28px;
+    margin: 0.3em;
+    color: whitesmoke;
+    line-height: 1em;
+    font-size: 2em;
+    width: 3rem;
+    height: 3rem;
+  }
 
   & > div {
     /* background cover */
@@ -165,10 +196,6 @@ body {
   & .two-face-cover {
     width: 100%;
     height: 100%;
-
-    &.loading {
-      opacity: 0;
-    }
   }
 }
 
