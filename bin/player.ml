@@ -37,9 +37,12 @@ let idb =
   let _ = Db.with_idb @@ fun idb -> ignore (set_idb idb) in
   idb
 
-let get_album_cover_link ~base_url ~size ~album_id =
+let get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type =
+  (* Todo for better user experience we should pre-fetch the images before
+     updating the DOM. This is especially true for back covers that come from
+     the coverart archive which can be slow to download. *)
   match album_id with
-  | None -> Fut.return "track.png"
+  | None -> Fut.return None
   | Some album_id ->
       let open Brr_io.Indexed_db in
       let open Db.Stores in
@@ -52,16 +55,25 @@ let get_album_cover_link ~base_url ~size ~album_id =
         |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
       in
       let+ album_id = Albums_by_idx.get album_id index |> Request.fut_exn in
-      Option.map
-        (fun { Album.id = Id.Jellyfin id; _ } ->
-          Printf.sprintf "%s/Items/%s/Images/Primary?width=%i&format=Jpg"
-            base_url id size)
-        album_id
-      |> Option.value ~default:"track.png"
+      Option.bind album_id (fun { Album.id = Id.Jellyfin id; mbid; _ } ->
+          if Equal.poly cover_type App_state.Front then
+            Some
+              (Printf.sprintf "%s/Items/%s/Images/Primary?width=%i&format=Jpg"
+                 base_url id size)
+          else
+            Option.map
+              (fun mbid ->
+                Printf.sprintf
+                  "https://coverartarchive.org/release/%s/back-1200" mbid)
+              mbid)
 
-let cover_var ~base_url ~size ~album_id =
+let get_album_cover_link ~base_url ~size ~album_id ~cover_type =
+  get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type
+  |> Fut.map (Option.value ~default:"track.png")
+
+let cover_var ~base_url ~size ~album_id ~cover_type =
   Brr_lwd_ui.Utils.var_of_fut ~init:"track.png"
-  @@ get_album_cover_link ~base_url ~size ~album_id
+  @@ get_album_cover_link ~base_url ~size ~album_id ~cover_type
 
 module Playback_controller (P : sig
   val fetch :
@@ -101,7 +113,7 @@ struct
                 let session = of_navigator G.navigator in
                 let cover =
                   get_album_cover_link ~base_url:connexion.base_url ~size:500
-                    ~album_id
+                    ~album_id ~cover_type:Front
                 in
                 let title = name in
                 let album = "" in
@@ -226,7 +238,7 @@ struct
                     in
                     Lwd.get
                     @@ cover_var ~base_url:connexion.base_url ~size:500
-                         ~album_id)
+                         ~album_id ~cover_type:Front)
           in
           Lwd.map (Lwd.join cover) ~f:(fun src ->
               Printf.sprintf "background-image: url(%S)" src)
@@ -242,7 +254,8 @@ struct
               (match Lwd.peek App_state.active_layout with
               | Kiosk -> Main
               | Main -> Kiosk)
-              |> Lwd.set App_state.active_layout)
+              |> Lwd.set App_state.active_layout;
+              Lwd.set App_state.kiosk_cover Front)
         in
         Elwd.a
           ~ev:[ `P on_click ]
