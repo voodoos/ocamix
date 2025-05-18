@@ -126,9 +126,8 @@ let app (db : Brr_io.Indexed_db.Database.t) =
               Back ) ->
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
-              Player.get_album_cover_link ~base_url:connexion.base_url
+              Player.get_album_cover_link_opt ~base_url:connexion.base_url
                 ~size:1024 ~album_id ~cover_type:Back
-              |> Fut.map Option.some
           | _, _ -> Fut.return None)
     in
     let front_image_preloader = Brr_lwd_ui.Img.preloader src_front in
