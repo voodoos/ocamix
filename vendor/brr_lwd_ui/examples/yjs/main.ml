@@ -898,6 +898,7 @@ let ui_table ~columns_src ~rows_src names =
               in
               Columns.v "a" "1fr" [ `R label; `R delete ])
             names;
+        status = [];
       };
     row_height = Em 5.;
   }

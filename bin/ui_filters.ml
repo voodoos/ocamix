@@ -280,14 +280,14 @@ let status =
               Printf.sprintf "%.*f s" 2 seconds
             else Printf.sprintf "%i ms" i
           in
-          El.txt' @@ Printf.sprintf "in %s" duration)
-    |> fun txt -> Elwd.div [ `R txt ]
+          El.txt' @@ Printf.sprintf " in %s" duration)
+    |> fun txt -> Elwd.span [ `R txt ]
   in
   let item_count =
     Lwd.map (Lwd.get view) ~f:(fun { View.item_count; duration; _ } ->
         let duration = Duration.pp_approx_duration duration in
         El.txt' @@ Printf.sprintf "%i results, %s" item_count duration)
-    |> fun txt -> Elwd.div [ `R txt ]
+    |> fun txt -> Elwd.span [ `R txt ]
   in
   [ `R item_count; `R spinner ]
 
@@ -296,6 +296,6 @@ let bar =
   let first_row =
     Elwd.div ~at [ `R library_chooser; `R genre_chooser; `R artist_chooser ]
   in
-  let second_row = Elwd.div ~at (search_and_sort @ status) in
+  let second_row = Elwd.div ~at search_and_sort in
   let at = Attrs.O.(v (`P (C "filters-container"))) in
   Elwd.div ~at [ `R first_row; `R second_row ]

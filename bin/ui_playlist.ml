@@ -19,7 +19,8 @@ let columns () =
            v "Duration" "5rem" @@ [ `P (El.txt' "Duration") ];
          |]
 
-let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
+let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
+    (view : Lwd_view.ordered) =
   let ranged =
     Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun view order ->
         { View.view; first = 0; last = 0; order })
@@ -77,7 +78,7 @@ let make ~reset_playlist ~fetch ?scroll_target (view : Lwd_view.ordered) =
   in
   let placeholder _i = [ `P (El.txt' "Loading...") ] in
   let ui_table =
-    { Table.table = { columns = columns () }; row_height = Em 4. }
+    { Table.table = { columns = columns (); status }; row_height = Em 4. }
   in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in

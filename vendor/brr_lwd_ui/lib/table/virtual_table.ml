@@ -232,6 +232,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
         else result)
   in
   let table_header = Schema.header ui_table in
+  let table_status = Schema.status ui_table.table in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
@@ -289,7 +290,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let grid_style = Schema.style ui_table in
     let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
     let at = `R s :: at in
-    Elwd.div ~at [ `R table_header; `R wrapper ]
+    Elwd.div ~at [ `R table_header; `R wrapper; `R table_status ]
   in
   table
 
