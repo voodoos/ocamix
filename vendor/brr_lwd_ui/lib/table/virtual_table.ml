@@ -13,13 +13,15 @@ module FRef = Utils.Forward_ref
 
 let logger = Logger.for_section "virtual table"
 
+type 'a row_renderer = int -> 'a -> Elwd.t Elwd.col
 type 'a row_data = { index : int; content : 'a Fut.t option }
 
-type ('data, 'error) data_source = {
-  total_items : int Lwd.t;
-  fetch : (int array -> ('data, 'error) Fut.result array) Lwd.t;
-  render : (int -> 'data -> Elwd.t Elwd.col) Lwd.t;
-}
+type ('data, 'error) data_source =
+  | Lazy of {
+      total_items : int Lwd.t;
+      fetch : (int array -> ('data, 'error) Fut.result array) Lwd.t;
+          (* TODO: the whole source should be reactive *)
+    }
 
 (* The virtual table is a complex reactive component. Primarily, it reacts to
    changes of the [data_source] so that content in the table is properly
@@ -28,10 +30,10 @@ type ('data, 'error) data_source = {
    that the visible part of the talbe is always populated with rows. *)
 module Cache = FFCache.Make (Int)
 
-let make (type data) ~(ui_table : Schema.fixed_row_height)
+let make (type data) ~(layout : Layout.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
-    ?(scroll_target : int Lwd.t option)
-    ({ total_items; fetch; render } : (data, _) data_source) =
+    ?(scroll_target : int Lwd.t option) (render : data row_renderer Lwd.t)
+    (data_source : (data, _) data_source) =
   let module State = struct
     (* The wrapper_div ref should be initialized with the correct element as
        soon as it is created. It is not reactive per se. *)
@@ -45,7 +47,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
        execution when the browser is resized or other layout changes are made. *)
     let _window_height : int option Lwd.var = Lwd.var None
   end in
-  let row_size = ui_table.row_height |> Utils.Unit.to_string in
+  let row_size = layout.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let table : data row_data Lwd_table.t = Lwd_table.make () in
@@ -104,7 +106,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let () = last_scroll_y := scroll_y in
     let visible_height = height div in
     let parent = Utils.Forward_ref.get_exn State.content_div in
-    let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
+    let row_height = Utils.Unit.to_px ~parent layout.row_height in
     logger.debug [ "Visible height:"; visible_height; "Row height"; row_height ];
     let number_of_visible_rows =
       Int.of_float (ceil (visible_height /. row_height))
@@ -141,16 +143,19 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           incr i;
           current_row := Lwd_table.next row
       | None ->
-          if !i <= total - 1 then (
-            let set = { index = !i; content = None } in
-            let row = Lwd_table.append ~set table in
-            Hashtbl.add row_index !i row;
-            incr i;
-            current_row := Lwd_table.next row)
+          let set = { index = !i; content = None } in
+          let row = Lwd_table.append ~set table in
+          Hashtbl.add row_index !i row;
+          incr i;
+          current_row := Lwd_table.next row
     done
   in
   let populate_on_scroll =
     let last_scroll_y = ref 0. in
+    let total_items, fetch =
+      match data_source with
+      | Lazy { total_items; fetch } -> (total_items, fetch)
+    in
     let update =
       Lwd.map fetch ~f:(fun fetch () ->
           let visible_rows = compute_visible_rows ~last_scroll_y in
@@ -231,8 +236,8 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
-  let table_header = Schema.header ui_table in
-  let table_status = Schema.status ui_table.table in
+  let table_header = Layout.header layout in
+  let table_status = Schema.status layout in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
@@ -276,7 +281,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           Lwd.map scroll_target ~f:(fun i ->
               let row_height =
                 let parent = Utils.Forward_ref.get_exn State.content_div in
-                Int.of_float (Utils.Unit.to_px ~parent ui_table.row_height)
+                Int.of_float (Utils.Unit.to_px ~parent layout.row_height)
               in
               Some (Controlled_scroll.Pos (i * row_height)))
         in
@@ -287,7 +292,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let table =
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Schema.style ui_table in
+    let grid_style = Layout.style layout in
     let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
     let at = `R s :: at in
     Elwd.div ~at [ `R table_header; `R wrapper; `R table_status ]

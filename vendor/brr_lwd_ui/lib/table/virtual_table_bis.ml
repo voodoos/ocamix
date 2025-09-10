@@ -43,7 +43,7 @@ let lwd_table_concat t1 t2 =
   aux @@ Lwd_table.first t2;
   t1
 
-let make (type data) ~(ui_table : Schema.fixed_row_height)
+let make (type data) ~(layout : Layout.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ?(scroll_target : int Lwd.t option)
     ({ total_items = _; source_rows; render } : (data, _) data_source) =
@@ -62,7 +62,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
        execution when the browser is resized or other layout changes are made. *)
     let _window_height : int option Lwd.var = Lwd.var None
   end in
-  let row_size = ui_table.row_height |> Utils.Unit.to_string in
+  let row_size = layout.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let table_rows : data row_data Lwd_seq.t Lwd.t =
@@ -129,7 +129,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
     let () = last_scroll_y := scroll_y in
     let visible_height = height div in
     let parent = Utils.Forward_ref.get_exn State.content_div in
-    let row_height = Utils.Unit.to_px ~parent ui_table.row_height in
+    let row_height = Utils.Unit.to_px ~parent layout.row_height in
     logger.debug [ "Visible height:"; visible_height; "Row height"; row_height ];
     let number_of_visible_rows =
       Int.of_float (ceil (visible_height /. row_height))
@@ -245,7 +245,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
-  let table_header = Schema.header ui_table in
+  let table_header = Layout.header layout in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
@@ -301,7 +301,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
           Lwd.map scroll_target ~f:(fun i ->
               let row_height =
                 let parent = Utils.Forward_ref.get_exn State.content_div in
-                Int.of_float (Utils.Unit.to_px ~parent ui_table.row_height)
+                Int.of_float (Utils.Unit.to_px ~parent layout.row_height)
               in
               Some (Controlled_scroll.Pos (i * row_height)))
         in
@@ -311,7 +311,7 @@ let make (type data) ~(ui_table : Schema.fixed_row_height)
   in
   let table =
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Schema.style ui_table in
+    let grid_style = Layout.style layout in
     let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
     let at = `R s :: at in
     Elwd.div ~at [ `R table_header; `R wrapper ]

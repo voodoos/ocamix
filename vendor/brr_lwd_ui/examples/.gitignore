@@ -1,3 +1,4 @@
 *.css
 bundle.js*
+*.bc.js
 !main.css
