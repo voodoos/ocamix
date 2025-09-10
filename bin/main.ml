@@ -70,7 +70,8 @@ let app (db : Brr_io.Indexed_db.Database.t) =
   in
   (* TODO filter and view does not update correctly while syncing *)
   let main_list =
-    Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch main_view
+    let status = Ui_filters.status in
+    Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch ~status main_view
   in
   let now_playing =
     let playlist =
