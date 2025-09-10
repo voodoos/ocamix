@@ -237,7 +237,7 @@ let make (type data) ~(layout : Layout.fixed_row_height)
         else result)
   in
   let table_header = Layout.header layout in
-  let table_status = Schema.status layout in
+  let table_status = Layout.status layout in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->

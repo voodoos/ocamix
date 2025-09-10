@@ -3,35 +3,34 @@ open Brr_lwd
 open Brr_lwd_ui
 open Brr_lwd_ui.Table
 
+let renderer =
+ fun i data ->
+  [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]
+
 let data =
-  {
-    Virtual.total_items = Lwd.pure 300;
-    fetch =
-      Lwd.pure (fun i ->
-          (* Console.log [ "Loading"; Jv.of_array Jv.of_int i ]; *)
-          Array.map (fun i -> Fut.ok (i * i)) i);
-    render =
-      Lwd.pure (fun i data ->
-          [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]);
-  }
+  Virtual.Lazy
+    {
+      total_items = Lwd.pure 300;
+      fetch =
+        Lwd.pure (fun i ->
+            (* Console.log [ "Loading"; Jv.of_array Jv.of_int i ]; *)
+            Array.map (fun i -> Fut.ok (i * i)) i);
+    }
 
 let app =
-  let table =
-    {
-      columns =
-        Lwd.pure
-        @@ Lwd_seq.of_array
-             [|
-               Columns.v "a" "5em" [ `P (El.txt' "id") ];
-               Columns.v "a" "1fr" [ `P (El.txt' "square") ];
-             |];
-      status = [];
-    }
+  let columns =
+    Lwd.pure
+    @@ Lwd_seq.of_array
+         [|
+           Columns.v "a" "5em" [ `P (El.txt' "id") ];
+           Columns.v "a" "1fr" [ `P (El.txt' "square") ];
+         |]
   in
-  let table = { table; row_height = Em 5. } in
+  let layout = { columns; status = []; row_height = Em 5. } in
   let scroll_target = Lwd.var 0 in
   let table =
-    Virtual.make ~ui_table:table ~scroll_target:(Lwd.get scroll_target) data
+    Virtual.make ~layout ~scroll_target:(Lwd.get scroll_target)
+      (Lwd.return renderer) data
   in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))

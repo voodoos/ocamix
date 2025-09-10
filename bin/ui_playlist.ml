@@ -77,16 +77,14 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     ]
   in
   let placeholder _i = [ `P (El.txt' "Loading...") ] in
-  let ui_table =
-    { Table.table = { columns = columns (); status }; row_height = Em 4. }
-  in
+  let layout = { Table.columns = columns (); status; row_height = Em 4. } in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
-    let render = Lwd.pure (render ranged) in
-    { Table.Virtual.total_items; fetch; render }
+    Table.Virtual.Lazy { total_items; fetch }
   in
-  Table.Virtual.make ~ui_table ~placeholder ?scroll_target data_source
+  let render = Lwd.pure (render ranged) in
+  Table.Virtual.make ~layout ~placeholder ?scroll_target render data_source
 
 let make_now_playing ~reset_playlist ~fetch view =
   let scroll_target = Lwd.get Player.playstate.current_index in

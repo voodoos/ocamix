@@ -859,47 +859,44 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
       in
       Yjs.Array.push rows [| `Map cells |])
 
-let ui_table ~columns_src ~rows_src names =
+let layout ~columns_src ~rows_src names =
   {
-    table =
-      {
-        columns =
-          Lwd_seq.map
-            (fun ({ name; id; _ } : column_info) ->
-              let label = Lwd.map name ~f:El.txt' in
-              let delete =
-                let on_click _ =
-                  let findi id =
-                    let exception Found of int in
-                    try
-                      (* TODO this should be done elsewhere (in Schema ?) *)
-                      Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
-                          match v with
-                          | `Map m -> (
-                              match
-                                Yjs.Map.get m ~key:S.Data.Table.Column_info.id
-                              with
-                              | Some (`Jv s)
-                                when String.equal id (Jv.to_string s) ->
-                                  raise (Found index)
-                              | _ -> ())
-                          | _ -> ());
-                      raise Not_found
-                    with Found i -> i
-                  in
-                  Yjs.Doc.transact yjs_doc (fun () ->
-                      Yjs.Array.delete columns_src (findi id) 1;
-                      Yjs.Array.iter rows_src ~f:(fun ~index:_ v _ ->
-                          match v with `Map m -> Yjs.Map.delete m id | _ -> ()))
-                in
-                Elwd.button
-                  ~ev:[ `P (Elwd.handler Ev.click on_click) ]
-                  [ `P (El.txt' "❌") ]
+    columns =
+      Lwd_seq.map
+        (fun ({ name; id; _ } : column_info) ->
+          let label = Lwd.map name ~f:El.txt' in
+          let delete =
+            let on_click _ =
+              let findi id =
+                let exception Found of int in
+                try
+                  (* TODO this should be done elsewhere (in Schema ?) *)
+                  Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
+                      match v with
+                      | `Map m -> (
+                          match
+                            Yjs.Map.get m ~key:S.Data.Table.Column_info.id
+                          with
+                          | Some (`Jv s) when String.equal id (Jv.to_string s)
+                            ->
+                              raise (Found index)
+                          | _ -> ())
+                      | _ -> ());
+                  raise Not_found
+                with Found i -> i
               in
-              Columns.v "a" "1fr" [ `R label; `R delete ])
-            names;
-        status = [];
-      };
+              Yjs.Doc.transact yjs_doc (fun () ->
+                  Yjs.Array.delete columns_src (findi id) 1;
+                  Yjs.Array.iter rows_src ~f:(fun ~index:_ v _ ->
+                      match v with `Map m -> Yjs.Map.delete m id | _ -> ()))
+            in
+            Elwd.button
+              ~ev:[ `P (Elwd.handler Ev.click on_click) ]
+              [ `P (El.txt' "❌") ]
+          in
+          Columns.v "a" "1fr" [ `R label; `R delete ])
+        names;
+    status = [];
     row_height = Em 5.;
   }
 
@@ -915,8 +912,8 @@ let render_page_item ({ data; _ } : page_item) =
             (fun _ column_info -> Lwd_seq.element column_info)
             Lwd_seq.monoid columns.table
         in
-        let ui_table = ui_table ~columns_src ~rows_src columns in
-        Virtual_bis.make ~ui_table data_source
+        let layout = layout ~columns_src ~rows_src columns in
+        Virtual_bis.make ~layout data_source
       in
       Elwd.div
         ~at:Attrs.O.(v (`P (C "flex")))
