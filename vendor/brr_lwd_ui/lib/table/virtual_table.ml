@@ -56,24 +56,15 @@ let make (type data) ~(layout : Layout.fixed_row_height)
   let row_index : (int, data row_data Lwd_table.row) Hashtbl.t =
     Hashtbl.create 2048
   in
-  let unload i =
-    let open Option.Infix in
-    (let* row = Hashtbl.get row_index i in
-     let+ row_data = Lwd_table.get row in
-     Lwd_table.set row { row_data with content = None })
-    |> ignore
-  in
   let new_cache () = Cache.create ~size:50 in
   (* The cache is some sort of LRU to keep live the content of recently seen
      rows *)
   let cache_ref = ref (new_cache ()) in
-  let add ~fetch ?(max_items = 200) indexes =
-    let cache = !cache_ref in
-    let load indexes =
-      (let data : (data, _) Fut.result array = fetch indexes in
-       Array.iter2 indexes data ~f:(fun i (data : (data, _) Fut.result) ->
+  let load_or_bump_in_cache ~fetch ?(max_items = 200) rows =
+    let load rows =
+      (let data : (data, _) Fut.result array = fetch (Array.map ~f:fst rows) in
+       Array.iter2 rows data ~f:(fun (_, row) (data : (data, _) Fut.result) ->
            (let open Option.Infix in
-            let* row = Hashtbl.get row_index i in
             let+ row_data = Lwd_table.get row in
             let data =
               data
@@ -85,12 +76,20 @@ let make (type data) ~(layout : Layout.fixed_row_height)
            |> ignore))
       |> ignore
     in
-    let cache, to_load =
-      List.fold_left ~init:(cache, []) indexes ~f:(fun (cache, acc) i ->
-          ignore max_items (* cache is not configurable right now *);
-          let cache, inserted = Cache.insert ~on_evict:unload cache i i in
-          if inserted then (cache, i :: acc) else (cache, acc))
+    let unload row =
+      Lwd_table.get row
+      |> Option.iter (fun row_data ->
+             Lwd_table.set row { row_data with content = None })
     in
+    let cache, to_load =
+      List.fold_left ~init:(!cache_ref, []) rows
+        ~f:(fun (cache, acc) (i, row) ->
+          ignore max_items (* cache is not configurable right now *);
+
+          let cache, inserted = Cache.insert ~on_evict:unload cache i row in
+          if inserted then (cache, (i, row) :: acc) else (cache, acc))
+    in
+    (* So much for the purely functionnal cache^^ *)
     cache_ref := cache;
     match Array.of_list to_load with [||] -> () | to_load -> load to_load
   in
@@ -107,7 +106,6 @@ let make (type data) ~(layout : Layout.fixed_row_height)
     let visible_height = height div in
     let parent = Utils.Forward_ref.get_exn State.content_div in
     let row_height = Utils.Unit.to_px ~parent layout.row_height in
-    logger.debug [ "Visible height:"; visible_height; "Row height"; row_height ];
     let number_of_visible_rows =
       Int.of_float (ceil (visible_height /. row_height))
     in
@@ -158,10 +156,18 @@ let make (type data) ~(layout : Layout.fixed_row_height)
     in
     let update =
       Lwd.map fetch ~f:(fun fetch () ->
-          let visible_rows = compute_visible_rows ~last_scroll_y in
+          let visible_rows_indexes = compute_visible_rows ~last_scroll_y in
           (* todo: We do way too much work and rebuild the queue each
              time... it's very ineficient *)
-          add ~fetch ~max_items:(4 * List.length visible_rows) visible_rows)
+          let visible_rows =
+            List.filter_map
+              ~f:(fun idx ->
+                Hashtbl.get row_index idx |> Option.map (Pair.make idx))
+              visible_rows_indexes
+          in
+          load_or_bump_in_cache ~fetch
+            ~max_items:(4 * List.length visible_rows)
+            visible_rows)
     in
     Lwd.map2 total_items update ~f:(fun total_items update ->
         prepare ~total_items;
