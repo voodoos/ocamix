@@ -102,3 +102,13 @@ let var_of_fut_opt fut =
   v
 
 let wait_and_set v fut = Fut.await fut (Lwd.set v)
+
+let measure_execution_time name f () =
+  let before = Brr.Performance.now_ms G.performance in
+  let result = f () in
+  Console.debug
+    [
+      Printf.sprintf "%s took %fms" name
+        (Brr.Performance.now_ms G.performance -. before);
+    ];
+  result
