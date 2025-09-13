@@ -76,7 +76,14 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       `P (El.div [ El.span [ El.txt' duration ] ]);
     ]
   in
-  let placeholder _i = [ `P (El.txt' "Loading...") ] in
+  let placeholder i =
+    [
+      `P (El.txt' (string_of_int (i + 1)));
+      `P (El.nbsp ());
+      `P (El.txt' "Loading...");
+      `P (El.nbsp ());
+    ]
+  in
   let layout = { Table.columns = columns (); status; row_height = Em 4. } in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
