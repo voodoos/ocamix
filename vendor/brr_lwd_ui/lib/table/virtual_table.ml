@@ -14,7 +14,11 @@ module FRef = Utils.Forward_ref
 let logger = Logger.for_section "virtual table"
 
 type 'a row_renderer = int -> 'a -> Elwd.t Elwd.col
-type 'a row_data = { index : int; content : 'a Fut.t option }
+
+type ('a, 'error) row_data = {
+  index : int;
+  content : ('a, 'error) Fut.result option;
+}
 
 type ('data, 'error) data_source =
   | Lazy of {
@@ -30,10 +34,10 @@ type ('data, 'error) data_source =
    that the visible part of the talbe is always populated with rows. *)
 module Cache = FFCache.Make (Int)
 
-let make (type data) ~(layout : Layout.fixed_row_height)
+let make (type data error) ~(layout : Layout.fixed_row_height)
     ?(placeholder : int -> Elwd.t Elwd.col = fun _ -> [])
     ?(scroll_target : int Lwd.t option) (render : data row_renderer Lwd.t)
-    (data_source : (data, _) data_source) =
+    (data_source : (data, error) data_source) =
   let module State = struct
     (* The wrapper_div ref should be initialized with the correct element as
        soon as it is created. It is not reactive per se. *)
@@ -50,10 +54,10 @@ let make (type data) ~(layout : Layout.fixed_row_height)
   let row_size = layout.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
-  let table : data row_data Lwd_table.t = Lwd_table.make () in
+  let table : (data, error) row_data Lwd_table.t = Lwd_table.make () in
   (* The [row_index] table is used to provide fast random access to the table's
      rows in the observer's callback *)
-  let row_index : (int, data row_data Lwd_table.row) Hashtbl.t =
+  let row_index : (int, (data, error) row_data Lwd_table.row) Hashtbl.t =
     Hashtbl.create 2048
   in
   let new_cache () = Cache.create ~size:50 in
@@ -66,13 +70,7 @@ let make (type data) ~(layout : Layout.fixed_row_height)
        Array.iter2 rows data ~f:(fun (_, row) (data : (data, _) Fut.result) ->
            (let open Option.Infix in
             let+ row_data = Lwd_table.get row in
-            let data =
-              data
-              |> Fut.map (function Ok data -> data | _ -> raise Not_found)
-            in
-            (* todo: let users provide comparison *)
-            if not (Equal.poly row_data.content @@ Some data) then
-              Lwd_table.set row { row_data with content = Some data })
+            Lwd_table.set row { row_data with content = Some data })
            |> ignore))
       |> ignore
     in
@@ -195,9 +193,13 @@ let make (type data) ~(layout : Layout.fixed_row_height)
         let rendered_row =
           let data = Utils.var_of_fut_opt data in
           Lwd.map2 render (Lwd.get data) ~f:(fun render -> function
-            | Some data ->
+            | Some (Ok data) ->
                 Lwd_seq.of_list
                   (List.map (render index data) ~f:(fun elt -> Elwd.div [ elt ]))
+            | Some (Error err) ->
+                Console.error [ err ];
+                Lwd_seq.of_list
+                  (List.map (placeholder index) ~f:(fun elt -> Elwd.div [ elt ]))
             | None ->
                 Lwd_seq.of_list
                   (List.map (placeholder index) ~f:(fun elt -> Elwd.div [ elt ])))
