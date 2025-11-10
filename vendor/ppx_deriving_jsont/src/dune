@@ -6,5 +6,4 @@
  (preprocess
   (pps ppxlib.metaquot))
  (ppx_runtime_libraries jsont)
- (modules ppx_deriving_jsont)
  (kind ppx_deriver))

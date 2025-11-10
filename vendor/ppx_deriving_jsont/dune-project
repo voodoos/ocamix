@@ -5,18 +5,18 @@
 (source
  (github voodoos/ppx_deriving_jsont))
 
-(license AGPL-3.0)
+(license MIT)
 
 (authors "Ulysse Gérard")
 
-(maintainers "")
+(maintainers "Ulysse Gérard")
 
 (package
  (allow_empty)
  (name ppx_deriving_jsont)
  (synopsis "A ppx deriver for Jsont")
- (description "A _really_ long description")
+ (description "A convenient tool to generate Jsont descriptions for various OCaml types.")
  (depends
-  ppxlib
-  jsont
+  (ppxlib (>= 0.36.0))
+  (jsont :with-test)
   (bytesrw :with-test)))

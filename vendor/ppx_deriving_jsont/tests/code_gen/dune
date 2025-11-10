@@ -1,0 +1,5 @@
+(test
+ (name tests_readme)
+ (libraries jsont)
+ (preprocess
+  (pps ppx_deriving_jsont)))

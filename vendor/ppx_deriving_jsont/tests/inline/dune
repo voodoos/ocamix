@@ -1,6 +1,0 @@
-; (test
-;  (name inline)
-;  (libraries jsont jsont.bytesrw)
-;  (enabled_if false)
-;  (preprocess
-;   (pps ppx_yojson_conv ppx_deriving_jsont)))
