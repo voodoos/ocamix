@@ -66,23 +66,26 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
         | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
     in
     let duration = Duration.pp_track_duration duration in
-    [
-      `R status;
-      `R
-        (Elwd.div
-           ~ev:[ `R play_on_click ]
-           [ `R (Elwd.img ~at:[ `R img_url; `P (At.width 50) ] ()) ]);
-      `P (El.div [ El.span [ El.txt' name ] ]);
-      `P (El.div [ El.span [ El.txt' duration ] ]);
-    ]
+    Lwd.return
+      (Lwd_seq.of_list
+         [
+           status;
+           Elwd.div
+             ~ev:[ `R play_on_click ]
+             [ `R (Elwd.img ~at:[ `R img_url; `P (At.width 50) ] ()) ];
+           Lwd.return (El.div [ El.span [ El.txt' name ] ]);
+           Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
+         ])
   in
   let placeholder i =
-    [
-      `P (El.txt' (string_of_int (i + 1)));
-      `P (El.nbsp ());
-      `P (El.txt' "Loading...");
-      `P (El.nbsp ());
-    ]
+    Lwd.return
+      (Lwd_seq.of_list
+         [
+           Lwd.return (El.txt' (string_of_int (i + 1)));
+           Lwd.return (El.nbsp ());
+           Lwd.return (El.txt' "Loading...");
+           Lwd.return (El.nbsp ());
+         ])
   in
   let layout = { Table.columns = columns (); status; row_height = Em 4. } in
   let data_source =
@@ -90,8 +93,10 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
     Table.Virtual.Lazy { total_items; fetch }
   in
-  let render = Lwd.pure (render ranged) in
-  Table.Virtual.make ~layout ~placeholder ?scroll_target render data_source
+  let render =
+    render ranged |> Table.Virtual.with_placeholder_or_error ~placeholder
+  in
+  Table.Virtual.make ~layout ?scroll_target render data_source
 
 let make_now_playing ~reset_playlist ~fetch view =
   let scroll_target = Lwd.get Player.playstate.current_index in

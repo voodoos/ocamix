@@ -4,8 +4,13 @@ open Brr_lwd_ui
 open Brr_lwd_ui.Table
 
 let renderer =
- fun i data ->
-  [ `P (El.txt' (string_of_int i)); `P (El.txt' (string_of_int data)) ]
+  Table.Virtual.with_placeholder_or_error @@ fun i data ->
+  Lwd.return
+    (Lwd_seq.of_list
+       [
+         Lwd.return (El.txt' (string_of_int i));
+         Lwd.return (El.txt' (string_of_int data));
+       ])
 
 let data =
   Virtual.Lazy
@@ -29,8 +34,7 @@ let app =
   let layout = { columns; status = []; row_height = Em 5. } in
   let scroll_target = Lwd.var 0 in
   let table =
-    Virtual.make ~layout ~scroll_target:(Lwd.get scroll_target)
-      (Lwd.return renderer) data
+    Virtual.make ~layout ~scroll_target:(Lwd.get scroll_target) renderer data
   in
   Elwd.div
     ~at:Attrs.O.(v (`P (C "flex")))
