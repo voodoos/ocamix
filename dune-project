@@ -29,6 +29,7 @@
   bytesrw
   (jsont
    (>= "0.1.1"))
+  ppx_deriving_jsont
   ezjsonm
   json-data-encoding
   json-data-encoding-browser
