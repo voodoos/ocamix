@@ -34,6 +34,14 @@ module Brr = struct
   end
 
   module Url = Url
+
+  module Window = struct
+    include Window
+
+    let queue_micro_task t (f : unit -> unit) =
+      Jv.call (Window.to_jv t) "queueMicrotask" [| Jv.callback ~arity:1 f |]
+      |> ignore
+  end
 end
 
 module Brr_io = struct

@@ -30,15 +30,18 @@
  (action
   (run yarn build)))
 
-(alias
- (name examples)
- (deps bundle.js))
-
 (copy_files
  (mode
   (promote (until-clean)))
- (alias examples)
  (files ../../css/brr_lwd_ui.css))
+
+(alias
+ (name examples)
+ (deps bundle.js brr_lwd_ui.css))
+
+(alias
+ (name example-yjs)
+ (deps bundle.js brr_lwd_ui.css))
 
 ; (rule
 ;  (mode

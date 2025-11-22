@@ -46,7 +46,7 @@ let make ?(at = []) ?(ev = []) ?placeholder ?(on_change = fun ~init:_ -> ignore)
   in
   let () =
     (* React to direct control of the var *)
-    Utils.listen ~f:(fun v ->
+    Utils.tap ~f:(fun v ->
         let text = Option.value ~default:"" v in
         Option.iter
           (fun text_input ->

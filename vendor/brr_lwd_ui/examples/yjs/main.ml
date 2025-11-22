@@ -197,7 +197,6 @@ module Indexed_table = struct
             if !cursor = 0 then Lwd_table.first t.table
             else Lwd_table.next (V.get_last new_index)
           in
-
           for _i = 1 to i do
             (* We remove the [i] next rows *)
             match !next with
@@ -692,17 +691,15 @@ let table_data_source source_rows (content : row Indexed_table.t) =
         Lwd_seq.element elt)
       Lwd_seq.monoid row.cells
   in
-  let render lwd_table_row row =
-    let$ cells = reduce_row row in
+  let render i lwd_table_row =
+    let row = Lwd_table.get lwd_table_row in
+    let$ cells =
+      match row with
+      | Some row -> reduce_row row
+      | None -> Lwd.return Lwd_seq.empty
+    in
     let actions =
-      let on_delete_row _ =
-        let i =
-          (* TODO Virtual_table_bis should use an indexed table and take care of this *)
-          Hector.Poly.find (( == ) lwd_table_row) content.index
-        in
-        Console.log [ "DELETE ROW"; i ];
-        Yjs.Array.delete source_rows i 1
-      in
+      let on_delete_row _ = Yjs.Array.delete source_rows i 1 in
       Elwd.button
         ~ev:[ `P (Elwd.handler Ev.click on_delete_row) ]
         ~at:[ `P (At.class' (Jstr.of_string "row-actions")) ]
@@ -710,7 +707,23 @@ let table_data_source source_rows (content : row Indexed_table.t) =
     in
     Lwd_seq.concat cells @@ Lwd_seq.element actions
   in
-  Virtual_bis.{ total_items = Lwd.pure 0; source_rows = content.table; render }
+  let fetch =
+    let error = Jv.Error.v (Jstr.of_string "Not found") in
+    fun indices ->
+      Array.map
+        (fun i ->
+          let row =
+            if i >= 0 && i < Hector.Poly.length content.index then
+              Ok (Hector.Poly.get content.index i)
+            else Error error
+          in
+          Fut.return row)
+        indices
+  in
+  let total_items =
+    Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) content.table
+  in
+  (Virtual.Lazy { total_items; fetch = Lwd.return fetch }, render)
 
 let new_table_column_form columns rows =
   let open Brr_lwd_ui.Forms.Form in
@@ -903,7 +916,8 @@ let layout ~columns_src ~rows_src names =
 let render_page_item ({ data; _ } : page_item) =
   match data with
   | Table { columns_src; rows_src; columns; table } ->
-      let data_source = table_data_source rows_src table in
+      let data_source, render = table_data_source rows_src table in
+      let render = Virtual.with_placeholder_or_error render in
       let form = new_table_row_form columns rows_src in
       let column_form = new_table_column_form columns_src rows_src in
       let table =
@@ -913,7 +927,7 @@ let render_page_item ({ data; _ } : page_item) =
             Lwd_seq.monoid columns.table
         in
         let layout = layout ~columns_src ~rows_src columns in
-        Virtual_bis.make ~layout data_source
+        Virtual.make ~layout render data_source
       in
       Elwd.div
         ~at:Attrs.O.(v (`P (C "flex")))

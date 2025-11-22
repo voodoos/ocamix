@@ -42,6 +42,22 @@ type ('data, 'error) data_source =
           (** Fetched indices are always contiguous. *)
     }
 
+let data_source_of_random_access_table (t : 'a Random_access_table.t) =
+  let open Random_access_table in
+  let fetch =
+    let error = Jv.Error.v (Jstr.of_string "Not found") in
+    Lwd.map t.index ~f:(fun index indices ->
+        (* TODO There is an opportunity for an optimisation here: [RAList.get]
+               runs in [log n] but since the indicies should be consecutive we could
+               only [get] the first one and then iterate with [Lwd_table.next] in
+               constant time. *)
+        Array.map
+          ~f:(fun i ->
+            RAList.get index i |> Option.to_result error |> Fut.return)
+          indices)
+  in
+  Lazy { total_items = t.length; fetch }
+
 (* The virtual table is a complex reactive component. Primarily, it reacts to
        changes of the [data_source] so that content in the table is properly
        refreshed when it does. Additionnaly it needs to react to multiple dom
@@ -52,22 +68,22 @@ module Cache = FFCache.Make (Int)
 type ('data, 'error) state = {
   layout : Layout.fixed_row_height;
   (* The content_div ref should be initialized with the correct element as
-           soon as it is created. It is not reactive per se. *)
+       soon as it is created. It is not reactive per se. *)
   content_div : El.t Utils.Forward_ref.t;
   (* The wrapper_div ref should be initialized with the correct element as
-         soon as it is created. It is not reactive per se. *)
+     soon as it is created. It is not reactive per se. *)
   wrapper_div : El.t Utils.Forward_ref.t;
   (* The height of the window is a reactive value that might change during
-         execution when the browser is resized or other layout changes are made. *)
+     execution when the browser is resized or other layout changes are made. *)
   window_height : int option Lwd.var;
   table_height : int option Lwd.var;
   mutable last_scroll_y : float;
   (* The cache is some sort of LRU to keep live the content of recently seen
-         rows *)
+     rows *)
   mutable cache : ('data, 'error) row_data Lwd_table.row Cache.t;
   table : ('data, 'error) row_data Lwd_table.t;
   (* The [row_index] table is used to provide fast random access to the table's
-         rows in the observer's callback *)
+     rows in the observer's callback *)
   row_index : (int, ('data, 'error) row_data Lwd_table.row) Hashtbl.t;
 }
 
@@ -161,7 +177,7 @@ let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch
 let update_visible_rows state fetch =
   let visible_rows_indexes = compute_visible_rows state in
   (* todo: We do way too much work and rebuild the queue each
-         time... it's very ineficient *)
+     time... it's very ineficient *)
   let visible_rows =
     List.filter_map
       ~f:(fun idx ->
@@ -268,8 +284,8 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     let scroll_handler =
       Lwd.map fetch ~f:(fun fetch ->
           (* We use [last_update] to have regular debounced updates and the
-                 [timeout] to ensure that the last scroll event is always taken into
-                 account even it it happens during the debouncing interval. *)
+             [timeout] to ensure that the last scroll event is always taken into
+             account even it it happens during the debouncing interval. *)
           Console.log [ "POP ON SCROLL UPD" ];
           let update () = update_visible_rows state fetch in
           let last_update = ref 0. in
@@ -286,12 +302,12 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     let ev = [ `R scroll_handler ] in
     let on_create el =
       Utils.Forward_ref.set_exn state.wrapper_div el;
-      Utils.listen ~initial_trigger:true (Lwd.pair total_items fetch)
-        ~f:(function total_items, fetch ->
+      Utils.tap ~initial_trigger:true (Lwd.pair total_items fetch) ~f:(function
+          | total_items, fetch ->
           Console.log [ "Full refresh" ];
           prepare state ~total_items;
           update_visible_rows state fetch);
-      Utils.listen ~initial_trigger:true
+      Utils.tap ~initial_trigger:false
         (Lwd.pair fetch (Lwd.get state.table_height))
         ~f:(function
           | fetch, _ ->

@@ -57,7 +57,7 @@ let make ?(persist = true) ?(at = []) ?(ev = [])
       [ `S (Lwd_seq.lift options) ]
   in
   let () =
-    Utils.listen ~f:(fun v ->
+    Utils.tap ~f:(fun v ->
         Option.iter
           (fun select -> Jv.set (El.to_jv select) "value" (Jv.of_string v))
           !element)
@@ -119,7 +119,7 @@ let make_multiple ?(persist = false) ?(at = [])
         }
     in
     let () =
-      Utils.listen
+      Utils.tap
         ~f:(function
           | true -> Lwd.set select_all_var (Some ())
           | false -> Lwd.set select_all_var None)

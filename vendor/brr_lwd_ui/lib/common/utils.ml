@@ -57,11 +57,22 @@ module Unit = struct
         f *. font_size
 end
 
-let listen ?(initial_trigger = false) ~f t =
+let tap ?(initial_trigger = false) ~f t =
   let root = Lwd.observe t in
-  Lwd.set_on_invalidate root (fun _ -> f (Lwd.quick_sample root));
+  Lwd.set_on_invalidate root (fun _ ->
+      (* See https://github.com/let-def/lwd/issues/52 *)
+      Window.queue_micro_task G.window (fun () -> f (Lwd.quick_sample root)));
   let first_sample = Lwd.quick_sample root in
   if initial_trigger then f first_sample
+
+let collect_into_var t =
+  let root = Lwd.observe t in
+  let first_sample = Lwd.quick_sample root in
+  let v = Lwd.var first_sample in
+  Lwd.set_on_invalidate root (fun _ ->
+      Window.queue_micro_task G.window (fun () ->
+          Lwd.set v (Lwd.quick_sample root)));
+  v
 
 let map3 ~f a b c =
   Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)

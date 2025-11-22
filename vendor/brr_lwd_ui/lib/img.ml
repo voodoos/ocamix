@@ -21,7 +21,7 @@ let preloader ?(placeholder : string option)
     let open Fut.Syntax in
     let previous_url = ref "" in
     let previous_fetch_abort : (unit -> unit) ref = ref Fun.id in
-    Utils.listen url_source ~initial_trigger:true ~f:(fun url ->
+    Utils.tap url_source ~initial_trigger:true ~f:(fun url ->
         Fut.await
           (* TODO we should not wait but cancel/ignore previous requests.
              See https://developer.mozilla.org/en-US/docs/Web/API/AbortController/abort *)
