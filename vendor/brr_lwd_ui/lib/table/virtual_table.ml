@@ -65,7 +65,7 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        that the visible part of the talbe is always populated with rows. *)
 module Cache = FFCache.Make (Int)
 
-type ('data, 'error) state = {
+type dom_state = {
   layout : Layout.fixed_row_height;
   (* The content_div ref should be initialized with the correct element as
        soon as it is created. It is not reactive per se. *)
@@ -78,8 +78,12 @@ type ('data, 'error) state = {
   window_height : int option Lwd.var;
   table_height : int option Lwd.var;
   mutable last_scroll_y : float;
+}
+
+type ('data, 'error) state = {
+  dom : dom_state;
   (* The cache is some sort of LRU to keep live the content of recently seen
-     rows *)
+ rows *)
   mutable cache : ('data, 'error) row_data Lwd_table.row Cache.t;
   table : ('data, 'error) row_data Lwd_table.t;
   (* The [row_index] table is used to provide fast random access to the table's
@@ -110,13 +114,21 @@ let prepare (state : ('data, 'error) state) ~total_items:total =
         current_row := Lwd_table.next row
   done
 
+let make_spacer state n =
+  let at = [ At.class' (Jstr.v "row_spacer") ] in
+  let row_size = state.layout.row_height |> Utils.Unit.to_string in
+  let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
+
+  let style = At.style (Jstr.v @@ height_n n) in
+  El.div ~at:(style :: at) []
+
 (** Given the height of the wrapper element, the height of the table's rows and
     the scroll position, [compute_visible_rows] return the indices of currently
     visible rows. This includes indices of rows close but not visible rows
     ([bleeding]) so that they can be pre loaded to give the illusion to the user
     that they have always been there. The scroll direction is used to compute
     the scrolling speed and adjust bleeding consequently. *)
-let compute_visible_rows (state : ('data, 'error) state) =
+let compute_visible_rows (state : dom_state) =
   let height elt =
     let jv = El.to_jv elt in
     Jv.get jv "offsetHeight" |> Jv.to_float
@@ -161,7 +173,7 @@ let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch
   let unload row =
     Lwd_table.get row
     |> Option.iter (fun row_data ->
-           Lwd_table.set row { row_data with content = None })
+        Lwd_table.set row { row_data with content = None })
   in
   let cache, to_load =
     List.fold_left ~init:(state.cache, []) rows ~f:(fun (cache, acc) (i, row) ->
@@ -175,7 +187,7 @@ let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch
   match Array.of_list to_load with [||] -> () | to_load -> load to_load
 
 let update_visible_rows state fetch =
-  let visible_rows_indexes = compute_visible_rows state in
+  let visible_rows_indexes = compute_visible_rows state.dom in
   (* todo: We do way too much work and rebuild the queue each
      time... it's very ineficient *)
   let visible_rows =
@@ -193,27 +205,24 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     (data_source : (data, error) data_source) =
   let state =
     {
-      layout;
-      content_div = Utils.Forward_ref.make ();
-      wrapper_div = Utils.Forward_ref.make ();
-      window_height = Lwd.var None;
-      table_height = Lwd.var None;
-      last_scroll_y = 0.;
+      dom =
+        {
+          layout;
+          content_div = Utils.Forward_ref.make ();
+          wrapper_div = Utils.Forward_ref.make ();
+          window_height = Lwd.var None;
+          table_height = Lwd.var None;
+          last_scroll_y = 0.;
+        };
       cache = new_cache ();
       table = Lwd_table.make ();
       row_index = Hashtbl.create 2048;
     }
   in
   let row_size = layout.row_height |> Utils.Unit.to_string in
-  let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let total_items, fetch =
     match data_source with Lazy { total_items; fetch } -> (total_items, fetch)
-  in
-  let make_spacer n =
-    let at = [ At.class' (Jstr.v "row_spacer") ] in
-    let style = At.style (Jstr.v @@ height_n n) in
-    El.div ~at:(style :: at) []
   in
   let table_body =
     let render _row { content; index } =
@@ -242,7 +251,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
             | _, _ ->
                 let s =
                   if m + p > 0 then
-                    let spacer = Lwd.pure @@ make_spacer (m + p) in
+                    let spacer = Lwd.pure @@ make_spacer state.dom (m + p) in
                     Lwd_seq.(concat s @@ concat (element spacer) s')
                   else Lwd_seq.concat s s'
                 in
@@ -252,12 +261,12 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     Lwd.map rows ~f:(fun (n, s, m) ->
         let result =
           if n > 0 then
-            let first_spacer = Lwd.pure @@ make_spacer n in
+            let first_spacer = Lwd.pure @@ make_spacer state.dom n in
             Lwd_seq.(concat (element first_spacer) s)
           else s
         in
         if m > 0 then
-          let last_spacer = Lwd.pure @@ make_spacer m in
+          let last_spacer = Lwd.pure @@ make_spacer state.dom m in
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
@@ -269,14 +278,15 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
         let entry = List.hd entries in
         let rect = Resize_observer.Entry.content_rect entry in
         let height = Dom_rect_read_only.height rect in
-        match Lwd.peek state.table_height with
-        | Some h when h <> height -> Lwd.set state.table_height (Some height)
-        | None -> Lwd.set state.table_height (Some height)
+        match Lwd.peek state.dom.table_height with
+        | Some h when h <> height ->
+            Lwd.set state.dom.table_height (Some height)
+        | None -> Lwd.set state.dom.table_height (Some height)
         | _ -> ())
   in
   let rows =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
-    let on_create el = Utils.Forward_ref.set_exn state.content_div el in
+    let on_create el = Utils.Forward_ref.set_exn state.dom.content_div el in
     Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
   in
   let wrapper =
@@ -301,32 +311,34 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     in
     let ev = [ `R scroll_handler ] in
     let on_create el =
-      Utils.Forward_ref.set_exn state.wrapper_div el;
+      Utils.Forward_ref.set_exn state.dom.wrapper_div el;
       Utils.tap ~initial_trigger:true (Lwd.pair total_items fetch) ~f:(function
           | total_items, fetch ->
           Console.log [ "Full refresh" ];
           prepare state ~total_items;
           update_visible_rows state fetch);
       Utils.tap ~initial_trigger:false
-        (Lwd.pair fetch (Lwd.get state.table_height))
+        (Lwd.pair fetch (Lwd.get state.dom.table_height))
         ~f:(function
           | fetch, _ ->
           Console.log [ "Height refresh" ];
           update_visible_rows state fetch)
     in
     (match scroll_target with
-    | Some scroll_target ->
-        let scroll_target =
-          Lwd.map scroll_target ~f:(fun i ->
-              let row_height =
-                let parent = Utils.Forward_ref.get_exn state.content_div in
-                Int.of_float (Utils.Unit.to_px ~parent layout.row_height)
-              in
-              Some (Controlled_scroll.Pos (i * row_height)))
-        in
-        Controlled_scroll.make ~at ~ev ~scroll_target
-          (Elwd.div ~at ~ev ~on_create [ `R rows ])
-    | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
+      | Some scroll_target ->
+          let scroll_target =
+            Lwd.map scroll_target ~f:(fun i ->
+                let row_height =
+                  let parent =
+                    Utils.Forward_ref.get_exn state.dom.content_div
+                  in
+                  Int.of_float (Utils.Unit.to_px ~parent layout.row_height)
+                in
+                Some (Controlled_scroll.Pos (i * row_height)))
+          in
+          Controlled_scroll.make ~at ~ev ~scroll_target
+            (Elwd.div ~at ~ev ~on_create [ `R rows ])
+      | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
     |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
   in
   let table =
