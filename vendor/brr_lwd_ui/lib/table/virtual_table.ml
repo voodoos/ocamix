@@ -304,16 +304,8 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
              account even it it happens during the debouncing interval. *)
           Console.log [ "POP ON SCROLL UPD" ];
           let update () = update_visible_rows state fetch in
-          let last_update = ref 0. in
-          let timeout = ref (-1) in
-          Elwd.handler Ev.scroll (fun _ev ->
-              let debouncing_interval = 50 in
-              let now = Performance.now_ms G.performance in
-              if !timeout >= 0 then G.stop_timer !timeout;
-              timeout := G.set_timeout ~ms:debouncing_interval update;
-              if now -. !last_update >. float_of_int debouncing_interval then (
-                last_update := now;
-                update ())))
+          let update = Utils.limit update in
+          Elwd.handler Ev.scroll (fun _ev -> update ()))
     in
     let ev = [ `R scroll_handler ] in
     let on_create el =

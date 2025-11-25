@@ -123,3 +123,21 @@ let measure_execution_time name f () =
         (Brr.Performance.now_ms G.performance -. before);
     ];
   result
+
+(** [limit ~interval_ms:50 f] wraps [f] in a function that can be executed at
+    most once every 50ms. The last call will always happens even if it as made
+    during the debouncing_interval. *)
+let limit ?(interval_ms = 50) f =
+  (* We use [last_update] to have regular  updates and the [timeout] to ensure
+     that the last event is always taken into account even it it happens during
+     the debouncing interval. *)
+  let last_update = ref 0. in
+  let timeout = ref (-1) in
+  fun () ->
+    let now = Performance.now_ms G.performance in
+    if !timeout >= 0 then G.stop_timer !timeout;
+    timeout := G.set_timeout ~ms:interval_ms f;
+    if now -. !last_update >. float_of_int interval_ms then begin
+      last_update := now;
+      f ()
+    end
