@@ -122,6 +122,30 @@ let make_spacer state n =
   let style = At.style (Jstr.v @@ height_n n) in
   El.div ~at:(style :: at) []
 
+module Spacer_monoid = struct
+  let empty = (0, Lwd_seq.empty, 0)
+
+  let concat dom (n, s, m) (p, s', q) =
+    match (Lwd_seq.view s, Lwd_seq.view s') with
+    | Empty, Empty ->
+        (* Since s is empty it does not matter on which
+             "side" of it the spaces are accumulated. *)
+        (n + m + p + q, s, 0)
+    | Empty, _ -> (n + m + p, s', q)
+    | _, Empty -> (n, s, m + p + q)
+    | _, _ ->
+        let s =
+          if m + p > 0 then
+            let spacer = Lwd.pure @@ make_spacer dom (m + p) in
+            Lwd_seq.(concat s @@ concat (element spacer) s')
+          else Lwd_seq.concat s s'
+        in
+        (n, s, q)
+
+  let v dom = (empty, concat dom)
+  let lwd_v dom = (Lwd.return empty, Lwd.map2 ~f:(concat dom))
+end
+
 (** Given the height of the wrapper element, the height of the table's rows and
     the scroll position, [compute_visible_rows] return the indices of currently
     visible rows. This includes indices of rows close but not visible rows
@@ -238,25 +262,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
       | None -> (1, Lwd_seq.empty, 0)
     in
     let rows =
-      Lwd_table.map_reduce render
-        ( (0, Lwd_seq.empty, 0),
-          fun (n, s, m) (p, s', q) ->
-            match (Lwd_seq.view s, Lwd_seq.view s') with
-            | Empty, Empty ->
-                (* Since s is empty it does not matter on which
-                       "side" of it the spaces are accumulated. *)
-                (n + m + p + q, s, 0)
-            | Empty, _ -> (n + m + p, s', q)
-            | _, Empty -> (n, s, m + p + q)
-            | _, _ ->
-                let s =
-                  if m + p > 0 then
-                    let spacer = Lwd.pure @@ make_spacer state.dom (m + p) in
-                    Lwd_seq.(concat s @@ concat (element spacer) s')
-                  else Lwd_seq.concat s s'
-                in
-                (n, s, q) )
-        state.table
+      Lwd_table.map_reduce render (Spacer_monoid.v state.dom) state.table
     in
     Lwd.map rows ~f:(fun (n, s, m) ->
         let result =
