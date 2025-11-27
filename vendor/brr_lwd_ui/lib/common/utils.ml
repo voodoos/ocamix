@@ -74,6 +74,9 @@ let collect_into_var t =
           Lwd.set v (Lwd.quick_sample root)));
   v
 
+let set_if_different ?(equal = Equal.poly) var v =
+  if equal v @@ Lwd.peek var then () else Lwd.set var v
+
 let map3 ~f a b c =
   Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)
 

@@ -224,6 +224,122 @@ let update_visible_rows state fetch =
     ~max_items:(4 * List.length visible_rows)
     visible_rows
 
+let index_of_row t row =
+  Lwd_table.map_reduce
+    (fun row _v -> (1, Some row, 0))
+    ( (0, None, 0),
+      fun (lb, lr, la) (rb, rr, ra) ->
+        match (lr, rr) with
+        | Some row', _ when Equal.physical row row' -> (lb, lr, la + rb + ra)
+        | _, Some row' when Equal.physical row row' -> (lb + la + rb, rr, ra)
+        | _ -> (lb + la + rb, rr, ra) )
+    t
+  |> Lwd.map ~f:(fun (i, _, _) -> (* todo check not found ? *) i)
+
+type 'a loaded_state = Loaded of 'a | Unloaded
+
+let make' (type data) ~(layout : Layout.fixed_row_height)
+    (data_source : data Lwd_table.t)
+    (renderer :
+      int Lwd.var -> data Lwd_table.row -> data -> Elwd.t Lwd.t Lwd_seq.t Lwd.t)
+    =
+  let module RAList = CCRAL in
+  let dom =
+    {
+      layout;
+      content_div = Utils.Forward_ref.make ();
+      wrapper_div = Utils.Forward_ref.make ();
+      window_height = Lwd.var None;
+      table_height = Lwd.var None;
+      last_scroll_y = 0.;
+    }
+  in
+  let row_size = layout.row_height |> Utils.Unit.to_string in
+  let height = Printf.sprintf "height: %s !important;" row_size in
+  let internal_seq =
+    Lwd_table.map_reduce
+      (fun row v -> Lwd_seq.element (Lwd.var 0, Lwd.var Unloaded, row, v))
+      Lwd_seq.monoid data_source
+  in
+  let seq_index =
+    Lwd_seq.fold_monoid
+      (fun v -> RAList.(cons v empty))
+      (RAList.empty, RAList.append)
+      internal_seq
+  in
+  let scroll_handler =
+    let on_scroll index =
+      let visible_rows = compute_visible_rows dom in
+      List.iter
+        ~f:(fun i ->
+          RAList.get index i
+          |> Option.iter (fun (row_index, load_state, _row, _value) ->
+              let () = Utils.set_if_different row_index i in
+              match Lwd.peek load_state with
+              | Loaded () -> ()
+              | _ -> Lwd.set load_state (Loaded ())))
+        visible_rows
+    in
+    Lwd.map seq_index ~f:(fun index ->
+        let () =
+          (* We execute the handle once each time it changes to make sure the
+             table is always up-to-date. *)
+          (* Queuing prevents illegal updates during invalidation *)
+          Window.queue_micro_task G.window (fun () -> on_scroll index)
+        in
+        let on_scroll = Utils.limit (fun () -> on_scroll index) in
+        Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
+  in
+  let render (row_index, load_state, row, value) =
+    let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
+    let style = `P (At.style (Jstr.v height)) in
+    Lwd.map (Lwd.get load_state) ~f:(function
+      | Unloaded -> (1, Lwd_seq.empty, 0)
+      | Loaded () ->
+          let rendered_row = renderer row_index row value in
+          ( 0,
+            Lwd_seq.element
+            @@ Elwd.div ~at:(style :: at) [ `S (Lwd_seq.lift rendered_row) ],
+            0 ))
+  in
+  let rows =
+    Lwd_seq.fold_monoid render (Spacer_monoid.lwd_v dom) internal_seq
+  in
+  let table_body =
+    Lwd.map (Lwd.join rows) ~f:(fun (n, s, m) ->
+        let result =
+          if n > 0 then
+            let first_spacer = Lwd.pure @@ make_spacer dom n in
+            Lwd_seq.(concat (element first_spacer) s)
+          else s
+        in
+        if m > 0 then
+          let last_spacer = Lwd.pure @@ make_spacer dom m in
+          Lwd_seq.(concat result (element last_spacer))
+        else result)
+  in
+  let rows =
+    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
+    let on_create = Utils.Forward_ref.set_exn dom.content_div in
+    Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
+  in
+  let wrapper =
+    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content-wrapper"))) in
+    let ev = [ `R scroll_handler ] in
+    let on_create = Utils.Forward_ref.set_exn dom.wrapper_div in
+    Elwd.div ~at ~ev ~on_create [ `R rows ]
+  in
+  let table =
+    let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
+    let grid_style = Layout.style layout in
+    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
+    let at = `R s :: at in
+    let header = Layout.header layout in
+    let status = Layout.status layout in
+    Elwd.div ~at [ `R header; `R wrapper; `R status ]
+  in
+  table
+
 let make (type data error) ~(layout : Layout.fixed_row_height)
     ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
     (data_source : (data, error) data_source) =
