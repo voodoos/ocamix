@@ -81,6 +81,17 @@ module Dom = struct
     mutable last_scroll_y : float;
   }
 
+  let resize_observer state =
+    (* We observe the size of the table to re-populate if necessary *)
+    Resize_observer.create ~callback:(fun entries _ ->
+        let entry = List.hd entries in
+        let rect = Resize_observer.Entry.content_rect entry in
+        let height = Dom_rect_read_only.height rect in
+        match Lwd.peek state.table_height with
+        | Some h when h <> height -> Lwd.set state.table_height (Some height)
+        | None -> Lwd.set state.table_height (Some height)
+        | _ -> ())
+
   let with_scroll_position ?at dom_state target_position el =
     let scroll_target =
       Lwd.map target_position ~f:(fun i ->
@@ -410,18 +421,6 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
-  let observer =
-    (* We observe the size of the table to re-populate if necessary *)
-    Resize_observer.create ~callback:(fun entries _ ->
-        let entry = List.hd entries in
-        let rect = Resize_observer.Entry.content_rect entry in
-        let height = Dom_rect_read_only.height rect in
-        match Lwd.peek state.dom.table_height with
-        | Some h when h <> height ->
-            Lwd.set state.dom.table_height (Some height)
-        | None -> Lwd.set state.dom.table_height (Some height)
-        | _ -> ())
-  in
   let rows =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
     let on_create el = Utils.Forward_ref.set_exn state.dom.content_div el in
@@ -440,8 +439,10 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           Elwd.handler Ev.scroll (fun _ev -> update ()))
     in
     let ev = [ `R scroll_handler ] in
+    let observer = Dom.resize_observer state.dom in
     let on_create el =
       Utils.Forward_ref.set_exn state.dom.wrapper_div el;
+      Resize_observer.observe observer el;
       Utils.tap ~initial_trigger:true (Lwd.pair total_items fetch) ~f:(function
           | total_items, fetch ->
           Console.log [ "Full refresh" ];
@@ -455,11 +456,10 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           update_visible_rows state fetch)
     in
     let wrapper = Elwd.div ~at ~ev ~on_create [ `R rows ] in
-    (match scroll_target with
-      | Some scroll_target ->
-          Dom.with_scroll_position state.dom scroll_target wrapper
-      | None -> wrapper)
-    |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
+    match scroll_target with
+    | Some scroll_target ->
+        Dom.with_scroll_position state.dom scroll_target wrapper
+    | None -> wrapper
   in
   Dom.make_table layout wrapper
 
