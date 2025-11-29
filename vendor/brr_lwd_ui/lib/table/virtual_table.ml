@@ -65,6 +65,17 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        that the visible part of the talbe is always populated with rows. *)
 module Cache = FFCache.Make (Int)
 
+module Dom = struct
+  let make_table layout content =
+    let table_header = Layout.header layout in
+    let table_status = Layout.status layout in
+    let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
+    let grid_style = Layout.style layout in
+    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
+    let at = `R s :: at in
+    Elwd.div ~at [ `R table_header; `R content; `R table_status ]
+end
+
 type dom_state = {
   layout : Layout.fixed_row_height;
   (* The content_div ref should be initialized with the correct element as
@@ -333,16 +344,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
     let on_create = Utils.Forward_ref.set_exn dom.wrapper_div in
     Elwd.div ~at ~ev ~on_create [ `R rows ]
   in
-  let table =
-    let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Layout.style layout in
-    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
-    let at = `R s :: at in
-    let header = Layout.header layout in
-    let status = Layout.status layout in
-    Elwd.div ~at [ `R header; `R wrapper; `R status ]
-  in
-  table
+  Dom.make_table layout wrapper
 
 let make (type data error) ~(layout : Layout.fixed_row_height)
     ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
@@ -459,14 +461,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
       | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
     |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
   in
-  let table =
-    let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Layout.style layout in
-    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
-    let at = `R s :: at in
-    Elwd.div ~at [ `R table_header; `R wrapper; `R table_status ]
-  in
-  table
+  Dom.make_table layout wrapper
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
     ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
