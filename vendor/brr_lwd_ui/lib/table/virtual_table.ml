@@ -66,6 +66,32 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
 module Cache = FFCache.Make (Int)
 
 module Dom = struct
+  type state = {
+    layout : Layout.fixed_row_height;
+    (* The content_div ref should be initialized with the correct element as
+         soon as it is created. It is not reactive per se. *)
+    content_div : El.t Utils.Forward_ref.t;
+    (* The wrapper_div ref should be initialized with the correct element as
+       soon as it is created. It is not reactive per se. *)
+    wrapper_div : El.t Utils.Forward_ref.t;
+    (* The height of the window is a reactive value that might change during
+       execution when the browser is resized or other layout changes are made. *)
+    window_height : int option Lwd.var;
+    table_height : int option Lwd.var;
+    mutable last_scroll_y : float;
+  }
+
+  let with_scroll_position ?at dom_state target_position el =
+    let scroll_target =
+      Lwd.map target_position ~f:(fun i ->
+          let row_height =
+            let parent = Utils.Forward_ref.get_exn dom_state.content_div in
+            Int.of_float (Utils.Unit.to_px ~parent dom_state.layout.row_height)
+          in
+          Some (Controlled_scroll.Pos (i * row_height)))
+    in
+    Controlled_scroll.make ?at ~scroll_target el
+
   let make_table layout content =
     let table_header = Layout.header layout in
     let table_status = Layout.status layout in
@@ -76,23 +102,8 @@ module Dom = struct
     Elwd.div ~at [ `R table_header; `R content; `R table_status ]
 end
 
-type dom_state = {
-  layout : Layout.fixed_row_height;
-  (* The content_div ref should be initialized with the correct element as
-       soon as it is created. It is not reactive per se. *)
-  content_div : El.t Utils.Forward_ref.t;
-  (* The wrapper_div ref should be initialized with the correct element as
-     soon as it is created. It is not reactive per se. *)
-  wrapper_div : El.t Utils.Forward_ref.t;
-  (* The height of the window is a reactive value that might change during
-     execution when the browser is resized or other layout changes are made. *)
-  window_height : int option Lwd.var;
-  table_height : int option Lwd.var;
-  mutable last_scroll_y : float;
-}
-
 type ('data, 'error) state = {
-  dom : dom_state;
+  dom : Dom.state;
   (* The cache is some sort of LRU to keep live the content of recently seen
  rows *)
   mutable cache : ('data, 'error) row_data Lwd_table.row Cache.t;
@@ -125,7 +136,7 @@ let prepare (state : ('data, 'error) state) ~total_items:total =
         current_row := Lwd_table.next row
   done
 
-let make_spacer state n =
+let make_spacer (state : Dom.state) n =
   let at = [ At.class' (Jstr.v "row_spacer") ] in
   let row_size = state.layout.row_height |> Utils.Unit.to_string in
   let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
@@ -163,7 +174,7 @@ end
     ([bleeding]) so that they can be pre loaded to give the illusion to the user
     that they have always been there. The scroll direction is used to compute
     the scrolling speed and adjust bleeding consequently. *)
-let compute_visible_rows (state : dom_state) =
+let compute_visible_rows (state : Dom.state) =
   let height elt =
     let jv = El.to_jv elt in
     Jv.get jv "offsetHeight" |> Jv.to_float
@@ -256,14 +267,15 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
     =
   let module RAList = CCRAL in
   let dom =
-    {
-      layout;
-      content_div = Utils.Forward_ref.make ();
-      wrapper_div = Utils.Forward_ref.make ();
-      window_height = Lwd.var None;
-      table_height = Lwd.var None;
-      last_scroll_y = 0.;
-    }
+    Dom.
+      {
+        layout;
+        content_div = Utils.Forward_ref.make ();
+        wrapper_div = Utils.Forward_ref.make ();
+        window_height = Lwd.var None;
+        table_height = Lwd.var None;
+        last_scroll_y = 0.;
+      }
   in
   let cache = Lru.create ~on_remove:(fun _i f -> f ()) 20 in
   let row_size = layout.row_height |> Utils.Unit.to_string in
@@ -398,8 +410,6 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
-  let table_header = Layout.header layout in
-  let table_status = Layout.status layout in
   let observer =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
@@ -444,21 +454,11 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           Console.log [ "Height refresh" ];
           update_visible_rows state fetch)
     in
+    let wrapper = Elwd.div ~at ~ev ~on_create [ `R rows ] in
     (match scroll_target with
       | Some scroll_target ->
-          let scroll_target =
-            Lwd.map scroll_target ~f:(fun i ->
-                let row_height =
-                  let parent =
-                    Utils.Forward_ref.get_exn state.dom.content_div
-                  in
-                  Int.of_float (Utils.Unit.to_px ~parent layout.row_height)
-                in
-                Some (Controlled_scroll.Pos (i * row_height)))
-          in
-          Controlled_scroll.make ~at ~scroll_target
-            (Elwd.div ~at ~ev ~on_create [ `R rows ])
-      | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
+          Dom.with_scroll_position state.dom scroll_target wrapper
+      | None -> wrapper)
     |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
   in
   Dom.make_table layout wrapper
