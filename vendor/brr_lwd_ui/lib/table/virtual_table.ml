@@ -456,7 +456,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
                 in
                 Some (Controlled_scroll.Pos (i * row_height)))
           in
-          Controlled_scroll.make ~at ~ev ~scroll_target
+          Controlled_scroll.make ~at ~scroll_target
             (Elwd.div ~at ~ev ~on_create [ `R rows ])
       | None -> Elwd.div ~at ~ev ~on_create [ `R rows ])
     |> Lwd.map ~f:(tee (fun el -> Resize_observer.observe observer el))
