@@ -127,6 +127,16 @@ let measure_execution_time name f () =
     ];
   result
 
+let lwd_seq_sort compare t =
+  let i = ref 0 in
+  t
+  |> Lwd_seq.map (fun v ->
+      incr i;
+      (v, !i))
+  |> Lwd_seq.sort_uniq compare |> Lwd_seq.map fst
+
+let now_ms () = Performance.now_ms G.performance
+
 (** [limit ~interval_ms:50 f] wraps [f] in a function that can be executed at
     most once every 50ms. The last call will always happens even if it as made
     during the debouncing_interval. *)
@@ -135,12 +145,20 @@ let limit ?(interval_ms = 50) f =
      that the last event is always taken into account even it it happens during
      the debouncing interval. *)
   let last_update = ref 0. in
+  let missed = ref Fun.id in
+  let run_missed () =
+    let f = !missed in
+    missed := Fun.id;
+    f ()
+  in
   let timeout = ref (-1) in
   fun () ->
-    let now = Performance.now_ms G.performance in
-    if !timeout >= 0 then G.stop_timer !timeout;
-    timeout := G.set_timeout ~ms:interval_ms f;
-    if now -. !last_update >. float_of_int interval_ms then begin
+    let now = now_ms () in
+    if now -. !last_update >=. float_of_int interval_ms then begin
       last_update := now;
+      missed := Fun.id;
+      if !timeout >= 0 then G.stop_timer !timeout;
+      timeout := G.set_timeout ~ms:interval_ms run_missed;
       f ()
     end
+    else missed := f
