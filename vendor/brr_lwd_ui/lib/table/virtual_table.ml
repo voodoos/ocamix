@@ -254,6 +254,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
       last_scroll_y = 0.;
     }
   in
+  let cache = Lru.create ~on_remove:(fun _i f -> f ()) 20 in
   let row_size = layout.row_height |> Utils.Unit.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let internal_seq =
@@ -275,6 +276,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
           RAList.get index i
           |> Option.iter (fun (row_index, load_state, _row, _value) ->
               let () = Utils.set_if_different row_index i in
+              Lru.use cache i (fun () -> Lwd.set load_state Unloaded);
               match Lwd.peek load_state with
               | Loaded () -> ()
               | _ -> Lwd.set load_state (Loaded ())))
@@ -287,7 +289,9 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
           (* Queuing prevents illegal updates during invalidation *)
           Window.queue_micro_task G.window (fun () -> on_scroll index)
         in
-        let on_scroll = Utils.limit (fun () -> on_scroll index) in
+        let on_scroll =
+          Utils.limit ~interval_ms:75 (fun () -> on_scroll index)
+        in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let render (row_index, load_state, row, value) =
