@@ -81,6 +81,10 @@ module Dom = struct
     mutable last_scroll_y : float;
   }
 
+  let number_of_fitting_rows_in dom_state h_px =
+    let row_height_px = Utils.Unit.to_px dom_state.layout.row_height in
+    Float.(of_int h_px / row_height_px) |> int_of_float
+
   let resize_observer state =
     (* We observe the size of the table to re-populate if necessary *)
     Resize_observer.create ~callback:(fun entries _ ->
