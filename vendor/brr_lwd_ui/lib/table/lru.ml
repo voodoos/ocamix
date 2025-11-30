@@ -10,7 +10,7 @@ type ('a, 'b) t = {
   mutable first : ('a, 'b) cell option;
   mutable last : ('a, 'b) cell option;
   on_remove : 'a -> 'b -> unit;
-  max_length : int;
+  mutable max_length : int;
 }
 
 let create ?(on_remove = fun _ _ -> ()) max_length =
@@ -22,6 +22,8 @@ let create ?(on_remove = fun _ _ -> ()) max_length =
     on_remove;
     max_length;
   }
+
+let set_max_length t max_Length = t.max_length <- max_Length
 
 let remove_last t =
   match t.last with

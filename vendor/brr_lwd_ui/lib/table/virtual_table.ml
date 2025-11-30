@@ -349,7 +349,15 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
               | _ -> Lwd.set load_state (Loaded ())))
         visible_rows
     in
-    Lwd.map2 (Lwd.get dom.table_height) seq_index ~f:(fun _ index ->
+    Lwd.map2 (Lwd.get dom.table_height) seq_index ~f:(fun h index ->
+        let () =
+          Option.iter
+            (fun h ->
+              (* TODO: that's not a very thougtful heuristic *)
+              2 * (Dom.number_of_fitting_rows_in dom h + 10)
+              |> Lru.set_max_length cache)
+            h
+        in
         let () =
           (* We execute the handle once each time it changes to make sure the
              table is always up-to-date. *)
