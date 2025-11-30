@@ -103,6 +103,14 @@ module Dom = struct
     in
     Controlled_scroll.make ?at ~scroll_target el
 
+  let make_spacer (state : state) n =
+    let at = [ At.class' (Jstr.v "row_spacer") ] in
+    let row_size = state.layout.row_height |> Utils.Unit.to_string in
+    let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
+
+    let style = At.style (Jstr.v @@ height_n n) in
+    El.div ~at:(style :: at) []
+
   let make_wrapper dom_state ?(on_create = Fun.id) ?scroll_target scroll_handler
       rows =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content-wrapper"))) in
@@ -167,14 +175,6 @@ let prepare (state : ('data, 'error) state) ~total_items:total =
         current_row := Lwd_table.next row
   done
 
-let make_spacer (state : Dom.state) n =
-  let at = [ At.class' (Jstr.v "row_spacer") ] in
-  let row_size = state.layout.row_height |> Utils.Unit.to_string in
-  let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
-
-  let style = At.style (Jstr.v @@ height_n n) in
-  El.div ~at:(style :: at) []
-
 module Spacer_monoid = struct
   let empty = (0, Lwd_seq.empty, 0)
 
@@ -189,7 +189,7 @@ module Spacer_monoid = struct
     | _, _ ->
         let s =
           if m + p > 0 then
-            let spacer = Lwd.pure @@ make_spacer dom (m + p) in
+            let spacer = Lwd.pure @@ Dom.make_spacer dom (m + p) in
             Lwd_seq.(concat s @@ concat (element spacer) s')
           else Lwd_seq.concat s s'
         in
@@ -367,12 +367,12 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
     Lwd.map (Lwd.join rows) ~f:(fun (n, s, m) ->
         let result =
           if n > 0 then
-            let first_spacer = Lwd.pure @@ make_spacer dom n in
+            let first_spacer = Lwd.pure @@ Dom.make_spacer dom n in
             Lwd_seq.(concat (element first_spacer) s)
           else s
         in
         if m > 0 then
-          let last_spacer = Lwd.pure @@ make_spacer dom m in
+          let last_spacer = Lwd.pure @@ Dom.make_spacer dom m in
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
@@ -426,12 +426,12 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     Lwd.map rows ~f:(fun (n, s, m) ->
         let result =
           if n > 0 then
-            let first_spacer = Lwd.pure @@ make_spacer state.dom n in
+            let first_spacer = Lwd.pure @@ Dom.make_spacer state.dom n in
             Lwd_seq.(concat (element first_spacer) s)
           else s
         in
         if m > 0 then
-          let last_spacer = Lwd.pure @@ make_spacer state.dom m in
+          let last_spacer = Lwd.pure @@ Dom.make_spacer state.dom m in
           Lwd_seq.(concat result (element last_spacer))
         else result)
   in
