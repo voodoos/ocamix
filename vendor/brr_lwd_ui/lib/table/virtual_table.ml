@@ -107,15 +107,18 @@ module Dom = struct
     in
     Controlled_scroll.make ?at ~scroll_target el
 
+  let height_n_rows dom_state n =
+    let row_size = dom_state.layout.row_height |> Utils.Unit.to_string in
+    Printf.sprintf "height: calc(%s * %i);" row_size n
+
   let make_spacer dom_state n =
     let at = [ At.class' (Jstr.v "row_spacer") ] in
-    let row_size = dom_state.layout.row_height |> Utils.Unit.to_string in
-    let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
+    let height_n n = height_n_rows dom_state n in
 
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
 
-  let make_rows dom_state spaced_rows =
+  let make_rows dom_state ~row_count spaced_rows =
     let table_body =
       Lwd.map spaced_rows ~f:(fun (n, s, m) ->
           let result =
@@ -129,7 +132,13 @@ module Dom = struct
             Lwd_seq.(concat result (element last_spacer))
           else result)
     in
-    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
+    let total_height =
+      Lwd.map row_count ~f:(fun n ->
+          Attrs.O.A (height_n_rows dom_state n |> Jstr.v |> At.style))
+    in
+    let at =
+      Attrs.O.(`R total_height @:: v (`P (C "lwdui-lazy-table-content")))
+    in
     let on_create el = Utils.Forward_ref.set_exn dom_state.content_div el in
     Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
 
@@ -333,6 +342,9 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
   let cache = Lru.create ~on_remove:(fun _i f -> f ()) 20 in
   let row_size = layout.row_height |> Utils.Unit.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
+  let row_count =
+    Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) data_source
+  in
   let internal_seq =
     Lwd_table.map_reduce
       (fun row v -> Lwd_seq.element (Lwd.var 0, Lwd.var Unloaded, row, v))
@@ -391,7 +403,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
             0 ))
   in
   let rows = Lwd_seq.fold_monoid render (Spacer_monoid.lwd_v dom) sorted_seq in
-  let rows = Dom.make_rows dom (Lwd.join rows) in
+  let rows = Dom.make_rows dom ~row_count (Lwd.join rows) in
   Dom.make dom scroll_handler rows
 
 let make (type data error) ~(layout : Layout.fixed_row_height)
@@ -434,7 +446,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     let rows =
       Lwd_table.map_reduce render (Spacer_monoid.v state.dom) state.table
     in
-    Dom.make_rows state.dom rows
+    Dom.make_rows state.dom ~row_count:total_items rows
   in
   let scroll_handler =
     Lwd.map fetch ~f:(fun fetch ->
