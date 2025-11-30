@@ -116,17 +116,22 @@ module Dom = struct
     El.div ~at:(style :: at) []
 
   let make_rows dom_state spaced_rows =
-    Lwd.map spaced_rows ~f:(fun (n, s, m) ->
-        let result =
-          if n > 0 then
-            let first_spacer = Lwd.pure @@ make_spacer dom_state n in
-            Lwd_seq.(concat (element first_spacer) s)
-          else s
-        in
-        if m > 0 then
-          let last_spacer = Lwd.pure @@ make_spacer dom_state m in
-          Lwd_seq.(concat result (element last_spacer))
-        else result)
+    let table_body =
+      Lwd.map spaced_rows ~f:(fun (n, s, m) ->
+          let result =
+            if n > 0 then
+              let first_spacer = Lwd.pure @@ make_spacer dom_state n in
+              Lwd_seq.(concat (element first_spacer) s)
+            else s
+          in
+          if m > 0 then
+            let last_spacer = Lwd.pure @@ make_spacer dom_state m in
+            Lwd_seq.(concat result (element last_spacer))
+          else result)
+    in
+    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
+    let on_create el = Utils.Forward_ref.set_exn dom_state.content_div el in
+    Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
 
   let make_wrapper dom_state ?(on_create = Fun.id) ?scroll_target scroll_handler
       rows =
@@ -386,12 +391,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
             0 ))
   in
   let rows = Lwd_seq.fold_monoid render (Spacer_monoid.lwd_v dom) sorted_seq in
-  let table_body = Dom.make_rows dom (Lwd.join rows) in
-  let rows =
-    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
-    let on_create = Utils.Forward_ref.set_exn dom.content_div in
-    Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
-  in
+  let rows = Dom.make_rows dom (Lwd.join rows) in
   Dom.make dom scroll_handler rows
 
 let make (type data error) ~(layout : Layout.fixed_row_height)
@@ -418,7 +418,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
   let total_items, fetch =
     match data_source with Lazy { total_items; fetch } -> (total_items, fetch)
   in
-  let table_body =
+  let rows =
     let render _row { content; index } =
       let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
       let style = `P (At.style (Jstr.v height)) in
@@ -435,11 +435,6 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
       Lwd_table.map_reduce render (Spacer_monoid.v state.dom) state.table
     in
     Dom.make_rows state.dom rows
-  in
-  let rows =
-    let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
-    let on_create el = Utils.Forward_ref.set_exn state.dom.content_div el in
-    Elwd.div ~at ~on_create [ `S (Lwd_seq.lift table_body) ]
   in
   let scroll_handler =
     Lwd.map fetch ~f:(fun fetch ->
