@@ -103,13 +103,26 @@ module Dom = struct
     in
     Controlled_scroll.make ?at ~scroll_target el
 
-  let make_spacer (state : state) n =
+  let make_spacer dom_state n =
     let at = [ At.class' (Jstr.v "row_spacer") ] in
-    let row_size = state.layout.row_height |> Utils.Unit.to_string in
+    let row_size = dom_state.layout.row_height |> Utils.Unit.to_string in
     let height_n n = Printf.sprintf "height: calc(%s * %i);" row_size n in
 
     let style = At.style (Jstr.v @@ height_n n) in
     El.div ~at:(style :: at) []
+
+  let make_rows dom_state spaced_rows =
+    Lwd.map spaced_rows ~f:(fun (n, s, m) ->
+        let result =
+          if n > 0 then
+            let first_spacer = Lwd.pure @@ make_spacer dom_state n in
+            Lwd_seq.(concat (element first_spacer) s)
+          else s
+        in
+        if m > 0 then
+          let last_spacer = Lwd.pure @@ make_spacer dom_state m in
+          Lwd_seq.(concat result (element last_spacer))
+        else result)
 
   let make_wrapper dom_state ?(on_create = Fun.id) ?scroll_target scroll_handler
       rows =
@@ -360,22 +373,8 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
             @@ Elwd.div ~at:(style :: at) [ `S (Lwd_seq.lift rendered_row) ],
             0 ))
   in
-  let rows =
-    Lwd_seq.fold_monoid render (Spacer_monoid.lwd_v dom) internal_seq
-  in
-  let table_body =
-    Lwd.map (Lwd.join rows) ~f:(fun (n, s, m) ->
-        let result =
-          if n > 0 then
-            let first_spacer = Lwd.pure @@ Dom.make_spacer dom n in
-            Lwd_seq.(concat (element first_spacer) s)
-          else s
-        in
-        if m > 0 then
-          let last_spacer = Lwd.pure @@ Dom.make_spacer dom m in
-          Lwd_seq.(concat result (element last_spacer))
-        else result)
-  in
+  let rows = Lwd_seq.fold_monoid render (Spacer_monoid.lwd_v dom) sorted_seq in
+  let table_body = Dom.make_rows dom (Lwd.join rows) in
   let rows =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
     let on_create = Utils.Forward_ref.set_exn dom.content_div in
@@ -423,17 +422,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
     let rows =
       Lwd_table.map_reduce render (Spacer_monoid.v state.dom) state.table
     in
-    Lwd.map rows ~f:(fun (n, s, m) ->
-        let result =
-          if n > 0 then
-            let first_spacer = Lwd.pure @@ Dom.make_spacer state.dom n in
-            Lwd_seq.(concat (element first_spacer) s)
-          else s
-        in
-        if m > 0 then
-          let last_spacer = Lwd.pure @@ Dom.make_spacer state.dom m in
-          Lwd_seq.(concat result (element last_spacer))
-        else result)
+    Dom.make_rows state.dom rows
   in
   let rows =
     let at = Attrs.O.(v (`P (C "lwdui-lazy-table-content"))) in
