@@ -144,21 +144,36 @@ let limit ?(interval_ms = 50) f =
   (* We use [last_update] to have regular  updates and the [timeout] to ensure
      that the last event is always taken into account even it it happens during
      the debouncing interval. *)
+  let interval_ms_f = Float.of_int interval_ms in
   let last_update = ref 0. in
-  let missed = ref Fun.id in
-  let run_missed () =
-    let f = !missed in
-    missed := Fun.id;
-    f ()
-  in
+  let trailing_edge = ref false in
   let timeout = ref (-1) in
+  let reset_trailing () =
+    trailing_edge := true;
+    timeout := -1
+  in
+  let run_trailing_edge () =
+    if !trailing_edge then begin
+      last_update := now_ms ();
+      f ()
+    end;
+    reset_trailing ()
+  in
   fun () ->
     let now = now_ms () in
-    if now -. !last_update >=. float_of_int interval_ms then begin
+    let time_elapsed_since_last_trigger = now -. !last_update in
+    if time_elapsed_since_last_trigger >=. interval_ms_f then begin
       last_update := now;
-      missed := Fun.id;
       if !timeout >= 0 then G.stop_timer !timeout;
-      timeout := G.set_timeout ~ms:interval_ms run_missed;
+      reset_trailing ();
       f ()
     end
-    else missed := f
+    else begin
+      trailing_edge := true;
+      if !timeout < 0 then
+        let ms =
+          (* Remaining time before the trailing edge *)
+          Int.of_float @@ (interval_ms_f -. time_elapsed_since_last_trigger)
+        in
+        timeout := G.set_timeout ~ms run_trailing_edge
+    end
