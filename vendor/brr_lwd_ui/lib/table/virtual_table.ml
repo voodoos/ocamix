@@ -112,11 +112,15 @@ module Dom = struct
     Printf.sprintf "height: calc(%s * %i);" row_size n
 
   let make_spacer dom_state n =
-    let at = [ At.class' (Jstr.v "row_spacer") ] in
-    let height_n n = height_n_rows dom_state n in
-
-    let style = At.style (Jstr.v @@ height_n n) in
-    El.div ~at:(style :: at) []
+    let at =
+      [
+        At.class' (Jstr.v "lwdui-virtual-table-row");
+        At.class' (Jstr.v "row_spacer");
+      ]
+    in
+    let height_n = height_n_rows dom_state n in
+    let style = At.style (Jstr.v height_n) in
+    El.div ~at:(style :: at) [ El.nbsp () ]
 
   let make_rows dom_state ~row_count spaced_rows =
     let table_body =
