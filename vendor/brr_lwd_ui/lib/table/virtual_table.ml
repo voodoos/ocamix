@@ -187,9 +187,10 @@ type ('data, 'error) state = {
   row_index : (int, ('data, 'error) row_data Lwd_table.row) Hashtbl.t;
 }
 
-let new_cache () = Cache.create ~size:50
+let new_cache () = Cache.create ~size:150
 
 let prepare (state : ('data, 'error) state) ~total_items:total =
+  (* TODO cache size should depend on the number of visible rows*)
   let () = state.cache <- new_cache () in
   let i = ref 0 in
   let current_row = ref (Lwd_table.first state.table) in
@@ -457,9 +458,8 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
         (* We use [last_update] to have regular debounced updates and the
            [timeout] to ensure that the last scroll event is always taken into
            account even it it happens during the debouncing interval. *)
-        Console.log [ "POP ON SCROLL UPD" ];
         let update () = update_visible_rows state fetch in
-        let update = Utils.limit update in
+        let update = Utils.limit ~interval_ms:50 update in
         Elwd.handler Ev.scroll (fun _ev -> update ()))
   in
   let wrapper =
