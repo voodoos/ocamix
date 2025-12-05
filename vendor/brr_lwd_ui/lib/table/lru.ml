@@ -38,7 +38,11 @@ let remove_last t =
       Hashtbl.remove t.table cell.key;
       t.on_remove cell.key cell.value
 
-let use t key value =
+(* [use' t key value] inserts [value] in the cache [t] with [key]. If the cache
+  already contains a value with that key: the record is marked as used recently,
+  its value stays unchanged and the function returns [false]. If a new record
+  was created [true] is returned. *)
+let use' t key value =
   for _ = 0 to Hashtbl.length t.table - t.max_length do
     remove_last t
   done;
@@ -54,10 +58,11 @@ let use t key value =
           f.prev <- Some cell;
           t.first <- Some cell
       | None, Some _ -> assert false
-      end
-  | Some cell -> (
+      end;
+      true
+  | Some cell ->
       (* 3 cases *)
-      match (cell.prev, cell.next) with
+      begin match (cell.prev, cell.next) with
       | None, None ->
           (* Already the only cell, doing nothing *)
           ()
@@ -85,7 +90,11 @@ let use t key value =
 
           (* Put it in front *)
           t.first |> Option.iter (fun f -> f.prev <- Some cell);
-          t.first <- Some cell)
+          t.first <- Some cell
+      end;
+      false
+
+let use t key value = ignore @@ use' t key value
 
 let debug_get_list t =
   let rec aux acc = function
