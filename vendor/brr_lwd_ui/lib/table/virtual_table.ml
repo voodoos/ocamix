@@ -180,14 +180,20 @@ type ('data, 'error) state = {
   dom : Dom.state;
   (* The cache is some sort of LRU to keep live the content of recently seen
  rows *)
-  mutable cache : ('data, 'error) row_data Lwd_table.row Cache.t;
+  mutable cache : (int, ('data, 'error) row_data Lwd_table.row) Lru.t;
   table : ('data, 'error) row_data Lwd_table.t;
   (* The [row_index] table is used to provide fast random access to the table's
      rows in the observer's callback *)
   row_index : (int, ('data, 'error) row_data Lwd_table.row) Hashtbl.t;
 }
 
-let new_cache () = Cache.create ~size:150
+let new_cache () =
+  let unload row =
+    Lwd_table.get row
+    |> Option.iter (fun row_data ->
+        Lwd_table.set row { row_data with content = None })
+  in
+  Lru.create ~on_remove:(fun _i row -> unload row) 150
 
 let prepare (state : ('data, 'error) state) ~total_items:total =
   (* TODO cache size should depend on the number of visible rows*)
@@ -272,8 +278,7 @@ let compute_visible_rows (state : Dom.state) =
   in
   List.init (last - first) ~f:(fun i -> first + i)
 
-let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch
-    ?(max_items = 200) rows =
+let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch rows =
   let load rows =
     (let data : ('data, _) Fut.result array = fetch (Array.map ~f:fst rows) in
      Array.iter2 rows data ~f:(fun (_, row) (data : ('data, _) Fut.result) ->
@@ -283,20 +288,11 @@ let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch
          |> ignore))
     |> ignore
   in
-  let unload row =
-    Lwd_table.get row
-    |> Option.iter (fun row_data ->
-        Lwd_table.set row { row_data with content = None })
+  let to_load =
+    List.fold_left ~init:[] rows ~f:(fun acc (i, row) ->
+        let inserted = Lru.use' state.cache i row in
+        if inserted then (i, row) :: acc else acc)
   in
-  let cache, to_load =
-    List.fold_left ~init:(state.cache, []) rows ~f:(fun (cache, acc) (i, row) ->
-        ignore max_items (* cache is not configurable right now *);
-
-        let cache, inserted = Cache.insert ~on_evict:unload cache i row in
-        if inserted then (cache, (i, row) :: acc) else (cache, acc))
-  in
-  (* So much for the purely functionnal cache^^ *)
-  state.cache <- cache;
   match Array.of_list to_load with [||] -> () | to_load -> load to_load
 
 let update_visible_rows state fetch =
@@ -309,9 +305,7 @@ let update_visible_rows state fetch =
         Hashtbl.get state.row_index idx |> Option.map (Pair.make idx))
       visible_rows_indexes
   in
-  load_or_bump_in_cache state ~fetch
-    ~max_items:(4 * List.length visible_rows)
-    visible_rows
+  load_or_bump_in_cache state ~fetch visible_rows
 
 let index_of_row t row =
   Lwd_table.map_reduce
@@ -473,8 +467,16 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
         Utils.tap ~initial_trigger:false
           (Lwd.pair fetch (Lwd.get state.dom.table_height))
           ~f:(function
-            | fetch, _ ->
+            | fetch, h ->
             Console.log [ "Height refresh" ];
+            let () =
+              Option.iter
+                (fun h ->
+                  (* TODO: that's not a very thougtful heuristic *)
+                  4 * Dom.number_of_fitting_rows_in state.dom h
+                  |> Lru.set_max_length state.cache)
+                h
+            in
             update_visible_rows state fetch))
       ?scroll_target scroll_handler rows
   in
