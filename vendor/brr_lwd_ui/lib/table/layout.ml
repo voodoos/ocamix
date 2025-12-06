@@ -6,16 +6,16 @@ module Columns = struct
   type column = {
     name : string;
     css_size : Css_lenght.t;
-    content : Elwd.t Elwd.col;
+    header : Elwd.t Elwd.col;
   }
 
   type t = column Lwd_seq.t Lwd.t
 
-  let v name css_size content = { name; css_size; content }
+  let v name css_size header = { name; css_size; header }
 
   let to_header t =
     Lwd_seq.fold_monoid
-      (fun { content; _ } -> Lwd_seq.element (Elwd.div content))
+      (fun { header; _ } -> Lwd_seq.element (Elwd.div header))
       Lwd_seq.monoid t
 
   let style t =
