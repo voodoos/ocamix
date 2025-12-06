@@ -89,6 +89,7 @@ html {
         overflow-y: hidden;
     }
     & .lwdui-lazy-table-content,
+    & .lwdui-controlled-scroll-wrapper:has(> .lwdui-lazy-table-content-wrapper),
     & .lwdui-lazy-table-content-wrapper,
     & .lwdui-virtual-table-row {
         display: grid;
