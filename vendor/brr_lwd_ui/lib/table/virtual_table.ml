@@ -321,11 +321,8 @@ let index_of_row t row =
 
 type 'a loaded_state = Loaded of 'a | Unloaded
 
-let make' (type data) ~(layout : Layout.fixed_row_height)
-    (data_source : data Lwd_table.t)
-    (renderer :
-      int Lwd.var -> data Lwd_table.row -> data -> Elwd.t Lwd.t Lwd_seq.t Lwd.t)
-    =
+let make' ~(layout : Layout.fixed_row_height) (data_source : 'data Lwd_table.t)
+    ?(sort : _ Utils.sort option Lwd.var = Lwd.var None) renderer =
   let module RAList = CCRAL in
   let dom =
     Dom.
@@ -349,11 +346,18 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
       (fun row v -> Lwd_seq.element (Lwd.var 0, Lwd.var Unloaded, row, v))
       Lwd_seq.monoid data_source
   in
+  let sorted_seq =
+    Lwd.bind (Lwd.get sort) ~f:(function
+      | None -> internal_seq
+      | Some sort ->
+          let sort = { sort with proj = (fun (_, _, _, v) -> sort.proj v) } in
+          internal_seq |> Utils.lwd_seq_sort (Utils.sort_compare sort))
+  in
   let seq_index =
     Lwd_seq.fold_monoid
       (fun v -> RAList.(cons v empty))
       (RAList.empty, RAList.append)
-      internal_seq
+      sorted_seq
   in
   let scroll_handler =
     let on_scroll index =
