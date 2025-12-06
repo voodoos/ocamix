@@ -83,7 +83,7 @@ module Dom = struct
 
   let number_of_fitting_rows_in dom_state h_px =
     let row_height_px = Utils.Unit.to_px dom_state.layout.row_height in
-    Float.(of_int h_px / row_height_px) |> int_of_float
+    Float.(of_int h_px / row_height_px |> ceil) |> int_of_float
 
   let resize_observer state =
     (* We observe the size of the table to re-populate if necessary *)
@@ -363,6 +363,8 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
           RAList.get index i
           |> Option.iter (fun (row_index, load_state, _row, _value) ->
               let () = Utils.set_if_different row_index i in
+              (* TODO for both implementations: actually visible rows should be
+                 refreshed last in the cache and not bleeding ones. *)
               Lru.use cache i (fun () -> Lwd.set load_state Unloaded);
               match Lwd.peek load_state with
               | Loaded () -> ()
@@ -373,7 +375,8 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
         let () =
           Option.iter
             (fun h ->
-              (* TODO: that's not a very thougtful heuristic *)
+              (* TODO: that's not a very thougtful heuristic. We could take the
+                 bleeding into account.  *)
               2 * (Dom.number_of_fitting_rows_in dom h + 10)
               |> Lru.set_max_length cache)
             h
