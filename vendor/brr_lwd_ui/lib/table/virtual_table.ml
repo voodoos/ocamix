@@ -10,6 +10,7 @@ open Brrer
 open Brr
 open Brr_lwd
 module FRef = Utils.Forward_ref
+module Sort = Utils.Sort
 
 let logger = Logger.for_section "virtual table"
 
@@ -66,8 +67,8 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
 module Cache = FFCache.Make (Int)
 
 module Dom = struct
-  type state = {
-    layout : Layout.fixed_row_height;
+  type 'data state = {
+    layout : 'data Layout.fixed_row_height;
     (* The content_div ref should be initialized with the correct element as
          soon as it is created. It is not reactive per se. *)
     content_div : El.t Utils.Forward_ref.t;
@@ -78,6 +79,7 @@ module Dom = struct
        execution when the browser is resized or other layout changes are made. *)
     window_height : int option Lwd.var;
     table_height : int option Lwd.var;
+    sort : 'data Sort.compare option Lwd.var;
     mutable last_scroll_y : float;
   }
 
@@ -162,22 +164,22 @@ module Dom = struct
     | Some scroll_target -> with_scroll_position dom_state scroll_target wrapper
     | None -> wrapper
 
-  let make_table layout content =
-    let table_header = Layout.header layout in
-    let table_status = Layout.status layout in
+  let make_table dom_state content =
+    let table_header = Layout.header dom_state.sort dom_state.layout in
+    let table_status = Layout.status dom_state.layout in
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Layout.style layout in
+    let grid_style = Layout.style dom_state.layout in
     let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
     let at = `R s :: at in
     Elwd.div ~at [ `R table_header; `R content; `R table_status ]
 
   let make dom_state ?scroll_target scroll_handler rows =
     let wrapper = make_wrapper dom_state ?scroll_target scroll_handler rows in
-    make_table dom_state.layout wrapper
+    make_table dom_state wrapper
 end
 
 type ('data, 'error) state = {
-  dom : Dom.state;
+  dom : 'data Dom.state;
   (* The cache is some sort of LRU to keep live the content of recently seen
  rows *)
   mutable cache : (int, ('data, 'error) row_data Lwd_table.row) Lru.t;
@@ -247,7 +249,7 @@ end
     ([bleeding]) so that they can be pre loaded to give the illusion to the user
     that they have always been there. The scroll direction is used to compute
     the scrolling speed and adjust bleeding consequently. *)
-let compute_visible_rows (state : Dom.state) =
+let compute_visible_rows (state : _ Dom.state) =
   let height elt =
     let jv = El.to_jv elt in
     Jv.get jv "offsetHeight" |> Jv.to_float
@@ -321,8 +323,9 @@ let index_of_row t row =
 
 type 'a loaded_state = Loaded of 'a | Unloaded
 
-let make' ~(layout : Layout.fixed_row_height) (data_source : 'data Lwd_table.t)
-    ?(sort : _ Utils.sort option Lwd.var = Lwd.var None) renderer =
+let make' ~(layout : _ Layout.fixed_row_height)
+    (data_source : 'data Lwd_table.t)
+    ?(sort : _ Sort.compare option Lwd.var = Lwd.var None) renderer =
   let module RAList = CCRAL in
   let dom =
     Dom.
@@ -332,6 +335,7 @@ let make' ~(layout : Layout.fixed_row_height) (data_source : 'data Lwd_table.t)
         wrapper_div = Utils.Forward_ref.make ();
         window_height = Lwd.var None;
         table_height = Lwd.var None;
+        sort;
         last_scroll_y = 0.;
       }
   in
@@ -349,9 +353,11 @@ let make' ~(layout : Layout.fixed_row_height) (data_source : 'data Lwd_table.t)
   let sorted_seq =
     Lwd.bind (Lwd.get sort) ~f:(function
       | None -> internal_seq
-      | Some sort ->
-          let sort = { sort with proj = (fun (_, _, _, v) -> sort.proj v) } in
-          internal_seq |> Utils.lwd_seq_sort (Utils.sort_compare sort))
+      | Some (Compare sort) ->
+          let sort =
+            Sort.Compare { sort with proj = (fun (_, _, _, v) -> sort.proj v) }
+          in
+          internal_seq |> Sort.lwd_seq (Sort.compare sort))
   in
   let seq_index =
     Lwd_seq.fold_monoid
@@ -412,7 +418,7 @@ let make' ~(layout : Layout.fixed_row_height) (data_source : 'data Lwd_table.t)
   let rows = Dom.make_rows dom ~row_count (Lwd.join rows) in
   Dom.make dom scroll_handler rows
 
-let make (type data error) ~(layout : Layout.fixed_row_height)
+let make (type data error) ~(layout : _ Layout.fixed_row_height)
     ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
     (data_source : (data, error) data_source) =
   let state =
@@ -424,6 +430,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
           wrapper_div = Utils.Forward_ref.make ();
           window_height = Lwd.var None;
           table_height = Lwd.var None;
+          sort = Lwd.var None;
           last_scroll_y = 0.;
         };
       cache = new_cache ();
@@ -487,7 +494,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
             update_visible_rows state fetch))
       ?scroll_target scroll_handler rows
   in
-  Dom.make_table layout wrapper
+  Dom.make_table state.dom wrapper
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
     ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++

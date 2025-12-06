@@ -1,21 +1,47 @@
 open Import
 open Brr
 open Brr_lwd
+module Sort = Utils.Sort
+
+type 'data on_sort = Do_nothing | Set of 'data Sort.compare
 
 module Columns = struct
-  type column = {
+  type 'data column = {
     name : string;
     css_size : Css_lenght.t;
     header : Elwd.t Elwd.col;
+    on_sort : 'data on_sort;
   }
 
-  type t = column Lwd_seq.t Lwd.t
+  type 'data t = 'data column Lwd_seq.t Lwd.t
 
-  let v name css_size header = { name; css_size; header }
+  let v name css_size ?(on_sort = Do_nothing) header =
+    { name; css_size; header; on_sort }
 
-  let to_header t =
+  let to_header (type data) (compare_state : data Sort.compare option Lwd.var)
+      (t : data t) =
     Lwd_seq.fold_monoid
-      (fun { header; _ } -> Lwd_seq.element (Elwd.div header))
+      (fun { header; on_sort; _ } ->
+        let sort_button =
+          match on_sort with
+          | Do_nothing -> None
+          | Set compare ->
+              Option.some
+              @@ Elwd.button
+                   ~ev:
+                     [
+                       `P
+                         (Elwd.handler Ev.click (fun _ ->
+                              Lwd.set compare_state (Some compare)));
+                     ]
+                   [ `P (El.txt' "sort") ]
+        in
+        let header =
+          match sort_button with
+          | None -> header
+          | Some button -> `R button :: header
+        in
+        Lwd_seq.element (Elwd.div header))
       Lwd_seq.monoid t
 
   let style t =
@@ -30,15 +56,15 @@ module Columns = struct
     Printf.sprintf "%s: %s;" "grid-template-columns" template
 end
 
-type fixed_row_height = {
-  columns : Columns.t;
+type 'data fixed_row_height = {
+  columns : 'data Columns.t;
   status : Elwd.t Elwd.col;
   row_height : Css_lenght.t;
 }
 
 let style t = Columns.style t.columns
 
-let header t =
+let header compare_state t =
   let row_height = Css_lenght.to_string t.row_height in
   let at =
     [
@@ -47,7 +73,8 @@ let header t =
       `P (At.class' (Jstr.v "lwdui-virtual-table-row"));
     ]
   in
-  Elwd.div ~at [ `S (Columns.to_header t.columns |> Lwd_seq.lift) ]
+  Elwd.div ~at
+    [ `S (Columns.to_header compare_state t.columns |> Lwd_seq.lift) ]
 
 let status t =
   let at = [ `P (At.class' (Jstr.v "lwdui-virtual-table-status")) ] in

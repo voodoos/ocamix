@@ -83,24 +83,30 @@ let measure_execution_time name f () =
     ];
   result
 
-type ('data, 'value) sort = {
-  proj : 'data -> 'value;
-  compare : 'value -> 'value -> int;
-}
+module Sort = struct
+  type 'data compare =
+    | Compare : {
+        proj : 'data -> 'value;
+        compare : 'value -> 'value -> int;
+      }
+        -> 'data compare
 
-let sort_compare sort d1 d2 = sort.compare (sort.proj d1) (sort.proj d2)
+  let int ?(proj = Fun.id) () = Compare { proj; compare = Int.compare }
+  let string ?(proj = Fun.id) () = Compare { proj; compare = String.compare }
+  let compare (Compare sort) d1 d2 = sort.compare (sort.proj d1) (sort.proj d2)
 
-let lwd_seq_sort compare t =
-  let compare (v1, i1) (v2, i2) =
-    let c = compare v1 v2 in
-    if c = 0 then Int.compare i1 i2 else c
-  in
-  let i = ref 0 in
-  t
-  |> Lwd_seq.map (fun v ->
-      incr i;
-      (v, !i))
-  |> Lwd_seq.sort_uniq compare |> Lwd_seq.map fst
+  let lwd_seq compare t =
+    let compare (v1, i1) (v2, i2) =
+      let c = compare v1 v2 in
+      if c = 0 then Int.compare i1 i2 else c
+    in
+    let i = ref 0 in
+    t
+    |> Lwd_seq.map (fun v ->
+        incr i;
+        (v, !i))
+    |> Lwd_seq.sort_uniq compare |> Lwd_seq.map fst
+end
 
 let now_ms () = Performance.now_ms G.performance
 

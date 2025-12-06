@@ -23,12 +23,15 @@ let _data =
     }
 
 let app =
+  let sort = Lwd.var None in
   let columns =
     Lwd.pure
     @@ Lwd_seq.of_array
          [|
            Columns.v "a" (Em 5.) [ `P (El.txt' "id") ];
-           Columns.v "a" (Fr 1.) [ `P (El.txt' "square") ];
+           Columns.v "a" (Fr 1.)
+             [ `P (El.txt' "square") ]
+             ~on_sort:(Set (Sort.int ()));
          |]
   in
   let layout = { columns; status = []; row_height = Em 5. } in
@@ -60,7 +63,7 @@ let app =
       (Lwd_seq.of_list
          [ s; Elwd.div [ `P (El.txt' (value |> string_of_int)); `R irow ] ])
   in
-  let table = Virtual.make' ~layout data renderer in
+  let table = Virtual.make' ~layout data ~sort renderer in
   let add_first =
     let ev =
       [ `P (Elwd.handler Ev.click (fun _ -> Lwd_table.prepend' data (-1))) ]
