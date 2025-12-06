@@ -3,7 +3,12 @@ open Brr
 open Brr_lwd
 
 module Columns = struct
-  type column = { name : string; css_size : string; content : Elwd.t Elwd.col }
+  type column = {
+    name : string;
+    css_size : Css_lenght.t;
+    content : Elwd.t Elwd.col;
+  }
+
   type t = column Lwd_seq.t Lwd.t
 
   let v name css_size content = { name; css_size; content }
@@ -17,7 +22,7 @@ module Columns = struct
     let open Lwd_infix in
     let$ template =
       Lwd_seq.fold_monoid
-        (fun { css_size; _ } -> css_size)
+        (fun { css_size; _ } -> Css_lenght.to_string css_size)
         ("", fun s s' -> Printf.sprintf "%s %s" s s')
         t
     in
@@ -28,13 +33,13 @@ end
 type fixed_row_height = {
   columns : Columns.t;
   status : Elwd.t Elwd.col;
-  row_height : Utils.Unit.t;
+  row_height : Css_lenght.t;
 }
 
 let style t = Columns.style t.columns
 
 let header t =
-  let row_height = Utils.Unit.to_string t.row_height in
+  let row_height = Css_lenght.to_string t.row_height in
   let at =
     [
       `P (At.style (Jstr.v @@ Printf.sprintf "height: %s" row_height));
@@ -47,5 +52,3 @@ let header t =
 let status t =
   let at = [ `P (At.class' (Jstr.v "lwdui-virtual-table-status")) ] in
   Elwd.div ~at t.status
-
-let _ = Utils.Unit.to_px (Rem 4.)

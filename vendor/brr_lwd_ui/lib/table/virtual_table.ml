@@ -82,7 +82,7 @@ module Dom = struct
   }
 
   let number_of_fitting_rows_in dom_state h_px =
-    let row_height_px = Utils.Unit.to_px dom_state.layout.row_height in
+    let row_height_px = Css_lenght.to_px dom_state.layout.row_height in
     Float.(of_int h_px / row_height_px |> ceil) |> int_of_float
 
   let resize_observer state =
@@ -101,14 +101,14 @@ module Dom = struct
       Lwd.map target_position ~f:(fun i ->
           let row_height =
             let parent = Utils.Forward_ref.get_exn dom_state.content_div in
-            Int.of_float (Utils.Unit.to_px ~parent dom_state.layout.row_height)
+            Int.of_float (Css_lenght.to_px ~parent dom_state.layout.row_height)
           in
           Some (Controlled_scroll.Pos (i * row_height)))
     in
     Controlled_scroll.make ?at ~scroll_target el
 
   let height_n_rows dom_state n =
-    let row_size = dom_state.layout.row_height |> Utils.Unit.to_string in
+    let row_size = dom_state.layout.row_height |> Css_lenght.to_string in
     Printf.sprintf "height: calc(%s * %i);" row_size n
 
   let make_spacer dom_state n =
@@ -258,7 +258,7 @@ let compute_visible_rows (state : Dom.state) =
   let () = state.last_scroll_y <- scroll_y in
   let visible_height = height div in
   let parent = Utils.Forward_ref.get_exn state.content_div in
-  let row_height = Utils.Unit.to_px ~parent state.layout.row_height in
+  let row_height = Css_lenght.to_px ~parent state.layout.row_height in
   let number_of_visible_rows =
     Int.of_float (ceil (visible_height /. row_height))
   in
@@ -339,7 +339,7 @@ let make' (type data) ~(layout : Layout.fixed_row_height)
       }
   in
   let cache = Lru.create ~on_remove:(fun _i f -> f ()) 20 in
-  let row_size = layout.row_height |> Utils.Unit.to_string in
+  let row_size = layout.row_height |> Css_lenght.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let row_count =
     Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) data_source
@@ -427,7 +427,7 @@ let make (type data error) ~(layout : Layout.fixed_row_height)
       row_index = Hashtbl.create 2048;
     }
   in
-  let row_size = layout.row_height |> Utils.Unit.to_string in
+  let row_size = layout.row_height |> Css_lenght.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let total_items, fetch =
     match data_source with Lazy { total_items; fetch } -> (total_items, fetch)

@@ -907,7 +907,7 @@ let layout ~columns_src ~rows_src names =
               ~ev:[ `P (Elwd.handler Ev.click on_click) ]
               [ `P (El.txt' "❌") ]
           in
-          Columns.v "a" "1fr" [ `R label; `R delete ])
+          Columns.v "a" (Fr 1.) [ `R label; `R delete ])
         names;
     status = [];
     row_height = Em 5.;

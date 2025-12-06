@@ -13,10 +13,10 @@ let columns () =
   @@ Lwd_seq.of_array
        Table.Columns.
          [|
-           v "Order" "5rem" @@ [ `P (El.txt' "#") ];
-           v "Cover" "5rem" @@ [ `P (El.txt' "Cover") ];
-           v "Title" "1fr" @@ [ `P (El.txt' "Title") ];
-           v "Duration" "5rem" @@ [ `P (El.txt' "Duration") ];
+           v "Order" (Rem 5.) @@ [ `P (El.txt' "#") ];
+           v "Cover" (Rem 5.) @@ [ `P (El.txt' "Cover") ];
+           v "Title" (Fr 1.) @@ [ `P (El.txt' "Title") ];
+           v "Duration" (Rem 5.) @@ [ `P (El.txt' "Duration") ];
          |]
 
 let make ~reset_playlist ~fetch ?(status = []) ?scroll_target

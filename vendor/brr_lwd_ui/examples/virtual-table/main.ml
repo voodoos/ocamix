@@ -27,8 +27,8 @@ let app =
     Lwd.pure
     @@ Lwd_seq.of_array
          [|
-           Columns.v "a" "5em" [ `P (El.txt' "id") ];
-           Columns.v "a" "1fr" [ `P (El.txt' "square") ];
+           Columns.v "a" (Em 5.) [ `P (El.txt' "id") ];
+           Columns.v "a" (Fr 1.) [ `P (El.txt' "square") ];
          |]
   in
   let layout = { columns; status = []; row_height = Em 5. } in
