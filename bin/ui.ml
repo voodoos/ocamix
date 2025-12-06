@@ -3,11 +3,11 @@ open Brrer
 open Brr_lwd_ui
 
 module Two_state_button = struct
-  let base = Attrs.classes [ "button" ]
+  let base = Attrs.O.(v (`P (C "button")))
 
   let at = function
-    | Button.On -> Attrs.classes [ "on" ]
-    | Off -> Attrs.classes [ "off" ]
+    | Button.On -> Brr.At.class' (Jstr.v "on")
+    | Off -> Brr.At.class' (Jstr.v "off")
 
   let make ~on_click =
     let on_click = Button.handler Brr.Ev.click on_click in

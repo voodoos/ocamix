@@ -26,11 +26,11 @@ module type State = sig
 end
 
 val with_state :
-  ?base:Attrs.t ->
+  ?base:At.t Elwd.col ->
   (module State with type t = 't) ->
   ?state:'t ->
   ?d:El.document ->
-  ?at:('t -> Attrs.t) ->
+  ?at:('t -> At.t) ->
   ?ev:'t handler_with_state Elwd.col ->
   ('t -> El.t Elwd.col) ->
   El.t Lwd.t * (unit -> 't Lwd.t) * ('t -> unit)
@@ -40,10 +40,10 @@ type two_state = On | Off
 module Two_state : State with type t = two_state
 
 val two_state :
-  ?base:Attrs.t ->
+  ?base:At.t Elwd.col ->
   ?state:Two_state.t ->
   ?d:El.document ->
-  ?at:(Two_state.t -> Attrs.t) ->
+  ?at:(Two_state.t -> At.t) ->
   ?ev:Two_state.t handler_with_state Elwd.col ->
   (Two_state.t -> El.t Elwd.col) ->
   El.t Lwd.t * (unit -> Two_state.t Lwd.t) * (Two_state.t -> unit)

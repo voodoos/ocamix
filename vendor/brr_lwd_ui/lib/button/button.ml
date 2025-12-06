@@ -27,20 +27,17 @@ module type State = sig
   val next : t -> t
 end
 
-let apply_state state f = f state
-
-let with_state ?(base = Attrs.empty) (type t) (module S : State with type t = t)
-    ?(state = S.default) ?d ?(at : (S.t -> Attrs.t) option)
+let with_state ?(base = []) (type t) (module S : State with type t = t)
+    ?(state = S.default) ?d ?(at : (S.t -> At.t) option)
     ?(ev : t handler_with_state Elwd.col option)
-    (content : S.t -> El.t Elwd.col) =
+    (content : S.t -> Elwd.t Elwd.col) =
   let v_state = Lwd.var state in
   let get_state () = Lwd.get v_state in
   let set_state t = Lwd.set v_state t in
   let elt =
-    let open Lwd_infix in
-    let$* state = get_state () in
     let with_state (Handler_with_state { opts; type'; func }) =
       let func ev =
+        let state = Lwd.peek v_state in
         match func state ev with
         | None -> ()
         | Set s -> set_state s
@@ -49,11 +46,10 @@ let with_state ?(base = Attrs.empty) (type t) (module S : State with type t = t)
       Elwd.handler ?opts type' func
     in
     let at =
-      Option.map_or ~default:base
-        (fun at -> Attrs.union base @@ apply_state state at)
-        at
+      match at with
+      | None -> base
+      | Some f -> `R (Lwd.map (get_state ()) ~f) :: base
     in
-    let at = Attrs.to_at at in
     let ev =
       Option.map
         (List.map ~f:(function
@@ -62,7 +58,8 @@ let with_state ?(base = Attrs.empty) (type t) (module S : State with type t = t)
           | `S h -> `S (Lwd_seq.map with_state h)))
         ev
     in
-    Elwd.button ?d ~at ?ev (content state)
+    let content = Lwd.bind (get_state ()) ~f:(fun s -> Elwd.div (content s)) in
+    Elwd.button ?d ~at ?ev [ `R content ]
   in
   (elt, get_state, set_state)
 
