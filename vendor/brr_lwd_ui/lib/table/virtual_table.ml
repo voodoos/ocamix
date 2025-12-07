@@ -199,7 +199,6 @@ let new_cache () =
   Lru.create ~on_remove:(fun _i row -> unload row) 150
 
 let prepare (state : ('data, 'error) state) ~total_items:total =
-  (* TODO cache size should depend on the number of visible rows*)
   let () = state.cache <- new_cache () in
   let i = ref 0 in
   let current_row = ref (Lwd_table.first state.table) in
@@ -345,6 +344,7 @@ let make' ~(layout : _ Layout.fixed_row_height)
     Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) data_source
   in
   let internal_seq =
+    (* This counter is used to dedup rows when sorting *)
     let i = ref 0 in
     Lwd_table.map_reduce
       (fun row v ->
@@ -470,37 +470,36 @@ let make (type data error) ~(layout : _ Layout.fixed_row_height)
     Dom.make_rows state.dom ~row_count:total_items rows
   in
   let scroll_handler =
-    Lwd.map fetch ~f:(fun fetch ->
+    Lwd.map2 fetch (Lwd.get state.dom.table_height) ~f:(fun fetch h ->
         (* We use [last_update] to have regular debounced updates and the
            [timeout] to ensure that the last scroll event is always taken into
            account even it it happens during the debouncing interval. *)
         let update () = update_visible_rows state fetch in
+        let () =
+          Option.iter
+            (fun h ->
+              (* TODO: that's not a very thougtful heuristic *)
+              let new_cache_size =
+                4 * (1 + Dom.number_of_fitting_rows_in state.dom h)
+              in
+              Console.log [ "New cache size: "; new_cache_size ];
+              Lru.set_max_length state.cache new_cache_size)
+            h
+        in
+        let () =
+          (* We execute the handle once each time it changes to make sure the
+             table is always up-to-date. *)
+          (* Queuing prevents illegal updates during invalidation *)
+          Window.queue_micro_task G.window update
+        in
         let update = Utils.limit ~interval_ms:50 update in
         Elwd.handler Ev.scroll (fun _ev -> update ()))
   in
-  let wrapper =
-    Dom.make_wrapper state.dom
-      ~on_create:(fun () ->
-        Utils.tap ~initial_trigger:true (Lwd.pair total_items fetch)
-          ~f:(function total_items, fetch ->
-            Console.log [ "Full refresh" ];
-            prepare state ~total_items;
-            update_visible_rows state fetch);
-        Utils.tap ~initial_trigger:false
-          (Lwd.pair fetch (Lwd.get state.dom.table_height))
-          ~f:(function
-            | fetch, h ->
-            Console.log [ "Height refresh" ];
-            let () =
-              Option.iter
-                (fun h ->
-                  (* TODO: that's not a very thougtful heuristic *)
-                  4 * Dom.number_of_fitting_rows_in state.dom h
-                  |> Lru.set_max_length state.cache)
-                h
-            in
-            update_visible_rows state fetch))
-      ?scroll_target scroll_handler rows
+  let wrapper = Dom.make_wrapper state.dom ?scroll_target scroll_handler rows in
+  let () =
+    Utils.tap ~initial_trigger:true total_items ~f:(function total_items ->
+        Console.log [ "Full refresh" ];
+        prepare state ~total_items)
   in
   Dom.make_table state.dom wrapper
 
