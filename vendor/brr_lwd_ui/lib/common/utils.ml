@@ -95,6 +95,10 @@ module Sort = struct
   let string ?(proj = Fun.id) () = Compare { proj; compare = String.compare }
   let compare (Compare sort) d1 d2 = sort.compare (sort.proj d1) (sort.proj d2)
 
+  let reverse (Compare { proj; compare }) =
+    let compare a b = compare b a in
+    Compare { proj; compare }
+
   let lwd_seq compare t =
     let compare (v1, i1) (v2, i2) =
       let c = compare v1 v2 in
