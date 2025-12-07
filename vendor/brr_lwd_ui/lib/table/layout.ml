@@ -32,10 +32,10 @@ module Columns = struct
     incr stamp;
     { id; name; css_size; header; on_sort }
 
-  let sort_button ~ev () =
+  let sort_button ~state ~ev () =
     Button.with_state
       (module Sort_button_state)
-      ~ev
+      ~state ~ev
       (function
         | Asc -> [ `P (El.txt' "^") ]
         | Desc -> [ `P (El.txt' "v") ]
@@ -62,7 +62,15 @@ module Columns = struct
                     Lwd.set compare_state sort;
                     Next)
               in
-              Option.some @@ sort_button ~ev:[ `P ev ] ()
+              let state = Lwd.var Sort_button_state.None in
+              let () =
+                Utils.tap (Lwd.get compare_state) ~f:(function
+                  | Some { column_id; _ } when column_id <> id ->
+                      (* If another column is used for sorting, this one is not. *)
+                      Lwd.set state None
+                  | _ -> ())
+              in
+              Option.some @@ sort_button ~state ~ev:[ `P ev ] ()
         in
         let header =
           match sort_button with

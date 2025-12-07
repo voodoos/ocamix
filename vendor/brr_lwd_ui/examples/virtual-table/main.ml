@@ -29,8 +29,11 @@ let app =
          [|
            Columns.v "a" (Em 5.) [ `P (El.txt' "id") ];
            Columns.v "a" (Fr 1.)
-             [ `P (El.txt' "square") ]
+             [ `P (El.txt' "val") ]
              ~on_sort:(Set (Sort.int ()));
+           Columns.v "a" (Fr 1.)
+             [ `P (El.txt' "square") ]
+             ~on_sort:(Set (Sort.int ~proj:(( * ) 2) ()));
          |]
   in
   let layout =
@@ -54,7 +57,11 @@ let app =
     let s = Elwd.div [ `R s ] in
     Lwd.return
       (Lwd_seq.of_list
-         [ s; Elwd.div [ `P (El.txt' (value |> string_of_int)) ] ])
+         [
+           s;
+           Elwd.div [ `P (El.txt' (value |> string_of_int)) ];
+           Elwd.div [ `P (El.txt' (value * value |> string_of_int)) ];
+         ])
   in
   let table = Virtual.make' ~layout data renderer in
   let add_first =
