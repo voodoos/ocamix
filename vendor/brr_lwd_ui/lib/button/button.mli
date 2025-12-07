@@ -28,7 +28,8 @@ end
 val with_state :
   ?base:At.t Elwd.col ->
   (module State with type t = 't) ->
-  ?state:'t ->
+  ?state:'t Lwd.var ->
+  ?control:'t Lwd.t ->
   ?d:El.document ->
   ?at:('t -> At.t) ->
   ?ev:'t handler_with_state Elwd.col ->
@@ -41,7 +42,8 @@ module Two_state : State with type t = two_state
 
 val two_state :
   ?base:At.t Elwd.col ->
-  ?state:Two_state.t ->
+  ?state:Two_state.t Lwd.var ->
+  ?control:Two_state.t Lwd.t ->
   ?d:El.document ->
   ?at:(Two_state.t -> At.t) ->
   ?ev:Two_state.t handler_with_state Elwd.col ->

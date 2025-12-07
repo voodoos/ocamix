@@ -28,10 +28,13 @@ module type State = sig
 end
 
 let with_state ?(base = []) (type t) (module S : State with type t = t)
-    ?(state = S.default) ?d ?(at : (S.t -> At.t) option)
+    ?(state = Lwd.var S.default) ?control ?d ?(at : (S.t -> At.t) option)
     ?(ev : t handler_with_state Elwd.col option)
     (content : S.t -> Elwd.t Elwd.col) =
-  let v_state = Lwd.var state in
+  let v_state = state in
+  let () =
+    Option.iter (Utils.tap ~initial_trigger:true ~f:(Lwd.set v_state)) control
+  in
   let get_state () = Lwd.get v_state in
   let set_state t = Lwd.set v_state t in
   let elt =
