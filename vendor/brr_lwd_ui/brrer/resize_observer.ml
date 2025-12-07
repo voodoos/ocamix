@@ -59,5 +59,5 @@ let create ~callback =
     let entries = Jv.to_list Entry.of_jv entries in
     callback entries (of_jv observer)
   in
-  let args = [| Jv.repr callback |] in
+  let args = [| Jv.callback ~arity:2 callback |] in
   Jv.new' (Jv.get Jv.global "ResizeObserver") args
