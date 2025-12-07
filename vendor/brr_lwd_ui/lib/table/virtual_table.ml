@@ -345,8 +345,11 @@ let make' ~(layout : _ Layout.fixed_row_height)
     Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) data_source
   in
   let internal_seq =
+    let i = ref 0 in
     Lwd_table.map_reduce
-      (fun row v -> Lwd_seq.element (Lwd.var 0, Lwd.var Unloaded, row, v))
+      (fun row v ->
+        incr i;
+        Lwd_seq.element ((Lwd.var 0, Lwd.var Unloaded, row, v), !i))
       Lwd_seq.monoid data_source
   in
   let sorted_seq =
@@ -354,13 +357,20 @@ let make' ~(layout : _ Layout.fixed_row_height)
       | None -> internal_seq
       | Some { compare = Compare sort; _ } ->
           let sort =
-            Sort.Compare { sort with proj = (fun (_, _, _, v) -> sort.proj v) }
+            Sort.Compare
+              {
+                proj = (fun ((_, _, _, v), i) -> (sort.proj v, i));
+                compare =
+                  (fun (v1, i1) (v2, i2) ->
+                    let c = sort.compare v1 v2 in
+                    if c = 0 then Int.compare i1 i2 else c);
+              }
           in
-          internal_seq |> Sort.lwd_seq (Sort.compare sort))
+          Lwd_seq.sort_uniq (Sort.compare sort) internal_seq)
   in
   let seq_index =
     Lwd_seq.fold_monoid
-      (fun v -> RAList.(cons v empty))
+      (fun (v, _) -> RAList.(cons v empty))
       (RAList.empty, RAList.append)
       sorted_seq
   in
@@ -401,7 +411,7 @@ let make' ~(layout : _ Layout.fixed_row_height)
         in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
-  let render (row_index, load_state, row, value) =
+  let render ((row_index, load_state, row, value), _) =
     let at = Attrs.add At.Name.class' (`P "lwdui-virtual-table-row") [] in
     let style = `P (At.style (Jstr.v height)) in
     Lwd.map (Lwd.get load_state) ~f:(function

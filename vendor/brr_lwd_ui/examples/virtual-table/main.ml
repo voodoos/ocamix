@@ -42,7 +42,7 @@ let app =
   (* let scroll_target = Lwd.var 0 in *)
   let data = Lwd_table.make () in
   let () =
-    for _ = 0 to 100 do
+    for _ = 0 to 1_000 do
       Lwd_table.append' data (Random.int 1000)
     done
   in
