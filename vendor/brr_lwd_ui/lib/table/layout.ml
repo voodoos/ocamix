@@ -5,6 +5,13 @@ module Sort = Utils.Sort
 
 type 'data on_sort = Do_nothing | Set of 'data Sort.compare
 
+module Sort_button_state = struct
+  type t = Asc | Desc | None
+
+  let default = None
+  let next = function Asc -> Desc | Desc -> None | None -> Asc
+end
+
 module Columns = struct
   type 'data column = {
     name : string;
@@ -18,6 +25,15 @@ module Columns = struct
   let v name css_size ?(on_sort = Do_nothing) header =
     { name; css_size; header; on_sort }
 
+  let sort_button ~ev () =
+    Button.with_state
+      (module Sort_button_state)
+      ~ev
+      (function
+        | Asc -> [ `P (El.txt' "^") ]
+        | Desc -> [ `P (El.txt' "v") ]
+        | None -> [ `P (El.txt' "-") ])
+
   let to_header (type data) (compare_state : data Sort.compare option Lwd.var)
       (t : data t) =
     Lwd_seq.fold_monoid
@@ -26,20 +42,17 @@ module Columns = struct
           match on_sort with
           | Do_nothing -> None
           | Set compare ->
-              Option.some
-              @@ Elwd.button
-                   ~ev:
-                     [
-                       `P
-                         (Elwd.handler Ev.click (fun _ ->
-                              Lwd.set compare_state (Some compare)));
-                     ]
-                   [ `P (El.txt' "sort") ]
+              let ev =
+                Button.handler Ev.click (fun _ _ ->
+                    Lwd.set compare_state (Some compare);
+                    Next)
+              in
+              Option.some @@ sort_button ~ev:[ `P ev ] ()
         in
         let header =
           match sort_button with
           | None -> header
-          | Some button -> `R button :: header
+          | Some (button, _, _) -> `R button :: header
         in
         Lwd_seq.element (Elwd.div header))
       Lwd_seq.monoid t
