@@ -77,7 +77,6 @@ module Dom = struct
     wrapper_div : El.t Utils.Forward_ref.t;
     (* The height of the window is a reactive value that might change during
        execution when the browser is resized or other layout changes are made. *)
-    window_height : int option Lwd.var;
     table_height : int option Lwd.var;
     mutable last_scroll_y : float;
   }
@@ -332,7 +331,6 @@ let make' ~(layout : _ Layout.fixed_row_height)
         layout;
         content_div = Utils.Forward_ref.make ();
         wrapper_div = Utils.Forward_ref.make ();
-        window_height = Lwd.var None;
         table_height = Lwd.var None;
         last_scroll_y = 0.;
       }
@@ -437,7 +435,6 @@ let make (type data error) ~(layout : _ Layout.fixed_row_height)
           layout;
           content_div = Utils.Forward_ref.make ();
           wrapper_div = Utils.Forward_ref.make ();
-          window_height = Lwd.var None;
           table_height = Lwd.var None;
           last_scroll_y = 0.;
         };
