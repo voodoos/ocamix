@@ -252,8 +252,8 @@ struct
           Elwd.handler Ev.click (fun e ->
               Ev.prevent_default e;
               (match Lwd.peek App_state.active_layout with
-              | Kiosk -> Main
-              | Main -> Kiosk)
+                | Kiosk -> Main
+                | Main -> Kiosk)
               |> Lwd.set App_state.active_layout;
               Lwd.set App_state.kiosk_cover Front)
         in

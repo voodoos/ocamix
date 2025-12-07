@@ -480,8 +480,8 @@ let lwd_of_yjs_page =
         let kind =
           Lwd_map.get_string lwd_map S.Data.Table.Column_info.kind
           |> Lwd.map ~f:(fun v ->
-                 Console.log [ "GET"; id; v ];
-                 Option.get v)
+              Console.log [ "GET"; id; v ];
+              Option.get v)
           |> Lwd.map ~f:S.Data.kind_of_string
         in
         let name =
@@ -851,8 +851,8 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
           |> Lwd_seq.element)
         Lwd_seq.monoid columns.table
       |> Lwd.map ~f:(fun seq ->
-             Lwd_seq.concat seq @@ Lwd_seq.element
-             @@ field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t))
+          Lwd_seq.concat seq @@ Lwd_seq.element
+          @@ field (Lwd.pure @@ Field.submit (`P "Add row")) (fun t _v -> t))
   end in
   create
     ~at:[ `P (At.class' (Jstr.v "inline-row-form")) ]

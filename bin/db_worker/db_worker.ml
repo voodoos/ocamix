@@ -39,8 +39,8 @@ module Worker () = struct
     in
     Db.Sync.check_and_sync ~report ~source idb
     |> Fut.map (fun res ->
-           invalidate_cache ();
-           res)
+        invalidate_cache ();
+        res)
 
   let idb =
     let idb, set_idb = Fut.create () in
@@ -148,9 +148,9 @@ module Worker () = struct
         in
         Fut.pair keys records
         |> Fut.map (function
-             | Ok keys, Ok records ->
-                 Ok (Array.map2 ~f:(fun k r -> (k, r)) keys records)
-             | Error e, Ok _ | _, Error e -> Error (`Jv e))
+          | Ok keys, Ok records ->
+              Ok (Array.map2 ~f:(fun k r -> (k, r)) keys records)
+          | Error e, Ok _ | _, Error e -> Error (`Jv e))
     | Create_view request ->
         let* store = get_store (module Db.Stores.Tracks_store) () in
         let+ keys = get_view_keys store request in
@@ -173,10 +173,10 @@ module Worker () = struct
               acc
               (List.map genres ~f:(fun g -> (g, 1))))
         |> Int.Map.mapi (fun key usage_count ->
-               try
-                 (usage_count, genres.(key - 1))
-                 (* Indexeddb auto increments starts at 1 *)
-               with Invalid_argument _ -> failwith "Unknown genre")
+            try
+              (usage_count, genres.(key - 1))
+              (* Indexeddb auto increments starts at 1 *)
+            with Invalid_argument _ -> failwith "Unknown genre")
     | Get_view_artists view ->
         let* store = get_store (module Tracks_store) () in
         let* keys = get_view_keys store view.request in
@@ -191,10 +191,10 @@ module Worker () = struct
               acc
               (List.map artists ~f:(fun g -> (g, 1))))
         |> Int.Map.mapi (fun key count ->
-               try
-                 { Db.Generic_schema.count; v = artists.(key - 1) }
-                 (* Indexeddb auto increments starts at 1 *)
-               with Invalid_argument _ -> failwith "Unknown genre")
+            try
+              { Db.Generic_schema.count; v = artists.(key - 1) }
+              (* Indexeddb auto increments starts at 1 *)
+            with Invalid_argument _ -> failwith "Unknown genre")
     | Get (view, order, indexes) ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)

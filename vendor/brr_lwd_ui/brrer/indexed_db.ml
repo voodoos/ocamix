@@ -228,7 +228,7 @@ struct
               acc := f !acc key primary_key;
               Cursor.continue cursor)
       |> Request.on_error ~f:(fun _ev req ->
-             set_result (Error (Request.error req)))
+          set_result (Error (Request.error req)))
     in
     result
 end

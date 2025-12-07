@@ -89,8 +89,8 @@ let big_cover =
       Elwd.handler Ev.click (fun e ->
           Ev.prevent_default e;
           (match Lwd.peek App_state.kiosk_cover with
-          | Front -> Back
-          | Back -> Front)
+            | Front -> Back
+            | Back -> Front)
           |> Lwd.set App_state.kiosk_cover)
     in
     Elwd.div

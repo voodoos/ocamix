@@ -58,12 +58,12 @@ let filter_of_formula ~matcher formula =
       | c, `None_of l :: tl -> `None_of (c :: l) :: tl
       | _, _ -> acc)
   |> List.filter_map ~f:(function
-       | `One_of chars ->
-           let name = string_of_chars chars in
-           if String.is_empty name then None else Some (One_of (matcher ~name))
-       | `None_of chars ->
-           let name = string_of_chars chars in
-           if String.is_empty name then None else Some (None_of (matcher ~name)))
+    | `One_of chars ->
+        let name = string_of_chars chars in
+        if String.is_empty name then None else Some (One_of (matcher ~name))
+    | `None_of chars ->
+        let name = string_of_chars chars in
+        if String.is_empty name then None else Some (None_of (matcher ~name)))
 
 let filter1_changed () =
   let open View in
@@ -130,7 +130,7 @@ let filter0_changed () =
   let sorted_artists =
     Int.Map.to_list artists
     |> List.sort ~cmp:(fun (_, { count = c1; _ }) (_, { count = c2; _ }) ->
-           Int.compare c2 c1)
+        Int.compare c2 c1)
   in
   Lwd.set view0 (Some view);
   Lwd.set view0_genres sorted_genres;

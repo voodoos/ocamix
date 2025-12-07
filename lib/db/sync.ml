@@ -312,10 +312,10 @@ let prepare_genres idb genre_items =
           Stores.Genres_by_canonical_name.get_key canon i_genres
           |> Request.fut_exn
           |> Fun.flip Fut.bind (function
-               | Some key -> Fut.ok key
-               | None ->
-                   let genre = Generic_schema.{ Genre.name; canon } in
-                   Stores.Genres_store.add genre s_genres |> Request.fut)
+            | Some key -> Fut.ok key
+            | None ->
+                let genre = Generic_schema.{ Genre.name; canon } in
+                Stores.Genres_store.add genre s_genres |> Request.fut)
         in
         Hashtbl.add genres_memo canon key;
         key
@@ -325,8 +325,8 @@ let prepare_genres idb genre_items =
       String.split_on_char ~by:';' name
       |> List.concat_map ~f:(String.split_on_char ~by:',')
       |> List.map ~f:(fun name ->
-             let name = String.trim name in
-             (name, canonicalize_string name))
+          let name = String.trim name in
+          (name, canonicalize_string name))
       |> List.uniq ~eq:(fun (_, c1) (_, c2) -> String.equal c1 c2)
       |> List.map ~f:get_or_set_genre)
   |> Fut.of_list |> Fut.map Result.flatten_l
@@ -470,9 +470,9 @@ let sync_tracks ~collection_id ~source idb items :
       { id; server_id = Jellyfin server_id; album_id; sort_name }
       store
     |> Request.on_error ~f:(fun e _ ->
-           (* This happens when the item is already in the database *)
-           Console.warn [ "Could not add album into the db: "; name ];
-           Ev.prevent_default e)
+        (* This happens when the item is already in the database *)
+        Console.warn [ "Could not add album into the db: "; name ];
+        Ev.prevent_default e)
     |> Request.fut
   in
   List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->

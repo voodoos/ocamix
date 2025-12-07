@@ -56,5 +56,5 @@ let canonicalize_string s =
   Ubase.from_utf8 ?malformed:None ~strip:"_" s
   |> String.lowercase_ascii
   |> String.filter ~f:(fun c ->
-         let c = Char.to_int c in
-         (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
+      let c = Char.to_int c in
+      (c >= 97 && c <= 122) || (c >= 48 && c <= 57))
