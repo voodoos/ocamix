@@ -12,8 +12,13 @@ module Sort_button_state = struct
   let next = function Asc -> Desc | Desc -> None | None -> Asc
 end
 
+type 'data sort_state = { column_id : int; compare : 'data Sort.compare }
+
 module Columns = struct
+  let stamp = ref 0
+
   type 'data column = {
+    id : int;
     name : string;
     css_size : Css_lenght.t;
     header : Elwd.t Elwd.col;
@@ -23,7 +28,9 @@ module Columns = struct
   type 'data t = 'data column Lwd_seq.t Lwd.t
 
   let v name css_size ?(on_sort = Do_nothing) header =
-    { name; css_size; header; on_sort }
+    let id = !stamp in
+    incr stamp;
+    { id; name; css_size; header; on_sort }
 
   let sort_button ~ev () =
     Button.with_state
@@ -34,17 +41,25 @@ module Columns = struct
         | Desc -> [ `P (El.txt' "v") ]
         | None -> [ `P (El.txt' "-") ])
 
-  let to_header (type data) (compare_state : data Sort.compare option Lwd.var)
+  let to_header (type data) (compare_state : data sort_state option Lwd.var)
       (t : data t) =
     Lwd_seq.fold_monoid
-      (fun { header; on_sort; _ } ->
+      (fun { id; header; on_sort; _ } ->
         let sort_button =
           match on_sort with
           | Do_nothing -> None
           | Set compare ->
               let ev =
-                Button.handler Ev.click (fun _ _ ->
-                    Lwd.set compare_state (Some compare);
+                Button.handler Ev.click (fun state _ ->
+                    let sort = { column_id = id; compare } in
+                    let sort =
+                      match Sort_button_state.next state with
+                      | Desc ->
+                          Some { sort with compare = Sort.reverse compare }
+                      | Asc -> Some sort
+                      | None -> None
+                    in
+                    Lwd.set compare_state sort;
                     Next)
               in
               Option.some @@ sort_button ~ev:[ `P ev ] ()
@@ -73,6 +88,7 @@ type 'data fixed_row_height = {
   columns : 'data Columns.t;
   status : Elwd.t Elwd.col;
   row_height : Css_lenght.t;
+  sort_state : 'data sort_state option Lwd.var;
 }
 
 let style t = Columns.style t.columns

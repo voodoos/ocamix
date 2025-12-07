@@ -87,7 +87,14 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
            Lwd.return (El.nbsp ());
          ])
   in
-  let layout = { Table.columns = columns (); status; row_height = Em 4. } in
+  let layout =
+    {
+      Table.columns = columns ();
+      status;
+      row_height = Em 4.;
+      sort_state = Lwd.var None;
+    }
+  in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in

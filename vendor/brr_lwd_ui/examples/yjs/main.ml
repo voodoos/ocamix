@@ -911,6 +911,7 @@ let layout ~columns_src ~rows_src names =
         names;
     status = [];
     row_height = Em 5.;
+    sort_state = Lwd.var None;
   }
 
 let render_page_item ({ data; _ } : page_item) =

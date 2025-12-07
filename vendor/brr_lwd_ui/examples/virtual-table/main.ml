@@ -23,7 +23,6 @@ let _data =
     }
 
 let app =
-  let sort = Lwd.var None in
   let columns =
     Lwd.pure
     @@ Lwd_seq.of_array
@@ -34,15 +33,17 @@ let app =
              ~on_sort:(Set (Sort.int ()));
          |]
   in
-  let layout = { columns; status = []; row_height = Em 5. } in
+  let layout =
+    { columns; status = []; row_height = Em 5.; sort_state = Lwd.var None }
+  in
   (* let scroll_target = Lwd.var 0 in *)
   let data = Lwd_table.make () in
   let () =
-    for i = 0 to 100 do
-      Lwd_table.append' data i
+    for _ = 0 to 100 do
+      Lwd_table.append' data (Random.int 1000)
     done
   in
-  let renderer row_index row value =
+  let renderer row_index _row value =
     let s =
       Lwd.map (Lwd.get row_index) ~f:(fun i ->
           (*render index data*)
@@ -51,19 +52,11 @@ let app =
           El.txt' i)
     in
     let s = Elwd.div [ `R s ] in
-    let irow =
-      Elwd.div
-        [
-          `R
-            (Lwd.map (Virtual.index_of_row data row) ~f:(fun i ->
-                 El.txt' ("irow=" ^ string_of_int i)));
-        ]
-    in
     Lwd.return
       (Lwd_seq.of_list
-         [ s; Elwd.div [ `P (El.txt' (value |> string_of_int)); `R irow ] ])
+         [ s; Elwd.div [ `P (El.txt' (value |> string_of_int)) ] ])
   in
-  let table = Virtual.make' ~layout data ~sort renderer in
+  let table = Virtual.make' ~layout data renderer in
   let add_first =
     let ev =
       [ `P (Elwd.handler Ev.click (fun _ -> Lwd_table.prepend' data (-1))) ]

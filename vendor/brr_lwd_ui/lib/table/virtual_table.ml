@@ -79,7 +79,6 @@ module Dom = struct
        execution when the browser is resized or other layout changes are made. *)
     window_height : int option Lwd.var;
     table_height : int option Lwd.var;
-    sort : 'data Sort.compare option Lwd.var;
     mutable last_scroll_y : float;
   }
 
@@ -165,7 +164,9 @@ module Dom = struct
     | None -> wrapper
 
   let make_table dom_state content =
-    let table_header = Layout.header dom_state.sort dom_state.layout in
+    let table_header =
+      Layout.header dom_state.layout.sort_state dom_state.layout
+    in
     let table_status = Layout.status dom_state.layout in
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
     let grid_style = Layout.style dom_state.layout in
@@ -324,8 +325,7 @@ let index_of_row t row =
 type 'a loaded_state = Loaded of 'a | Unloaded
 
 let make' ~(layout : _ Layout.fixed_row_height)
-    (data_source : 'data Lwd_table.t)
-    ?(sort : _ Sort.compare option Lwd.var = Lwd.var None) renderer =
+    (data_source : 'data Lwd_table.t) renderer =
   let module RAList = CCRAL in
   let dom =
     Dom.
@@ -335,7 +335,6 @@ let make' ~(layout : _ Layout.fixed_row_height)
         wrapper_div = Utils.Forward_ref.make ();
         window_height = Lwd.var None;
         table_height = Lwd.var None;
-        sort;
         last_scroll_y = 0.;
       }
   in
@@ -351,9 +350,9 @@ let make' ~(layout : _ Layout.fixed_row_height)
       Lwd_seq.monoid data_source
   in
   let sorted_seq =
-    Lwd.bind (Lwd.get sort) ~f:(function
+    Lwd.bind (Lwd.get dom.layout.sort_state) ~f:(function
       | None -> internal_seq
-      | Some (Compare sort) ->
+      | Some { compare = Compare sort; _ } ->
           let sort =
             Sort.Compare { sort with proj = (fun (_, _, _, v) -> sort.proj v) }
           in
@@ -430,7 +429,6 @@ let make (type data error) ~(layout : _ Layout.fixed_row_height)
           wrapper_div = Utils.Forward_ref.make ();
           window_height = Lwd.var None;
           table_height = Lwd.var None;
-          sort = Lwd.var None;
           last_scroll_y = 0.;
         };
       cache = new_cache ();
