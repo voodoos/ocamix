@@ -112,7 +112,7 @@ module Sort = struct
     |> Lwd_seq.sort_uniq compare |> Lwd_seq.map fst
 end
 
-let now_ms () = Performance.now_ms G.performance
+let now_ms () = Performance.now_ms G.performance |> Float.to_int
 
 (** [limit ~interval_ms:50 f] wraps [f] in a function that can be executed at
     most once every 50ms. The last call will always happens even if it as made
@@ -121,8 +121,7 @@ let limit ?(interval_ms = 50) f =
   (* We use [last_update] to have regular  updates and the [timeout] to ensure
      that the last event is always taken into account even it it happens during
      the debouncing interval. *)
-  let interval_ms_f = Float.of_int interval_ms in
-  let last_update = ref 0. in
+  let last_update = ref 0 in
   let trailing_edge = ref false in
   let timeout = ref (-1) in
   let reset_trailing () =
@@ -138,8 +137,8 @@ let limit ?(interval_ms = 50) f =
   in
   fun () ->
     let now = now_ms () in
-    let time_elapsed_since_last_trigger = now -. !last_update in
-    if time_elapsed_since_last_trigger >=. interval_ms_f then begin
+    let time_elapsed_since_last_trigger = now - !last_update in
+    if time_elapsed_since_last_trigger >= interval_ms then begin
       last_update := now;
       if !timeout >= 0 then G.stop_timer !timeout;
       reset_trailing ();
@@ -150,7 +149,7 @@ let limit ?(interval_ms = 50) f =
       if !timeout < 0 then
         let ms =
           (* Remaining time before the trailing edge *)
-          Int.of_float @@ (interval_ms_f -. time_elapsed_since_last_trigger)
+          interval_ms - time_elapsed_since_last_trigger
         in
         timeout := G.set_timeout ~ms run_trailing_edge
     end

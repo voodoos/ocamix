@@ -27,7 +27,7 @@ let to_string = function
 
 let pp fmt t = Printf.fprintf fmt "%s" (to_string t)
 
-let to_px ?(parent = G.document |> Document.root) =
+let to_px' parent =
   let get_font_size_in_px parent =
     let font_size =
       El.computed_style (Jstr.v "font-size") parent |> Jstr.to_string
@@ -46,3 +46,5 @@ let to_px ?(parent = G.document |> Document.root) =
       let font_size = get_font_size_in_px parent in
       f *. font_size
   | Fr _ -> failwith "not implemented"
+
+let to_px ?(parent = G.document |> Document.root) v = to_px' parent v

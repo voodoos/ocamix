@@ -101,7 +101,7 @@ module Dom = struct
       Lwd.map target_position ~f:(fun i ->
           let row_height =
             let parent = Utils.Forward_ref.get_exn dom_state.content_div in
-            Int.of_float (Css_lenght.to_px ~parent dom_state.layout.row_height)
+            Int.of_float (Css_lenght.to_px' parent dom_state.layout.row_height)
           in
           Some (Controlled_scroll.Pos (i * row_height)))
     in
@@ -259,7 +259,7 @@ let compute_visible_rows (state : _ Dom.state) =
   let () = state.last_scroll_y <- scroll_y in
   let visible_height = height div in
   let parent = Utils.Forward_ref.get_exn state.content_div in
-  let row_height = Css_lenght.to_px ~parent state.layout.row_height in
+  let row_height = Css_lenght.to_px' parent state.layout.row_height in
   let number_of_visible_rows =
     Int.of_float (ceil (visible_height /. row_height))
   in
@@ -277,7 +277,7 @@ let compute_visible_rows (state : _ Dom.state) =
     in
     last_visible_row + bleeding
   in
-  List.init (last - first) ~f:(fun i -> first + i)
+  (first, last - first)
 
 let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch rows =
   let load rows =
@@ -297,14 +297,13 @@ let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch rows =
   match Array.of_list to_load with [||] -> () | to_load -> load to_load
 
 let update_visible_rows state fetch =
-  let visible_rows_indexes = compute_visible_rows state.dom in
-  (* todo: We do way too much work and rebuild the queue each
-     time... it's very ineficient *)
+  let first, lenght = compute_visible_rows state.dom in
+  let visible_rows = List.init lenght ~f:(fun i -> first + i) in
   let visible_rows =
     List.filter_map
       ~f:(fun idx ->
         Hashtbl.get state.row_index idx |> Option.map (Pair.make idx))
-      visible_rows_indexes
+      visible_rows
   in
   load_or_bump_in_cache state ~fetch visible_rows
 
@@ -335,7 +334,9 @@ let make' ~(layout : _ Layout.fixed_row_height)
         last_scroll_y = 0.;
       }
   in
-  let cache = Lru.create ~on_remove:(fun _i f -> f ()) 20 in
+  let cache =
+    Lru.create ~on_remove:(fun _i load_state -> Lwd.set load_state Unloaded) 20
+  in
   let row_size = layout.row_height |> Css_lenght.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let row_count =
@@ -373,20 +374,20 @@ let make' ~(layout : _ Layout.fixed_row_height)
       sorted_seq
   in
   let scroll_handler =
-    let on_scroll index =
-      let visible_rows = compute_visible_rows dom in
-      List.iter
-        ~f:(fun i ->
-          RAList.get index i
-          |> Option.iter (fun (row_index, load_state, _row, _value) ->
-              let () = Utils.set_if_different row_index i in
-              (* TODO for both implementations: actually visible rows should be
+    let on_scroll index () =
+      let first, lenght = compute_visible_rows dom in
+      for i = first to first + lenght do
+        let row_index, load_state, _row, _value =
+          (* Allocs less, but is it safe ? *) RAList.get_exn index i
+        in
+        let () = Utils.set_if_different row_index i in
+        (* TODO for both implementations: actually visible rows should be
                  refreshed last in the cache and not bleeding ones. *)
-              Lru.use cache i (fun () -> Lwd.set load_state Unloaded);
-              match Lwd.peek load_state with
-              | Loaded () -> ()
-              | _ -> Lwd.set load_state (Loaded ())))
-        visible_rows
+        Lru.use cache i load_state;
+        match Lwd.peek load_state with
+        | Loaded () -> ()
+        | _ -> Lwd.set load_state (Loaded ())
+      done
     in
     Lwd.map2 (Lwd.get dom.table_height) seq_index ~f:(fun h index ->
         let () =
@@ -402,11 +403,9 @@ let make' ~(layout : _ Layout.fixed_row_height)
           (* We execute the handle once each time it changes to make sure the
              table is always up-to-date. *)
           (* Queuing prevents illegal updates during invalidation *)
-          Window.queue_micro_task G.window (fun () -> on_scroll index)
+          Window.queue_micro_task G.window (on_scroll index)
         in
-        let on_scroll =
-          Utils.limit ~interval_ms:75 (fun () -> on_scroll index)
-        in
+        let on_scroll = Utils.limit ~interval_ms:25 (on_scroll index) in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let render ((row_index, load_state, row, value), _) =
@@ -467,11 +466,11 @@ let make (type data error) ~(layout : _ Layout.fixed_row_height)
     Dom.make_rows state.dom ~row_count:total_items rows
   in
   let scroll_handler =
+    let on_scroll fetch () = update_visible_rows state fetch in
     Lwd.map2 fetch (Lwd.get state.dom.table_height) ~f:(fun fetch h ->
         (* We use [last_update] to have regular debounced updates and the
            [timeout] to ensure that the last scroll event is always taken into
            account even it it happens during the debouncing interval. *)
-        let update () = update_visible_rows state fetch in
         let () =
           Option.iter
             (fun h ->
@@ -487,10 +486,10 @@ let make (type data error) ~(layout : _ Layout.fixed_row_height)
           (* We execute the handle once each time it changes to make sure the
              table is always up-to-date. *)
           (* Queuing prevents illegal updates during invalidation *)
-          Window.queue_micro_task G.window update
+          Window.queue_micro_task G.window (on_scroll fetch)
         in
-        let update = Utils.limit ~interval_ms:50 update in
-        Elwd.handler Ev.scroll (fun _ev -> update ()))
+        let on_scroll = Utils.limit ~interval_ms:25 (on_scroll fetch) in
+        Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let wrapper = Dom.make_wrapper state.dom ?scroll_target scroll_handler rows in
   let () =
