@@ -53,15 +53,6 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        refreshed when it does. Additionnaly it needs to react to multiple dom
        events, notably vertical resize of the container and scroll events, to ensure
        that the visible part of the talbe is always populated with rows. *)
-module Cache = FFCache.Make (Int)
-
-let new_cache () =
-  let unload row =
-    Lwd_table.get row
-    |> Option.iter (fun row_data ->
-        Lwd_table.set row { row_data with content = None })
-  in
-  Lru.create ~on_remove:(fun _i row -> unload row) 150
 
 let prepare (state : ('data, 'error) state) ~total_items:total =
   let () = state.cache <- new_cache () in
@@ -294,22 +285,7 @@ let make' ~(layout : _ Layout.fixed_row_height)
 let make (type data error) ~(layout : _ Layout.fixed_row_height)
     ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
     (data_source : (data, error) data_source) =
-  let state =
-    {
-      dom =
-        {
-          layout;
-          content_div = Utils.Forward_ref.make ();
-          wrapper_div = Utils.Forward_ref.make ();
-          wrapper_width = Lwd.var None;
-          wrapper_height = Lwd.var None;
-          last_scroll_y = 0.;
-        };
-      cache = new_cache ();
-      table = Lwd_table.make ();
-      row_index = Hashtbl.create 2048;
-    }
-  in
+  let state = new_state layout in
   let row_size = layout.row_height |> Css_lenght.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let total_items, fetch =

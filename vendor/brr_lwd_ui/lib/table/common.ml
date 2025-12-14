@@ -138,3 +138,27 @@ type ('data, 'error) state = {
      rows in the observer's callback *)
   row_index : (int, ('data, 'error) row_data Lwd_table.row) Hashtbl.t;
 }
+
+let new_cache () =
+  let unload row =
+    Lwd_table.get row
+    |> Option.iter (fun row_data ->
+        Lwd_table.set row { row_data with content = None })
+  in
+  Lru.create ~on_remove:(fun _i row -> unload row) 150
+
+let new_state layout =
+  {
+    dom =
+      {
+        layout;
+        content_div = Utils.Forward_ref.make ();
+        wrapper_div = Utils.Forward_ref.make ();
+        wrapper_width = Lwd.var None;
+        wrapper_height = Lwd.var None;
+        last_scroll_y = 0.;
+      };
+    cache = new_cache ();
+    table = Lwd_table.make ();
+    row_index = Hashtbl.create 2048;
+  }
