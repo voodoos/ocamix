@@ -37,7 +37,12 @@ module Dom = struct
     Resize_observer.create ~callback:(fun entries _ ->
         let entry = List.hd entries in
         let rect = Resize_observer.Entry.content_rect entry in
+        let width = Dom_rect_read_only.width rect in
         let height = Dom_rect_read_only.height rect in
+        (match Lwd.peek state.wrapper_width with
+        | Some w when w <> width -> Lwd.set state.wrapper_width (Some width)
+        | None -> Lwd.set state.wrapper_width (Some width)
+        | _ -> ());
         match Lwd.peek state.wrapper_height with
         | Some h when h <> height -> Lwd.set state.wrapper_height (Some height)
         | None -> Lwd.set state.wrapper_height (Some height)
