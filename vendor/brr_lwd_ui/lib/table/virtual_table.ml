@@ -54,14 +54,14 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        events, notably vertical resize of the container and scroll events, to ensure
        that the visible part of the talbe is always populated with rows. *)
 
-let prepare (state : ('layout, 'data, 'error) state) ~total_items:total =
+let prepare (state : ('layout, 'data, 'error) state) ~total_items =
   let () = state.cache <- new_cache () in
   let i = ref 0 in
   let current_row = ref (Lwd_table.first state.table) in
-  while Option.is_some !current_row || !i <= total - 1 do
+  while Option.is_some !current_row || !i <= total_items - 1 do
     match !current_row with
     | Some row ->
-        if !i <= total - 1 then
+        if !i <= total_items - 1 then
           let () = Hashtbl.replace state.row_index !i row in
           Lwd_table.set row { index = !i; content = None }
         else Lwd_table.unset row;
