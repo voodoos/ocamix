@@ -282,16 +282,15 @@ let make' ~(layout : 'data Layout.fixed_table) (data_source : 'data Lwd_table.t)
   let rows = Dom.make_rows dom ~row_count (Lwd.join rows) in
   Dom.make dom scroll_handler rows
 
-let make (type data error) ~(layout : data Layout.fixed_table)
-    ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
+let make_lazy' (type data error) state ?(scroll_target : int Lwd.t option)
+    (render : (data, error) row_renderer)
     (data_source : (data, error) Data_source.t) =
-  let state = new_state layout in
   let total_items, fetch =
     match data_source with Lazy { total_items; fetch } -> (total_items, fetch)
   in
   let rows =
     let style =
-      let row_size = layout#row_height |> Css_length.to_string in
+      let row_size = state.dom.layout#row_height |> Css_length.to_string in
       let height = Printf.sprintf "height: %s !important;" row_size in
       `P (At.style (Jstr.v height))
     in
@@ -344,6 +343,12 @@ let make (type data error) ~(layout : data Layout.fixed_table)
         prepare state ~total_items)
   in
   Dom.make_table state.dom wrapper
+
+let make (type data error) ~layout ?(scroll_target : int Lwd.t option)
+    (render : (data, error) row_renderer)
+    (data_source : (data, error) Data_source.t) =
+  let state = new_state layout in
+  make_lazy' state ?scroll_target render data_source
 
 (** #######**#******#%%#===+++*###%###########*+##=###++++++++++++++++++++++++++
     ###########*####****%%##===========+#===-=======*#=###++++++++++++++++++++++++++
