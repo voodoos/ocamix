@@ -46,7 +46,7 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
             RAList.get index i |> Option.to_result error |> Fut.return)
           indices)
   in
-  Lazy { total_items = t.length; fetch }
+  Data_source.Lazy { total_items = t.length; fetch }
 
 (* The virtual table is a complex reactive component. Primarily, it reacts to
        changes of the [data_source] so that content in the table is properly
@@ -54,7 +54,7 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        events, notably vertical resize of the container and scroll events, to ensure
        that the visible part of the talbe is always populated with rows. *)
 
-let prepare (state : ('data, 'error) state) ~total_items:total =
+let prepare (state : ('layout, 'data, 'error) state) ~total_items:total =
   let () = state.cache <- new_cache () in
   let i = ref 0 in
   let current_row = ref (Lwd_table.first state.table) in
@@ -116,7 +116,7 @@ let compute_visible_rows (state : _ Dom.state) =
   let () = state.last_scroll_y <- scroll_y in
   let visible_height = height div in
   let parent = Utils.Forward_ref.get_exn state.content_div in
-  let row_height = Css_lenght.to_px' parent state.layout.row_height in
+  let row_height = Css_length.to_px' parent state.layout#row_height in
   let number_of_visible_rows =
     Int.of_float (ceil (visible_height /. row_height))
   in
@@ -136,7 +136,7 @@ let compute_visible_rows (state : _ Dom.state) =
   in
   (first, last - first)
 
-let load_or_bump_in_cache (state : ('data, 'error) state) ~fetch rows =
+let load_or_bump_in_cache (state : ('layout, 'data, 'error) state) ~fetch rows =
   let load rows =
     (let data : ('data, _) Fut.result array = fetch (Array.map ~f:fst rows) in
      Array.iter2 rows data ~f:(fun (_, row) (data : ('data, _) Fut.result) ->
@@ -178,8 +178,8 @@ let index_of_row t row =
 
 type 'a loaded_state = Loaded of 'a | Unloaded
 
-let make' ~(layout : _ Layout.fixed_row_height)
-    (data_source : 'data Lwd_table.t) renderer =
+let make' ~(layout : 'data Layout.fixed_table) (data_source : 'data Lwd_table.t)
+    renderer =
   let module RAList = CCRAL in
   let dom =
     Dom.
@@ -195,7 +195,7 @@ let make' ~(layout : _ Layout.fixed_row_height)
   let cache =
     Lru.create ~on_remove:(fun _i load_state -> Lwd.set load_state Unloaded) 20
   in
-  let row_size = layout.row_height |> Css_lenght.to_string in
+  let row_size = layout#row_height |> Css_length.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let row_count =
     Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) data_source
@@ -210,7 +210,7 @@ let make' ~(layout : _ Layout.fixed_row_height)
       Lwd_seq.monoid data_source
   in
   let sorted_seq =
-    Lwd.bind (Lwd.get dom.layout.sort_state) ~f:(function
+    Lwd.bind (Lwd.get dom.layout#sort_state) ~f:(function
       | None -> internal_seq
       | Some { compare = Compare sort; _ } ->
           let sort =
@@ -282,11 +282,11 @@ let make' ~(layout : _ Layout.fixed_row_height)
   let rows = Dom.make_rows dom ~row_count (Lwd.join rows) in
   Dom.make dom scroll_handler rows
 
-let make (type data error) ~(layout : _ Layout.fixed_row_height)
+let make (type data error) ~(layout : data Layout.fixed_table)
     ?(scroll_target : int Lwd.t option) (render : (data, error) row_renderer)
-    (data_source : (data, error) data_source) =
+    (data_source : (data, error) Data_source.t) =
   let state = new_state layout in
-  let row_size = layout.row_height |> Css_lenght.to_string in
+  let row_size = layout#row_height |> Css_length.to_string in
   let height = Printf.sprintf "height: %s !important;" row_size in
   let total_items, fetch =
     match data_source with Lazy { total_items; fetch } -> (total_items, fetch)

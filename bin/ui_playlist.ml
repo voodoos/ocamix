@@ -88,17 +88,13 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
          ])
   in
   let layout =
-    {
-      Table.columns = columns ();
-      status;
-      row_height = Em 4.;
-      sort_state = Lwd.var None;
-    }
+    Table.make_fixed_row_height (columns ()) ~status
+      ~row_height:(Common.Css_length.Em 4.) ()
   in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
-    Table.Virtual.Lazy { total_items; fetch }
+    Table.Data_source.Lazy { total_items; fetch }
   in
   let render =
     render ranged |> Table.Virtual.with_placeholder_or_error ~placeholder

@@ -20,7 +20,7 @@ module Columns = struct
   type 'data column = {
     id : int;
     name : string;
-    css_size : Css_lenght.t;
+    css_size : Css_length.t;
     header : Elwd.t Elwd.col;
     on_sort : 'data on_sort;
   }
@@ -84,7 +84,7 @@ module Columns = struct
     let open Lwd_infix in
     let$ template =
       Lwd_seq.fold_monoid
-        (fun { css_size; _ } -> Css_lenght.to_string css_size)
+        (fun { css_size; _ } -> Css_length.to_string css_size)
         ("", fun s s' -> Printf.sprintf "%s %s" s s')
         t
     in
@@ -92,17 +92,28 @@ module Columns = struct
     Printf.sprintf "%s: %s;" "grid-template-columns" template
 end
 
-type 'data fixed_row_height = {
-  columns : 'data Columns.t;
-  status : Elwd.t Elwd.col;
-  row_height : Css_lenght.t;
-  sort_state : 'data sort_state option Lwd.var;
-}
+class type ['data] common = object
+  method row_height : Css_length.t
+  method status : Elwd.t Elwd.col
+  method sort_state : 'data sort_state option Lwd.var
+end
 
-let style t = Columns.style t.columns
+type 'data fixed_table = < 'data common ; columns : 'data Columns.t >
+type 'data fixed_grid = < 'data common ; item_width : Css_length.t >
+
+let make_fixed_row_height columns ?(status = []) ~row_height
+    ?(sort_state = Lwd.var None) () =
+  object
+    method row_height = row_height
+    method columns = columns
+    method status = status
+    method sort_state = sort_state
+  end
+
+let style t = Columns.style t#columns
 
 let header compare_state t =
-  let row_height = Css_lenght.to_string t.row_height in
+  let row_height = Css_length.to_string t#row_height in
   let at =
     [
       `P (At.style (Jstr.v @@ Printf.sprintf "height: %s" row_height));
@@ -111,8 +122,8 @@ let header compare_state t =
     ]
   in
   Elwd.div ~at
-    [ `S (Columns.to_header compare_state t.columns |> Lwd_seq.lift) ]
+    [ `S (Columns.to_header compare_state t#columns |> Lwd_seq.lift) ]
 
 let status t =
   let at = [ `P (At.class' (Jstr.v "lwdui-virtual-table-status")) ] in
-  Elwd.div ~at t.status
+  Elwd.div ~at t#status

@@ -2,6 +2,7 @@ open Brr
 open Brr_lwd
 open Brr_lwd_ui
 open Brr_lwd_ui.Table
+module Css_length = Common.Css_length
 
 let _renderer =
   Table.Virtual.with_placeholder_or_error @@ fun i data ->
@@ -13,7 +14,7 @@ let _renderer =
        ])
 
 let _data =
-  Virtual.Lazy
+  Data_source.Lazy
     {
       total_items = Lwd.pure 300;
       fetch =
@@ -37,7 +38,7 @@ let app =
          |]
   in
   let layout =
-    { columns; status = []; row_height = Em 5.; sort_state = Lwd.var None }
+    make_fixed_row_height columns ~row_height:(Css_length.Em 5.) ()
   in
   (* let scroll_target = Lwd.var 0 in *)
   let data = Lwd_table.make () in

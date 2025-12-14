@@ -3,16 +3,18 @@ open Brrer
 open Brr
 open Brr_lwd
 
-type ('data, 'error) data_source =
-  | Lazy of {
-      total_items : int Lwd.t;
-      fetch : (int array -> ('data, 'error) Fut.result array) Lwd.t;
-          (** Fetched indices are always contiguous. *)
-    }
+module Data_source = struct
+  type ('data, 'error) t =
+    | Lazy of {
+        total_items : int Lwd.t;
+        fetch : (int array -> ('data, 'error) Fut.result array) Lwd.t;
+            (** Fetched indices are always contiguous. *)
+      }
+end
 
 module Dom = struct
-  type 'data state = {
-    layout : 'data Layout.fixed_row_height;
+  type ('data, 'layout) state = {
+    layout : 'layout;
     (* The content_div ref should be initialized with the correct element as
              soon as it is created. It is not reactive per se. *)
     content_div : El.t Utils.Forward_ref.t;
@@ -27,7 +29,7 @@ module Dom = struct
   }
 
   let number_of_fitting_rows_in dom_state h_px =
-    let row_height_px = Css_lenght.to_px dom_state.layout.row_height in
+    let row_height_px = Css_length.to_px dom_state.layout#row_height in
     Float.(of_int h_px / row_height_px |> ceil) |> int_of_float
 
   let resize_observer state =
@@ -46,14 +48,14 @@ module Dom = struct
       Lwd.map target_position ~f:(fun i ->
           let row_height =
             let parent = Utils.Forward_ref.get_exn dom_state.content_div in
-            Int.of_float (Css_lenght.to_px' parent dom_state.layout.row_height)
+            Int.of_float (Css_length.to_px' parent dom_state.layout#row_height)
           in
           Some (Controlled_scroll.Pos (i * row_height)))
     in
     Controlled_scroll.make ?at ~scroll_target el
 
   let height_n_rows dom_state n =
-    let row_size = dom_state.layout.row_height |> Css_lenght.to_string in
+    let row_size = dom_state.layout#row_height |> Css_length.to_string in
     Printf.sprintf "height: calc(%s * %i);" row_size n
 
   let make_spacer dom_state n =
@@ -109,7 +111,7 @@ module Dom = struct
 
   let make_table dom_state content =
     let table_header =
-      Layout.header dom_state.layout.sort_state dom_state.layout
+      Layout.header dom_state.layout#sort_state dom_state.layout
     in
     let table_status = Layout.status dom_state.layout in
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
@@ -128,8 +130,8 @@ type ('data, 'error) row_data = {
   content : ('data, 'error) Fut.result option;
 }
 
-type ('data, 'error) state = {
-  dom : 'data Dom.state;
+type ('layout, 'data, 'error) state = {
+  dom : ('data, 'layout) Dom.state;
   (* The cache is some sort of LRU to keep live the content of recently seen
  rows *)
   mutable cache : (int, ('data, 'error) row_data Lwd_table.row) Lru.t;

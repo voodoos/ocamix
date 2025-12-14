@@ -723,7 +723,7 @@ let table_data_source source_rows (content : row Indexed_table.t) =
   let total_items =
     Lwd_table.map_reduce (fun _row _v -> 1) (0, ( + )) content.table
   in
-  (Virtual.Lazy { total_items; fetch = Lwd.return fetch }, render)
+  (Data_source.Lazy { total_items; fetch = Lwd.return fetch }, render)
 
 let new_table_column_form columns rows =
   let open Brr_lwd_ui.Forms.Form in
@@ -873,46 +873,42 @@ let new_table_row_form (columns : column_info Indexed_table.t) rows =
       Yjs.Array.push rows [| `Map cells |])
 
 let layout ~columns_src ~rows_src names =
-  {
-    columns =
-      Lwd_seq.map
-        (fun ({ name; id; _ } : column_info) ->
-          let label = Lwd.map name ~f:El.txt' in
-          let delete =
-            let on_click _ =
-              let findi id =
-                let exception Found of int in
-                try
-                  (* TODO this should be done elsewhere (in Schema ?) *)
-                  Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
-                      match v with
-                      | `Map m -> (
-                          match
-                            Yjs.Map.get m ~key:S.Data.Table.Column_info.id
-                          with
-                          | Some (`Jv s) when String.equal id (Jv.to_string s)
-                            ->
-                              raise (Found index)
-                          | _ -> ())
-                      | _ -> ());
-                  raise Not_found
-                with Found i -> i
-              in
-              Yjs.Doc.transact yjs_doc (fun () ->
-                  Yjs.Array.delete columns_src (findi id) 1;
-                  Yjs.Array.iter rows_src ~f:(fun ~index:_ v _ ->
-                      match v with `Map m -> Yjs.Map.delete m id | _ -> ()))
+  let columns =
+    Lwd_seq.map
+      (fun ({ name; id; _ } : column_info) ->
+        let label = Lwd.map name ~f:El.txt' in
+        let delete =
+          let on_click _ =
+            let findi id =
+              let exception Found of int in
+              try
+                (* TODO this should be done elsewhere (in Schema ?) *)
+                Yjs.Array.iter columns_src ~f:(fun ~index v _ ->
+                    match v with
+                    | `Map m -> (
+                        match
+                          Yjs.Map.get m ~key:S.Data.Table.Column_info.id
+                        with
+                        | Some (`Jv s) when String.equal id (Jv.to_string s) ->
+                            raise (Found index)
+                        | _ -> ())
+                    | _ -> ());
+                raise Not_found
+              with Found i -> i
             in
-            Elwd.button
-              ~ev:[ `P (Elwd.handler Ev.click on_click) ]
-              [ `P (El.txt' "❌") ]
+            Yjs.Doc.transact yjs_doc (fun () ->
+                Yjs.Array.delete columns_src (findi id) 1;
+                Yjs.Array.iter rows_src ~f:(fun ~index:_ v _ ->
+                    match v with `Map m -> Yjs.Map.delete m id | _ -> ()))
           in
-          Columns.v "a" (Fr 1.) [ `R label; `R delete ])
-        names;
-    status = [];
-    row_height = Em 5.;
-    sort_state = Lwd.var None;
-  }
+          Elwd.button
+            ~ev:[ `P (Elwd.handler Ev.click on_click) ]
+            [ `P (El.txt' "❌") ]
+        in
+        Columns.v "a" (Fr 1.) [ `R label; `R delete ])
+      names
+  in
+  Table.make_fixed_row_height columns ~row_height:(Common.Css_length.Em 5.) ()
 
 let render_page_item ({ data; _ } : page_item) =
   match data with
