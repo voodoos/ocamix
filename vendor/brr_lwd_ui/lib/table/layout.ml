@@ -110,6 +110,15 @@ let make_fixed_row_height columns ?(status = []) ~row_height
     method sort_state = sort_state
   end
 
+let make_fixed_grid ?(status = []) ~item_width ~row_height
+    ?(sort_state = Lwd.var None) () =
+  object
+    method row_height = row_height
+    method item_width = item_width
+    method status = status
+    method sort_state = sort_state
+  end
+
 let style t = Columns.style t#columns
 
 let header compare_state t =
