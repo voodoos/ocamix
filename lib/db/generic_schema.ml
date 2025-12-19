@@ -10,7 +10,7 @@ open! Std
    an array within an array. *)
 
 type ('key, 'value) with_key = { key : 'key; value : 'value }
-type 'a info = { count : int; v : 'a }
+type 'a info = { count : int; v : 'a } [@@deriving jsont]
 
 module Id = struct
   type t = Jellyfin of string [@@deriving yojson]

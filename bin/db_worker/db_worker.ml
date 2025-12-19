@@ -1,5 +1,5 @@
-open! Std
 open Db.Worker_api
+open! Std
 open Brrer
 open! Brr
 module IDB = Brr_io.Indexed_db
@@ -127,18 +127,19 @@ module Worker () = struct
 
   (* TODO there is no reason to delegate everything to the worker, only view
      creation is really slow *)
-  let on_query (type a) (q : a query) : (a, error) Fut.result =
+  let on_query (type a b) (q : (a, b) query) (params : a) :
+      (b, error) Fut.result =
     let open Fut.Result_syntax in
     match q with
-    | Set_session_uuid s ->
-        let () = Data_source.Jellyfin_api.set_session_uuid s in
+    | Set_session_uuid ->
+        let () = Data_source.Jellyfin_api.set_session_uuid params in
         Fut.ok ()
-    | Add_servers l ->
+    | Add_servers ->
         let* idb = idb in
         let open Fut.Syntax in
-        let+ res = check_db idb (List.hd l) in
+        let+ res = check_db idb (List.hd params) in
         Result.map_err (fun jv -> `Jv jv) res
-    | Get_libraries () ->
+    | Get_libraries ->
         let* store = get_store (module Db.Stores.Collections_store) () in
         let keys =
           Db.Stores.Collections_store.get_all_keys store |> IDB.Request.fut
@@ -151,7 +152,8 @@ module Worker () = struct
           | Ok keys, Ok records ->
               Ok (Array.map2 ~f:(fun k r -> (k, r)) keys records)
           | Error e, Ok _ | _, Error e -> Error (`Jv e))
-    | Create_view request ->
+    | Create_view ->
+        let request = params in
         let* store = get_store (module Db.Stores.Tracks_store) () in
         let+ keys = get_view_keys store request in
         let item_count = Array.length keys in
@@ -161,9 +163,9 @@ module Worker () = struct
               acc +. duration)
         in
         { Db.View.request; start_offset = 0; item_count; duration }
-    | Get_view_genres view ->
+    | Get_view_genres ->
         let* store = get_store (module Tracks_store) () in
-        let* keys = get_view_keys store view.request in
+        let* keys = get_view_keys store params.request in
         let* s_genres = get_store (module Genres_store) () in
         let+ genres = Genres_store.get_all s_genres |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
@@ -177,9 +179,9 @@ module Worker () = struct
               (usage_count, genres.(key - 1))
               (* Indexeddb auto increments starts at 1 *)
             with Invalid_argument _ -> failwith "Unknown genre")
-    | Get_view_artists view ->
+    | Get_view_artists ->
         let* store = get_store (module Tracks_store) () in
-        let* keys = get_view_keys store view.request in
+        let* keys = get_view_keys store params.request in
         let* s_artists = get_store (module Artists_store) () in
         let+ artists = Artists_store.get_all s_artists |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
@@ -195,7 +197,7 @@ module Worker () = struct
               { Db.Generic_schema.count; v = artists.(key - 1) }
               (* Indexeddb auto increments starts at 1 *)
             with Invalid_argument _ -> failwith "Unknown genre")
-    | Get (view, order, indexes) ->
+    | Get ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
         let* store = get_store (module Db.Stores.Tracks_store) () in

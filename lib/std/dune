@@ -5,6 +5,7 @@
   containers
   containers-data
   brr
+  jsont
   base64
   uuidm
   json-data-encoding

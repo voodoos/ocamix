@@ -23,7 +23,7 @@ let get_view_item_count =
   in
   fun v ->
     let item_count = Hashtbl.get_or_add memo ~k:v ~f:(fun _ -> Lwd.var 0) in
-    Fut.await (query (Create_view v)) (function
+    Fut.await (query Create_view v) (function
       | Ok v ->
           Console.debug
             [

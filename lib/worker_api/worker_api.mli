@@ -1,20 +1,26 @@
 module type Queries = sig
-  type 'a query
+  type ('a, 'b) query
   (** Use a GADT to describe queries that have different parameters and return
       value. For example:
       {[
         type 'a query =
-          | Next_int : int -> int query
-          | Previous_letters : char -> char list query
+          | Next_int : (int, int) query
+          | Previous_letters : (char, char) list query
       ]} *)
+
+  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b Jsont.t
+  (** Queries payloads and results encoders *)
 
   type 'a event
   (** Events that can be listened to *)
+
+  val event_jsont : 'a event -> 'a Jsont.t
+  (** Events encoders *)
 end
 
 module Make : functor (Q : Queries) -> sig
   type error = [ `Jv of Jv.Error.t | `Msg of string ]
-  type 'a query = 'a Q.query
+  type ('a, 'b) query = ('a, 'b) Q.query
   type 'a event = 'a Q.event
   type listener
 
@@ -28,7 +34,7 @@ module Make : functor (Q : Queries) -> sig
     -> sig
     val worker : Brr_webworkers.Worker.t
 
-    val query : 'a query -> ('a, error) Fut.result
+    val query : ('a, 'b) query -> 'a -> ('b, error) Fut.result
     (** Send one query to the worker and return a future with the answer. *)
 
     val listen : 'a event -> f:('a -> unit) -> listener
@@ -37,7 +43,7 @@ module Make : functor (Q : Queries) -> sig
   end
 
   module type Worker_impl = functor () -> sig
-    val on_query : 'a query -> ('a, error) Fut.result
+    val on_query : ('a, 'b) query -> 'a -> ('b, error) Fut.result
     (** [on_query q] should return the result of the query q *)
   end
 

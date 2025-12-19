@@ -106,7 +106,7 @@ let filter1_changed () =
   let open Fut.Result_syntax in
   let start_time = Performance.now_ms G.performance in
   Lwd.set status Refreshing;
-  let+ view' = Worker_client.query (Create_view req) in
+  let+ view' = Worker_client.query Create_view req in
   let request_time =
     Float.to_int (Performance.now_ms G.performance -. start_time)
   in
@@ -120,9 +120,9 @@ let filter0_changed () =
   in
   let req = { kind = Audio; src_views; sort = Sort.Date_added; filters = [] } in
   let open Fut.Result_syntax in
-  let+ view = Worker_client.query (Create_view req) in
-  let+ genres = Worker_client.query (Get_view_genres view) in
-  let+ artists = Worker_client.query (Get_view_artists view) in
+  let+ view = Worker_client.query Create_view req in
+  let+ genres = Worker_client.query Get_view_genres view in
+  let+ artists = Worker_client.query Get_view_artists view in
   let sorted_genres =
     Int.Map.to_list genres
     |> List.sort ~cmp:(fun (_, (c1, _)) (_, (c2, _)) -> Int.compare c2 c1)

@@ -43,9 +43,12 @@ type status =
       last_source_item_key : int;
     }
   | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
+[@@deriving jsont]
 
-type progress = { total : int; remaining : int; jobs : int }
+type progress = { total : int; remaining : int; jobs : int } [@@deriving jsont]
+
 type report = { status : status; sync_progress : progress option }
+[@@deriving jsont]
 
 let initial_report = { status = Unknown; sync_progress = None }
 

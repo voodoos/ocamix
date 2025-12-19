@@ -21,7 +21,7 @@ let connect (server_id, { connexion; status; refresh }) =
           | Syncing, In_sync -> Lwd.set refresh ()
           | _ -> ()))
   in
-  ignore (Worker_client.query @@ Add_servers [ (server_id, connexion) ])
+  ignore (Worker_client.query Add_servers [ (server_id, connexion) ])
 
 let servers_with_status =
   Lwd_seq.map
@@ -135,7 +135,7 @@ let servers_libraries =
       let v =
         Lwd.bind (Lwd.get refresh) ~f:(fun () ->
             (* TODO: we should not do that here but in the ui *)
-            Worker_client.query (Get_libraries ())
+            Worker_client.query Get_libraries ()
             |> Fut.map (Result.get_or ~default:[||])
             |> Fut.map Array.to_list |> Fut.map Lwd_seq.of_list
             (* FIXME: This is bad: we create a lwd var each time we refresh

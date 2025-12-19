@@ -1,3 +1,5 @@
 (library
  (name worker_api)
- (libraries std brr uuidm))
+ (libraries std brr jsont.brr uuidm)
+ (preprocess
+  (pps ppx_deriving_jsont)))

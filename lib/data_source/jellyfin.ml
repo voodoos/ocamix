@@ -6,6 +6,7 @@ type connexion = {
   base_url : string;
   auth_response : Api.Authenticate_by_name.response;
 }
+[@@deriving jsont]
 
 let get_token t = t.auth_response.Api.Authenticate_by_name.access_token
 

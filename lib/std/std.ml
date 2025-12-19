@@ -4,7 +4,24 @@ module Brr_utils = Brr_utils
 module Int = struct
   include Int
   module Set = Set.Make (Int)
-  module Map = Map.Make (Int)
+
+  module Map = struct
+    include Map.Make (Int)
+
+    let jsont elt_jsont =
+      let enc =
+        {
+          Jsont.Array.enc =
+            (fun f init map -> fold (fun i elt acc -> f acc i elt) map init);
+        }
+      in
+      Jsont.Array.map ~enc
+        ~dec_empty:(fun () -> empty)
+        ~dec_add:add
+        ~dec_finish:(fun _ _ map -> map)
+        elt_jsont
+      |> Jsont.Array.array
+  end
 end
 
 module String = struct
@@ -40,6 +57,26 @@ module Encodings = struct
         Error (`Msg "Failed to unmarshal data")
 
   let of_jv jv = Jv.to_jstr jv |> of_jstr
+
+  let set_jsont elt_jsont =
+    let enc =
+      {
+        Jsont.Array.enc =
+          (fun f init set ->
+            let i = ref (-1) in
+            Int.Set.fold
+              (fun elt acc ->
+                incr i;
+                f acc !i elt)
+              set init);
+      }
+    in
+    Jsont.Array.map ~enc
+      ~dec_empty:(fun () -> Int.Set.empty)
+      ~dec_add:(fun _ -> Int.Set.add)
+      ~dec_finish:(fun _ _ set -> set)
+      elt_jsont
+    |> Jsont.Array.array
 end
 
 let random_state = Random.get_state ()

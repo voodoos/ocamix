@@ -27,7 +27,7 @@ let session_uuid =
 let _ =
   let uuid = Lwd.peek session_uuid in
   Data_source.Jellyfin_api.set_session_uuid uuid;
-  Worker_client.query (Set_session_uuid (Lwd.peek session_uuid))
+  Worker_client.query Set_session_uuid (Lwd.peek session_uuid)
 
 let fetch ranged_view i =
   Worker_client.(query (Get (ranged_view.View.view, ranged_view.order, i)))
