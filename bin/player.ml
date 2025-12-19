@@ -12,7 +12,10 @@ type t = Elwd.t Lwd.t
 let playstate = { playlist = Lwd.var None; current_index = Lwd.var 0 }
 
 type now_playing = {
-  item : Db.Generic_schema.Track.Key.t * Db.Generic_schema.Track.t;
+  item :
+    Db.Generic_schema.Track.Key.t
+    * Db.Generic_schema.Track.t
+    * Db.Generic_schema.Album.t option;
   url : string;
 }
 
@@ -37,49 +40,38 @@ let idb =
   let _ = Db.with_idb @@ fun idb -> ignore (set_idb idb) in
   idb
 
-let get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type =
+let get_album_cover_link_opt ~base_url ~size album ~cover_type =
   (* Todo for better user experience we should pre-fetch the images before
      updating the DOM. This is especially true for back covers that come from
      the coverart archive which can be slow to download. *)
-  match album_id with
-  | None -> Fut.return None
-  | Some album_id ->
-      let open Brr_io.Indexed_db in
-      let open Db.Stores in
-      let open Db.Generic_schema in
-      let open Fut.Syntax in
-      let* idb = idb in
-      let index =
-        Database.transaction [ (module Albums_store) ] ~mode:Readonly idb
-        |> Transaction.object_store (module Albums_store)
-        |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
-      in
-      let+ album_id = Albums_by_idx.get album_id index |> Request.fut_exn in
-      Option.bind album_id (fun { Album.id = Id.Jellyfin id; mbid; _ } ->
-          if Equal.poly cover_type App_state.Front then
-            Some
-              (Printf.sprintf "%s/Items/%s/Images/Primary?width=%i&format=Jpg"
-                 base_url id size)
-          else
-            Option.map
-              (fun mbid ->
-                Printf.sprintf
-                  "https://coverartarchive.org/release/%s/back-1200" mbid)
+  let open Db.Generic_schema in
+  match album with
+  | None -> None
+  | Some { Album.id = Id.Jellyfin id; mbid; _ } ->
+      if Equal.poly cover_type App_state.Front then
+        Some
+          (Printf.sprintf "%s/Items/%s/Images/Primary?width=%i&format=Jpg"
+             base_url id size)
+      else
+        Option.map
+          (fun mbid ->
+            Printf.sprintf "https://coverartarchive.org/release/%s/back-1200"
               mbid)
+          mbid
 
-let get_album_cover_link ~base_url ~size ~album_id ~cover_type =
-  get_album_cover_link_opt ~base_url ~size ~album_id ~cover_type
-  |> Fut.map (Option.value ~default:"track.png")
-
-let cover_var ~base_url ~size ~album_id ~cover_type =
-  Brr_lwd_ui.Utils.var_of_fut ~init:"track.png"
-  @@ get_album_cover_link ~base_url ~size ~album_id ~cover_type
+let get_album_cover_link ~base_url ~size ~cover_type album =
+  get_album_cover_link_opt ~base_url ~size ~cover_type album
+  |> Option.value ~default:"track.png"
 
 module Playback_controller (P : sig
   val fetch :
     View.ranged ->
     int array ->
-    ( (Db.Generic_schema.Track.Key.t * Db.Generic_schema.Track.t) option array,
+    ( (Db.Generic_schema.Track.Key.t
+      * Db.Generic_schema.Track.t
+      * Db.Generic_schema.Album.t option)
+      option
+      array,
       Db.Worker_api.error )
     Fut.result
 end) =
@@ -97,12 +89,8 @@ struct
            Some
              Track.(
                ( { Key.name; _ },
-                 {
-                   id = Jellyfin id;
-                   server_id = Jellyfin server_id;
-                   album_id;
-                   _;
-                 } ) as item);
+                 { id = Jellyfin id; server_id = Jellyfin server_id; _ },
+                 album ) as item);
           |] ->
               let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
               let connexion : DS.connexion = List.assq server_id servers in
@@ -111,24 +99,23 @@ struct
               let () =
                 let open Brr_io.Media.Session in
                 let session = of_navigator G.navigator in
-                let cover =
+                let img_src =
                   get_album_cover_link ~base_url:connexion.base_url ~size:500
-                    ~album_id ~cover_type:Front
+                    ~cover_type:Front album
                 in
                 let title = name in
                 let album = "" in
                 let artist = "" in
-                Fut.await cover (fun img_src ->
-                    let artwork =
-                      [
-                        {
-                          Media_metadata.src = img_src;
-                          sizes = "500x500";
-                          type' = "image/jpeg";
-                        };
-                      ]
-                    in
-                    set_metadata session { title; artist; album; artwork })
+                let artwork =
+                  [
+                    {
+                      Media_metadata.src = img_src;
+                      sizes = "500x500";
+                      type' = "image/jpeg";
+                    };
+                  ]
+                in
+                set_metadata session { title; artist; album; artwork }
               in
               { item; url }
           | _ -> raise Not_found
@@ -226,21 +213,20 @@ struct
             Lwd.map2 (Lwd.get now_playing) (Lwd.get Servers.connexions)
               ~f:(fun now_playing servers ->
                 match now_playing with
-                | None -> Lwd.pure "track.png"
+                | None -> "track.png"
                 | Some
                     {
-                      item = _, { album_id; server_id = Jellyfin server_id; _ };
+                      item = _, { server_id = Jellyfin server_id; _ }, album;
                       _;
                     } ->
                     let servers = Lwd_seq.to_list servers in
                     let connexion : DS.connexion =
                       List.assq server_id servers
                     in
-                    Lwd.get
-                    @@ cover_var ~base_url:connexion.base_url ~size:500
-                         ~album_id ~cover_type:Front)
+                    get_album_cover_link ~base_url:connexion.base_url ~size:500
+                      ~cover_type:Front album)
           in
-          Lwd.map (Lwd.join cover) ~f:(fun src ->
+          Lwd.map cover ~f:(fun src ->
               Printf.sprintf "background-image: url(%S)" src)
         in
         let at =
@@ -274,6 +260,7 @@ struct
           | Some album_id ->
               let open Db.Stores in
               let album_index =
+                (* TODO we don't need to fetch it anymore *)
                 IDB.Database.transaction
                   [ (module Albums_store) ]
                   ~mode:Readonly idb
@@ -312,7 +299,7 @@ struct
           let txt =
             Lwd.map (Lwd.get now_playing) ~f:(function
               | None -> El.txt' "Nothing playing"
-              | Some { item = { name; _ }, { album_id; _ }; _ } ->
+              | Some { item = { name; _ }, { album_id; _ }, _; _ } ->
                   update_album_title album_id;
                   El.txt' name)
           in

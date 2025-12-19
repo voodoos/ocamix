@@ -30,7 +30,16 @@ let _ =
   Worker_client.query Set_session_uuid (Lwd.peek session_uuid)
 
 let fetch ranged_view i =
-  Worker_client.(query (Get (ranged_view.View.view, ranged_view.order, i)))
+  let view = ranged_view.View.view in
+  let indexes =
+    Array.map
+      ~f:(fun index ->
+        let index = index + view.start_offset in
+
+        Db.View.Order.apply ~size:view.item_count ranged_view.order index)
+      i
+  in
+  Worker_client.(query Get (view, indexes))
 
 module P = Player.Playback_controller (struct
   let fetch = fetch

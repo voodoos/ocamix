@@ -14,31 +14,34 @@ let big_cover =
           {
             item =
               Db.Generic_schema.Track.(
-                _, { server_id = Jellyfin server_id; album_id; _ });
+                _, { server_id = Jellyfin server_id; _ }, album);
             _;
           } ->
           let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
           let connexion : DS.connexion = List.assq server_id servers in
-          Player.get_album_cover_link_opt ~base_url:connexion.base_url
-            ~size:1024 ~album_id ~cover_type:Front)
+          Fut.return
+            (Player.get_album_cover_link_opt ~base_url:connexion.base_url
+               ~size:1024 ~cover_type:Front album))
   in
   let src_back =
     Lwd.map2 (Lwd.get Player.now_playing) (Lwd.get App_state.kiosk_cover)
       ~f:(fun np back ->
+        Fut.return
+        @@
         match (np, back) with
         | ( Some
               {
                 item =
                   Db.Generic_schema.Track.(
-                    _, { server_id = Jellyfin server_id; album_id; _ });
+                    _, { server_id = Jellyfin server_id; _ }, album);
                 _;
               },
             Back ) ->
             let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
             let connexion : DS.connexion = List.assq server_id servers in
             Player.get_album_cover_link_opt ~base_url:connexion.base_url
-              ~size:1024 ~album_id ~cover_type:Back
-        | _, _ -> Fut.return None)
+              ~size:1024 ~cover_type:Back album
+        | _, _ -> None)
   in
   let front_image_preloader = Brr_lwd_ui.Img.preloader src_front in
   let back_image_preloader = Brr_lwd_ui.Img.preloader src_back in

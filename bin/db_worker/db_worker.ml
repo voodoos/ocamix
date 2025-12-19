@@ -200,29 +200,44 @@ module Worker () = struct
     | Get ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
+        let view, indexes = params in
         let* store = get_store (module Db.Stores.Tracks_store) () in
         let* keys = get_view_keys store view.request in
         let open Fut.Syntax in
         let+ results =
           Array.map indexes ~f:(fun index ->
               try
-                let index = index + view.start_offset in
-                let index =
-                  Db.View.Order.apply ~size:view.item_count order index
-                in
-                (* This could be optimize when access is sequential *)
                 let key = keys.(index) in
                 let open Fut.Syntax in
-                let+ result =
+                let* result =
                   Db.Stores.Tracks_store.get key store |> IDB.Request.fut
                 in
                 match result with
-                | Ok None -> None
+                | Ok None -> Fut.return None
                 | Error err ->
                     Console.error
                       [ "An error occured while loading item"; key; err ];
-                    None
-                | Ok (Some v) -> Some (key, v)
+                    Fut.return None
+                | Ok (Some v) ->
+                    let* album_store = get_store (module Albums_store) () in
+                    let album_by_id =
+                      Result.map
+                        (fun album_store ->
+                          Albums_store.index
+                            (module Albums_by_idx)
+                            ~name:"by-idx" album_store)
+                        album_store
+                    in
+                    let+ album =
+                      Option.map2
+                        (fun album_id album_by_id ->
+                          Albums_by_idx.get album_id album_by_id
+                          |> IDB.Request.fut_exn)
+                        v.album_id
+                        (Result.to_opt album_by_id)
+                      |> Option.value ~default:(Fut.return None)
+                    in
+                    Some (key, v, album)
               with _ -> Fut.return None)
           |> fut_of_array
         in

@@ -25,22 +25,28 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun view order ->
         { View.view; first = 0; last = 0; order })
   in
-  let img_url server_id album_id =
+  let img_url ?size server_id album =
     let servers =
       (* should this be reactive ? *)
       Lwd.peek Servers.connexions |> Lwd_seq.to_list
     in
+    let size =
+      Option.map_or ~default:50
+        (fun l -> Css_length.to_px l |> Float.to_int)
+        size
+    in
     let url =
       let connexion : DS.connexion = List.assq server_id servers in
-      Player.cover_var ~base_url:connexion.base_url ~size:50 ~album_id
-        ~cover_type:Front
+      Player.get_album_cover_link ~base_url:connexion.base_url ~size
+        ~cover_type:Front album
     in
-    Lwd.map (Lwd.get url) ~f:(fun url -> At.src (Jstr.v url))
+    At.src (Jstr.v url)
   in
   let render (ranged : View.ranged Lwd.t) start_index
       Db.Generic_schema.Track.(
         ( { Key.name; duration; _ },
-          { id = Jellyfin id; server_id = Jellyfin server_id; album_id; _ } )) =
+          { id = Jellyfin id; server_id = Jellyfin server_id; _ },
+          album )) =
     let play_from (ranged : View.ranged Lwd.t) =
       Lwd.map ranged ~f:(fun ranged _ ->
           ignore
@@ -57,12 +63,12 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     let play_on_click =
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
-    let img_url = img_url server_id album_id in
+    let img_url = img_url server_id album in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
-        | Some { item = _, { id = Jellyfin item_id; _ }; _ }
+        | Some { item = _, { id = Jellyfin item_id; _ }, _; _ }
           when String.equal item_id id ->
-            El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "|>" ]
+            El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "▷" ]
         | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
     in
     let duration = Duration.pp_track_duration duration in
@@ -72,7 +78,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
            status;
            Elwd.div
              ~ev:[ `R play_on_click ]
-             [ `R (Elwd.img ~at:[ `R img_url; `P (At.width 50) ] ()) ];
+             [ `R (Elwd.img ~at:[ `P img_url; `P (At.width 50) ] ()) ];
            Lwd.return (El.div [ El.span [ El.txt' name ] ]);
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])

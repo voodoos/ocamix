@@ -12,10 +12,12 @@ module Queries = struct
   type libraries = (int * Stores.Collection.t) array [@@deriving jsont]
   type view = View.t [@@deriving jsont]
   type create_view = View.req [@@deriving jsont]
-  type get = view * View.Order.t * int array [@@deriving jsont]
+  type get = view * int array [@@deriving jsont]
   type genres = (int * Genre.t) Int.Map.t [@@deriving jsont]
   type artists = Artist.t info Int.Map.t [@@deriving jsont]
-  type tracks = (Track.Key.t * Track.t) option array [@@deriving jsont]
+
+  type tracks = (Track.Key.t * Track.t * Album.t option) option array
+  [@@deriving jsont]
 
   type ('a, 'b) query =
     | Set_session_uuid : (set_session_uuid, unit) query
