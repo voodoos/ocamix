@@ -1,8 +1,8 @@
+open Brrer
 open Brr
 open Brr_lwd
 open Brr_lwd_ui
 open Brr_lwd_ui.Table
-module Css_length = Common.Css_length
 
 let _renderer =
   Table.Virtual.with_placeholder_or_error @@ fun i data ->

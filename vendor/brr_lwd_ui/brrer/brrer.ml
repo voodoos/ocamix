@@ -81,3 +81,4 @@ module Intersection_observer = Intersection_observer
 module Mutation_observer = Mutation_observer
 module Resize_observer = Resize_observer
 module Dom_rect_read_only = Dom_rect_read_only
+module Css_length = Css_length

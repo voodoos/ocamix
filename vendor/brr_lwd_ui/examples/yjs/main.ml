@@ -908,7 +908,7 @@ let layout ~columns_src ~rows_src names =
         Columns.v "a" (Fr 1.) [ `R label; `R delete ])
       names
   in
-  Table.make_fixed_row_height columns ~row_height:(Common.Css_length.Em 5.) ()
+  Table.make_fixed_row_height columns ~row_height:(Brrer.Css_length.Em 5.) ()
 
 let render_page_item ({ data; _ } : page_item) =
   match data with
