@@ -20,6 +20,7 @@ let name_filter = Lwd.var ""
 type status = Refreshing | Ready of int
 
 let status = Lwd.var Refreshing
+let grid_display = Lwd.var Button.Off
 
 let view =
   Lwd.var
@@ -269,6 +270,18 @@ let artist_chooser =
   let at = Attrs.O.(v (`P (C "artists-picker"))) in
   Elwd.div ~at [ `P (El.txt' " by artist: "); `R artist_formula.field ]
 
+let display =
+  let el, _, _ =
+    Button.two_state ~state:grid_display (fun s ->
+        [
+          `R
+            (Lwd.map s ~f:(function
+              | On -> El.txt' "List"
+              | Off -> El.txt' "Grid"));
+        ])
+  in
+  el
+
 let status =
   let spinner =
     Lwd.map (Lwd.get status) ~f:(function
@@ -296,6 +309,6 @@ let bar =
   let first_row =
     Elwd.div ~at [ `R library_chooser; `R genre_chooser; `R artist_chooser ]
   in
-  let second_row = Elwd.div ~at search_and_sort in
+  let second_row = Elwd.div ~at (search_and_sort @ [ `R display ]) in
   let at = Attrs.O.(v (`P (C "filters-container"))) in
   Elwd.div ~at [ `R first_row; `R second_row ]

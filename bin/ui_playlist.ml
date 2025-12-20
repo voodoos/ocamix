@@ -93,19 +93,69 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
            Lwd.return (El.nbsp ());
          ])
   in
-  let layout =
-    Table.make_fixed_row_height (columns ()) ~status
-      ~row_height:(Common.Css_length.Em 4.) ()
-  in
+  let placeholder_grid _i = Lwd.return Lwd_seq.empty in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
     let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
     Table.Data_source.Lazy { total_items; fetch }
   in
-  let render =
-    render ranged |> Table.Virtual.with_placeholder_or_error ~placeholder
-  in
-  Table.Virtual.make ~layout ?scroll_target render data_source
+  (* TODO: not for the playlist... and move the bind deeper *)
+  Lwd.bind (Lwd.get Ui_filters.grid_display) ~f:(function
+    | Off ->
+        let layout =
+          Table.make_fixed_row_height (columns ()) ~status
+            ~row_height:(Css_length.Em 4.) ()
+        in
+        let render =
+          render ranged |> Table.Virtual.with_placeholder_or_error ~placeholder
+        in
+        Table.Virtual.make ~layout ?scroll_target render data_source
+    | On ->
+        let size = Css_length.Em 10. in
+        let layout_grid =
+          Table.make_fixed_grid ~status ~item_width:size ~row_height:size ()
+        in
+        let render (ranged : View.ranged Lwd.t) start_index
+            Db.Generic_schema.Track.(
+              _, { server_id = Jellyfin server_id; _ }, album) =
+          let play_from (ranged : View.ranged Lwd.t) =
+            Lwd.map ranged ~f:(fun ranged _ ->
+                ignore
+                  (reset_playlist
+                     {
+                       ranged with
+                       view =
+                         {
+                           ranged.view with
+                           start_offset = ranged.view.start_offset + start_index;
+                         };
+                     }))
+          in
+          let play_on_click =
+            Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
+          in
+          let img_url = img_url ~size server_id album in
+          Lwd.return
+            (Lwd_seq.of_list
+               [
+                 Elwd.div
+                   ~ev:[ `R play_on_click ]
+                   [
+                     `P
+                       (El.img
+                          ~at:[ img_url; At.style (Jstr.v "height: 100%") ]
+                          ());
+                   ];
+               ])
+        in
+        let render_grid =
+          render ranged
+          |> Table.Virtual.with_placeholder_or_error
+               ~placeholder:placeholder_grid
+        in
+
+        Table.Virtual_grid.make ?scroll_target layout_grid render_grid
+          data_source)
 
 let make_now_playing ~reset_playlist ~fetch view =
   let scroll_target = Lwd.get Player.playstate.current_index in
