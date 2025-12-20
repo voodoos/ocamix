@@ -55,25 +55,28 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        that the visible part of the talbe is always populated with rows. *)
 
 let prepare (state : ('layout, 'data, 'error) state) ~total_items =
-  let () = state.cache <- new_cache () in
-  let i = ref 0 in
-  let current_row = ref (Lwd_table.first state.table) in
-  while Option.is_some !current_row || !i <= total_items - 1 do
-    match !current_row with
-    | Some row ->
-        if !i <= total_items - 1 then
-          let () = Hashtbl.replace state.row_index !i row in
-          Lwd_table.set row { index = !i; content = None }
-        else Lwd_table.unset row;
-        incr i;
-        current_row := Lwd_table.next row
-    | None ->
-        let set = { index = !i; content = None } in
-        let row = Lwd_table.append ~set state.table in
-        Hashtbl.add state.row_index !i row;
-        incr i;
-        current_row := Lwd_table.next row
-  done
+  if state.table_length <> total_items then begin
+    state.table_length <- total_items;
+    let () = state.cache <- new_cache () in
+    let i = ref 0 in
+    let current_row = ref (Lwd_table.first state.table) in
+    while Option.is_some !current_row || !i <= total_items - 1 do
+      match !current_row with
+      | Some row ->
+          if !i <= total_items - 1 then
+            let () = Hashtbl.replace state.row_index !i row in
+            Lwd_table.set row { index = !i; content = None }
+          else Lwd_table.unset row;
+          incr i;
+          current_row := Lwd_table.next row
+      | None ->
+          let set = { index = !i; content = None } in
+          let row = Lwd_table.append ~set state.table in
+          Hashtbl.add state.row_index !i row;
+          incr i;
+          current_row := Lwd_table.next row
+    done
+  end
 
 module Spacer_monoid = struct
   let empty = (0, Lwd_seq.empty, 0)
@@ -333,7 +336,7 @@ let make_lazy' (type data error) state ?(scroll_target : int Lwd.t option)
           (* Queuing prevents illegal updates during invalidation *)
           Window.queue_micro_task G.window (on_scroll fetch)
         in
-        let on_scroll = Utils.limit ~interval_ms:25 (on_scroll fetch) in
+        let on_scroll = Utils.limit ~interval_ms:75 (on_scroll fetch) in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let wrapper = Dom.make_wrapper state.dom ?scroll_target scroll_handler rows in
