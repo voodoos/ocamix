@@ -59,9 +59,13 @@ module Dom = struct
     in
     Controlled_scroll.make ?at ~scroll_target el
 
+  let start = Jstr.v "height: calc("
+  let star = Jstr.v " * "
+  let end_ = Jstr.v ");"
+
   let height_n_rows dom_state n =
-    let row_size = dom_state.layout#row_height |> Css_length.to_string in
-    Printf.sprintf "height: calc(%s * %i);" row_size n
+    let row_size = dom_state.layout#row_height |> Css_length.to_jstr in
+    Jstr.(start + row_size + star + Jstr.of_int n + end_)
 
   let make_spacer dom_state n =
     let at =
@@ -71,7 +75,7 @@ module Dom = struct
       ]
     in
     let height_n = height_n_rows dom_state n in
-    let style = At.style (Jstr.v height_n) in
+    let style = At.style height_n in
     El.div ~at:(style :: at) [ El.nbsp () ]
 
   let make_rows dom_state ~row_count spaced_rows =
@@ -90,7 +94,7 @@ module Dom = struct
     in
     let total_height =
       Lwd.map row_count ~f:(fun n ->
-          Attrs.O.A (height_n_rows dom_state n |> Jstr.v |> At.style))
+          Attrs.O.A (height_n_rows dom_state n |> At.style))
     in
     let at =
       Attrs.O.(`R total_height @:: v (`P (C "lwdui-lazy-table-content")))
@@ -120,8 +124,11 @@ module Dom = struct
     in
     let table_status = Layout.status dom_state.layout in
     let at = Attrs.to_at @@ Attrs.classes [ "lwdui-lazy-table" ] in
-    let grid_style = Layout.style dom_state.layout in
-    let s = Lwd.map grid_style ~f:(fun s -> At.style (Jstr.v s)) in
+    let s =
+      Lwd.map2 dom_state.layout#grid_template_columns
+        dom_state.layout#grid_template_rows ~f:(fun c r ->
+          At.style (Jstr.v (c ^ r)))
+    in
     let at = `R s :: at in
     Elwd.div ~at [ `R table_header; `R content; `R table_status ]
 
@@ -141,6 +148,7 @@ type ('layout, 'data, 'error) state = {
  rows *)
   mutable cache : (int, ('data, 'error) row_data Lwd_table.row) Lru.t;
   table : ('data, 'error) row_data Lwd_table.t;
+  mutable table_length : int;
   (* The [row_index] table is used to provide fast random access to the table's
      rows in the observer's callback *)
   row_index : (int, ('data, 'error) row_data Lwd_table.row) Hashtbl.t;
@@ -167,5 +175,6 @@ let new_state layout =
       };
     cache = new_cache ();
     table = Lwd_table.make ();
+    table_length = 0;
     row_index = Hashtbl.create 2048;
   }
