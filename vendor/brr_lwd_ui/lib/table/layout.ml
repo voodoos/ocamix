@@ -37,10 +37,14 @@ module Columns = struct
     Button.with_state
       (module Sort_button_state)
       ~state ~ev
-      (function
-        | Asc -> [ `P (El.txt' "^") ]
-        | Desc -> [ `P (El.txt' "v") ]
-        | None -> [ `P (El.txt' "-") ])
+      (fun s ->
+        [
+          `R
+            (Lwd.map s ~f:(function
+              | Asc -> El.txt' "^"
+              | Desc -> El.txt' "v"
+              | None -> El.txt' "-"));
+        ])
 
   let to_header (type data) (compare_state : data sort_state option Lwd.var)
       (t : data t) =
@@ -51,7 +55,7 @@ module Columns = struct
           | Do_nothing -> None
           | Set compare ->
               let ev =
-                Button.handler Ev.click (fun state _ ->
+                Button.handler Ev.click (fun _ state ->
                     let sort = { column_id = id; compare } in
                     let sort =
                       match Sort_button_state.next state with
