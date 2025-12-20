@@ -37,6 +37,7 @@ let map3 ~f a b c =
   Lwd.map2 a b ~f:(fun a b -> (a, b)) |> Lwd.map2 c ~f:(fun c (a, b) -> f a b c)
 
 let triple a b c = map3 a b c ~f:(fun a b c -> (a, b, c))
+let seq_is_empty s = Equal.poly Lwd_seq.Empty @@ Lwd_seq.view s
 
 module Forward_ref : sig
   type 'a t
