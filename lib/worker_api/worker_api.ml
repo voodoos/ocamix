@@ -85,7 +85,9 @@ module Make (Q : Queries) = struct
 
     let listen (type a) (event : a event) ~(f : a -> unit) : listener =
       let uuid = new_uuid_v4 () |> Uuidm.to_string in
-      let set jv = f (Obj.magic jv) in
+      let set jv =
+        f (Jsont_brr.decode_jv' (Q.event_jsont event) jv |> Result.get_exn)
+      in
       Hashtbl.add listeners (tag_of event) set;
       uuid
 
@@ -93,8 +95,8 @@ module Make (Q : Queries) = struct
       let message = Ev.as_type ev in
       let message = Brr_io.Message.Ev.data message |> decode_message in
       match message with
-      | Event (e, v) ->
-          Hashtbl.find_all listeners (tag_of e) |> List.iter (fun f -> f v)
+      | Event (tag, v) ->
+          Hashtbl.find_all listeners tag |> List.iter (fun f -> f v)
       | Answer { uuid; data } ->
           let f = Hashtbl.find futures uuid in
           Hashtbl.remove futures uuid;
@@ -111,8 +113,8 @@ module Make (Q : Queries) = struct
 
   let dispatch_event (type a) (e : a event) (v : a) =
     let v = Jsont_brr.encode_jv' (Q.event_jsont e) v |> Result.get_exn in
-    let tag = tag_of e in
-    Brr_webworkers.Worker.G.post (encode_message (Event (tag, v)))
+    let message = encode_message (Event (tag_of e, v)) in
+    Brr_webworkers.Worker.G.post message
 
   (** Execute W's body and configure messaging *)
   module Make_worker (W : Worker_impl) = struct
@@ -136,7 +138,6 @@ module Make (Q : Queries) = struct
       let+ result = W.on_query query data in
       let uuid = Jv.to_jstr uuid in
       let data = Jsont_brr.encode_jv' encoder result |> Result.get_exn in
-
       let message = encode_message (Answer { uuid; data }) in
       Brr_webworkers.Worker.G.post message
 
