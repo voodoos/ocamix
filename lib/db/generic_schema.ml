@@ -13,7 +13,7 @@ type ('key, 'value) with_key = { key : 'key; value : 'value }
 type 'a info = { count : int; v : 'a } [@@deriving jsont]
 
 module Id = struct
-  type t = Jellyfin of string [@@deriving yojson]
+  type t = Jellyfin of string [@@deriving jsont]
 
   let to_string = function Jellyfin id -> "J " ^ id
 
@@ -29,7 +29,7 @@ module Id = struct
 end
 
 module Collection = struct
-  type t = { id : Id.t; name : string } [@@deriving yojson, jsont]
+  type t = { id : Id.t; name : string } [@@deriving jsont]
 end
 
 module Artist = struct
@@ -40,13 +40,13 @@ module Artist = struct
     canon : string;
     sort_name : string;
   }
-  [@@deriving yojson, jsont]
+  [@@deriving jsont]
 
   type nonrec with_key = (int, t) with_key
 end
 
 module Genre = struct
-  type t = { name : string; canon : string } [@@deriving yojson, jsont]
+  type t = { name : string; canon : string } [@@deriving jsont]
   type nonrec with_key = (int, t) with_key
 end
 
@@ -58,12 +58,12 @@ module Album = struct
     mbid : string option;  (** Musicbrainz ID *)
     sort_name : string;
   }
-  [@@deriving yojson, jsont]
+  [@@deriving jsont]
 
   module Key = struct
     (* TODO: we would be better of we simple auto increment keys... *)
     type t = { id : Id.t; name : string; genres : int list; artists : int list }
-    [@@deriving yojson, jsont]
+    [@@deriving jsont]
   end
 end
 
@@ -76,7 +76,7 @@ module Track = struct
     server_id : Id.t;
         (* TODO this should not be here track -> collection -> server*)
   }
-  [@@deriving yojson, jsont]
+  [@@deriving jsont]
 
   module Key = struct
     (* TODO: we would be better of we simple auto increment keys... *)
@@ -89,6 +89,6 @@ module Track = struct
       collections : int list;
       duration : Duration.t; (* 10^-7 seconds *)
     }
-    [@@deriving yojson, jsont]
+    [@@deriving jsont]
   end
 end

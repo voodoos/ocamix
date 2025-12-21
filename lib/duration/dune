@@ -1,6 +1,5 @@
 (library
  (name duration)
  (libraries std)
- (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)
  (preprocess
-  (pps ppx_yojson_conv ppx_deriving_jsont)))
+  (pps ppx_deriving_jsont)))

@@ -1,7 +1,7 @@
 (* Jellyfin durations are in 10^-7 seconds... *)
 (* Todo there are probably many libraries better than these hacks *)
 
-type t = float [@@deriving yojson, jsont]
+type t = float [@@deriving jsont]
 type time = { days : int; hours : int; minutes : int; seconds : int }
 
 let to_seconds t = t /. 10000000.

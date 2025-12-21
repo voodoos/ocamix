@@ -1,5 +1,4 @@
 open Std
-module J = Json
 open Brr
 
 type method' = Get | Post
@@ -263,7 +262,7 @@ end
 (* Only for priviledged users... *)
 module Items_external_id_infos = struct
   type path_params = { item_id : string }
-  type params = unit list [@@deriving yojson]
+  type params = unit list
 
   type info = {
     name : string; [@key "Name"]

@@ -31,20 +31,6 @@ module String = struct
   module StdMap = Stdlib.Map.Make (Stdlib.String)
 end
 
-module Json = struct
-  let to_string v =
-    match
-      Json_repr.pp ~compact:true
-        (module Json_repr.Yojson)
-        Format.str_formatter v
-    with
-    | () ->
-        let v = Format.flush_str_formatter () in
-        v
-
-  let from_string s = Ezjsonm.from_string s |> Json_repr.to_yojson
-end
-
 module Encodings = struct
   let to_jstr t = Jv.repr t |> Brr.Json.encode
   let to_jv t = to_jstr t |> Jv.of_jstr
