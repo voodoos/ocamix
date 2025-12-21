@@ -10,10 +10,13 @@ html {
     box-sizing: inherit;
 }
 
+
 /* Utility classes */
+
 .display-none {
     display: none !important;
 }
+
 
 /* Style */
 
@@ -21,12 +24,13 @@ html {
     background-color: red;
 }
 
+
 /* Ham menu */
+
 .hover-menu {
     /* Required for absolute positioning of child */
     /* position: relative; */
 }
-
 
 .hover-menu menu {
     visibility: collapse;
@@ -36,15 +40,18 @@ html {
     transition: all 125ms;
 }
 
-
 .hover-menu:hover menu,
 .hover-menu.active menu {
     visibility: visible;
     opacity: 1;
 }
 
+
 /* Draggable table */
+
+
 /* todo: borders should be in theme */
+
 .draggable-table {
     display: inline-grid;
 }
@@ -63,37 +70,33 @@ html {
     box-shadow: 0px -200px 15px -200px rgba(255, 200, 0, 1) inset;
 }
 
+
 /* Virtual table */
 
 .lwdui-lazy-table {
     display: inline-grid;
     position: relative;
     width: 100%;
-    height: 100%;
-
+    max-height: 100%;
     grid-template-rows: [header] auto [content] 1fr [status] auto;
-
     align-content: start;
-
-
+    justify-content: space-between;
     border-top: 1px solid black;
     border-left: 1px solid black;
     border-right: 1px solid black;
     border-bottom: 1px solid black;
-
-    :has(> &) {
+     :has(> &) {
         overflow-x: auto;
         overflow-y: hidden;
     }
-
     & .lwdui-lazy-table-content,
+    & .lwdui-controlled-scroll-wrapper:has(> .lwdui-lazy-table-content-wrapper),
     & .lwdui-lazy-table-content-wrapper,
     & .lwdui-virtual-table-row {
         display: grid;
         grid-template-columns: subgrid;
         grid-column: 1/-1;
     }
-
     & .lwdui-virtual-table-status {
         grid-column: 1/-1;
         padding: 0;
@@ -102,41 +105,33 @@ html {
         justify-content: center;
         overflow: hidden;
         border-top: 1px solid black;
-
         & span {
             margin-right: 0.5em;
         }
     }
-
     & .lwdui-lazy-table-content-wrapper {
         height: 100%;
         overflow-x: hidden;
         overflow-y: auto;
         scroll-behavior: smooth;
     }
-
     & .lwdui-virtual-table-row {
         padding: 0;
         overflow-x: auto;
         overflow-y: hidden;
-
-        &:not(:last-child) {
+        &:not(:last-of-type) {
             border-bottom: 1px solid black;
         }
-
         &>div {
             display: flex;
             flex-direction: column;
             justify-content: center;
             overflow: hidden;
-
             padding: 0.5em;
-
-            &:not(:last-child) {
+            &:not(:last-of-type) {
                 border-right: 1px solid black;
             }
         }
-
         &>.row_spacer {
             padding: 0;
         }
@@ -146,15 +141,12 @@ html {
 .lwdui-controlled-scroll-wrapper {
     position: relative;
     overflow: hidden;
-
     & .lwdui-controlled-scroll-controls {
         position: absolute;
         bottom: 0;
         right: 0;
-
         transition: opacity 0.3s, visibility 0.3s;
     }
-
     &.locked .lwdui-controlled-scroll-controls {
         visibility: hidden;
         opacity: 0;
@@ -163,27 +155,19 @@ html {
 
 .lwdui-select-multiple {
     position: relative;
-
     height: 2em;
-
     padding: 0.25em;
-
     border: solid black 1px;
     border-radius: 3px;
-
     & .lwdui-select-multiple-selected {
         width: 100%;
         height: 100%;
-
         display: flex;
         overflow-x: auto;
         scrollbar-width: none;
-
-        mask-image: linear-gradient(to right, rgb(0, 0, 0) 96%, rgba(0,0,0,0) 100%);
-
+        mask-image: linear-gradient(to right, rgb(0, 0, 0) 96%, rgba(0, 0, 0, 0) 100%);
         & span {
             flex-shrink: 0;
-
             & button {
                 border: solid 1px black;
                 border-radius: 13px;
@@ -194,53 +178,40 @@ html {
             }
         }
     }
-
     & .lwdui-select-multiple-choices {
         display: flex;
         flex-direction: column;
-
         position: absolute;
         top: 100%;
         z-index: 10;
-
         padding: 0.25em;
-
         border: solid black 1px;
         border-radius: 3px;
-
         background-color: white;
-
         text-align: left;
-
         & .lwdui-select-multiple-search-bar {
             display: flex;
             flex-direction: row;
         }
     }
-
     & .lwdui-select-multiple-pill {
         display: inline-block;
         margin-right: 0.25em;
         padding: 0.25em;
         border: solid black 1px;
         border-radius: 3px;
-
         background-color: darkgrey;
     }
 }
 
 .two-face-cover {
-
     position: relative;
     transform-style: preserve-3d;
     transition: all 0.5s ease-in;
-
     cursor: pointer;
-
     &.flip {
         transform: rotateY(180deg);
     }
-
     & .face {
         width: 100%;
         height: 100%;
@@ -250,9 +221,7 @@ html {
         color: white;
         object-fit: contain;
     }
-
     & .back {
         transform: rotateY(180deg);
     }
-
 }
