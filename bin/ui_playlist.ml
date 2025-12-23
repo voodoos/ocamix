@@ -42,28 +42,49 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     in
     At.src (Jstr.v url)
   in
+  let cover ranged start_index server_id album =
+    let play_on_click =
+      let play_from (ranged : View.ranged Lwd.t) =
+        Lwd.map ranged ~f:(fun ranged _ ->
+            ignore
+              (reset_playlist
+                 {
+                   ranged with
+                   view =
+                     {
+                       ranged.view with
+                       start_offset = ranged.view.start_offset + start_index;
+                     };
+                 }))
+      in
+      Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
+    in
+    let src = img_url server_id album in
+    let cover = [ `R (Elwd.img ~at:[ `P src; `P (At.width 50) ] ()) ] in
+    let blur_hash =
+      let open Option in
+      let* album = album in
+      String.Map.find_opt "Primary" album.blur_hashes
+    in
+    let elts =
+      match blur_hash with
+      | None -> cover
+      | Some blur_hash ->
+          `P
+            (Brr_lwd_ui.Blur_hash_canvas.to_canvas ~width:50 ~height:50
+               blur_hash)
+          :: cover
+    in
+    Elwd.div
+      ~at:[ `P (At.class' (Jstr.v "grid-cover")) ]
+      ~ev:[ `R play_on_click ]
+      elts
+  in
   let render (ranged : View.ranged Lwd.t) start_index
       Db.Generic_schema.Track.(
         ( { Key.name; duration; _ },
           { id = Jellyfin id; server_id = Jellyfin server_id; _ },
           album )) =
-    let play_from (ranged : View.ranged Lwd.t) =
-      Lwd.map ranged ~f:(fun ranged _ ->
-          ignore
-            (reset_playlist
-               {
-                 ranged with
-                 view =
-                   {
-                     ranged.view with
-                     start_offset = ranged.view.start_offset + start_index;
-                   };
-               }))
-    in
-    let play_on_click =
-      Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
-    in
-    let img_url = img_url server_id album in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
         | Some { item = _, { id = Jellyfin item_id; _ }, _; _ }
@@ -76,9 +97,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       (Lwd_seq.of_list
          [
            status;
-           Elwd.div
-             ~ev:[ `R play_on_click ]
-             [ `R (Elwd.img ~at:[ `P img_url; `P (At.width 50) ] ()) ];
+           cover ranged start_index server_id album;
            Lwd.return (El.div [ El.span [ El.txt' name ] ]);
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])
@@ -111,42 +130,15 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
         in
         Table.Virtual.make ~layout ?scroll_target render data_source
     | On ->
-        let size = Css_length.Em 10. in
+        let size = Css_length.Em 6. in
         let layout_grid =
           Table.make_fixed_grid ~status ~item_width:size ~row_height:size ()
         in
         let render (ranged : View.ranged Lwd.t) start_index
             Db.Generic_schema.Track.(
               _, { server_id = Jellyfin server_id; _ }, album) =
-          let play_from (ranged : View.ranged Lwd.t) =
-            Lwd.map ranged ~f:(fun ranged _ ->
-                ignore
-                  (reset_playlist
-                     {
-                       ranged with
-                       view =
-                         {
-                           ranged.view with
-                           start_offset = ranged.view.start_offset + start_index;
-                         };
-                     }))
-          in
-          let play_on_click =
-            Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
-          in
-          let img_url = img_url ~size server_id album in
-          Lwd.return
-            (Lwd_seq.of_list
-               [
-                 Elwd.div
-                   ~ev:[ `R play_on_click ]
-                   [
-                     `P
-                       (El.img
-                          ~at:[ img_url; At.style (Jstr.v "height: 100%") ]
-                          ());
-                   ];
-               ])
+          let cover = cover ranged start_index server_id album in
+          Lwd.return (Lwd_seq.of_list [ cover ])
         in
         let render_grid =
           render ranged
