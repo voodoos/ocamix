@@ -54,7 +54,7 @@ let on_upgrade_needed e q =
   in
   ()
 
-let schema_version = 7
+let schema_version = 8
 
 let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in

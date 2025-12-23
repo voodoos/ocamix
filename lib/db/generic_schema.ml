@@ -57,6 +57,7 @@ module Album = struct
     id : Id.t;
     mbid : string option;  (** Musicbrainz ID *)
     sort_name : string;
+    blur_hashes : string String.Map.t;
   }
   [@@deriving jsont]
 

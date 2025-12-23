@@ -345,6 +345,8 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
         sort_name;
         genre_items;
         album_artists = artist_items;
+        image_tags;
+        image_blur_hashes;
         _;
       } =
     let open Fut.Syntax in
@@ -379,9 +381,17 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
           + 1
     in
     let id = Generic_schema.Id.Jellyfin id in
+    let blur_hashes =
+      String.Map.filter_map
+        (fun kind (* ex: Primary *) hashes ->
+          let open Option in
+          let* tag = String.Map.find_opt kind image_tags in
+          String.Map.find_opt tag hashes)
+        image_blur_hashes
+    in
     Stores.Albums_store.add
       ~key:{ id; name; genres; artists }
-      { idx; id; mbid; sort_name }
+      { idx; id; mbid; sort_name; blur_hashes }
       store
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut

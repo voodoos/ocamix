@@ -1,4 +1,6 @@
 (library
  (name std)
  (public_name ocamix.std)
- (libraries containers containers-data brr jsont base64 uuidm ubase))
+ (libraries containers containers-data brr jsont base64 uuidm ubase)
+ (preprocess
+  (pps ppx_deriving_jsont)))

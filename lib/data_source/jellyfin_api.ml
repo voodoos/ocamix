@@ -66,22 +66,10 @@ module Authenticate_by_name = struct
 end
 
 module Item = struct
-  type image_blur_hash = string String.StdMap.t
-
-  let image_blur_hash_jsont = Jsont.Object.as_string_map Jsont.string
-
   type genre_item = { name : string; [@key "Name"] id : string [@key "Id"] }
   [@@deriving jsont]
 
   type artist_item = { name : string; [@key "Name"] id : string [@key "Id"] }
-  [@@deriving jsont]
-
-  type image_blur_hashes = {
-    primary : image_blur_hash;
-        [@default String.StdMap.empty]
-        [@omit String.StdMap.is_empty]
-        [@key "Primary"]
-  }
   [@@deriving jsont]
 
   type type_ =
@@ -196,6 +184,17 @@ module Item = struct
 
   let type_str_jsont = type__jsont
 
+  (* It seems like Jellyfin uses image "tags" to distinguished several versions
+     of the same image. Blur hashes are associated to images via their tags.
+     The tags are generated like this:
+
+      public string
+        GetImageCacheTag(string baseItemPath, DateTime imageDateModified)
+        => (baseItemPath + imageDateModified.Ticks)
+              .GetMD5().ToString("N", CultureInfo.InvariantCulture);
+     See https://github.com/jellyfin/jellyfin/blob/84f66dd54e74621e4d81cd57648c4d27411d82d9/src/Jellyfin.Drawing/ImageProcessor.cs#L410
+    *)
+
   type t = {
     name : string; [@key "Name"]
     sort_name : string option; [@option] [@key "SortName"]
@@ -210,7 +209,12 @@ module Item = struct
         [@option]
         [@key "ParentId"]
     server_id : string; [@key "ServerId"]
-    (* image_blur_hashes : image_blur_hashes; [@key "ImageBlurHashes"] *)
+    primary_image_aspect_ratio : float option;
+        [@option] [@key "PrimaryImageAspectRatio"]
+    image_tags : string String.Map.t;
+        [@default String.Map.empty] [@key "ImageTags"]
+    image_blur_hashes : string String.Map.t String.Map.t;
+        [@default String.Map.empty] [@key "ImageBlurHashes"]
     type_ : type_str; [@key "Type"]
     genre_items : genre_item list; [@default []] [@key "GenreItems"]
     artist_items : artist_item list; [@default []] [@key "ArtistItems"]

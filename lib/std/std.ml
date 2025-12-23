@@ -27,8 +27,24 @@ end
 module String = struct
   include String
   module Set = Set.Make (String)
-  module Map = Map.Make (String)
-  module StdMap = Stdlib.Map.Make (Stdlib.String)
+
+  module Map = struct
+    include Map.Make (String)
+
+    let string_map ?kind ?doc type' =
+      let dec_empty () = empty in
+      let dec_add _meta n v mems = add n v mems in
+      let dec_finish _meta mems = mems in
+      let enc f mems acc =
+        fold (fun n v acc -> f Jsont.Meta.none n v acc) mems acc
+      in
+      Jsont.Object.Mems.map ?kind ?doc type' ~dec_empty ~dec_add ~dec_finish
+        ~enc:{ enc }
+
+    let jsont t =
+      let open Jsont.Object in
+      map Fun.id |> keep_unknown (string_map t) ~enc:Fun.id |> finish
+  end
 end
 
 module Encodings = struct
