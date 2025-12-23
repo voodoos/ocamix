@@ -31,4 +31,6 @@
   uuidm
   base64
   hector
-  ubase))
+  ubase
+  (bimage :with-tests)
+  (bimage-unix :with-tests)))

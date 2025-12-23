@@ -1,0 +1,15 @@
+(executable
+ (name blur_hash)
+ (libraries brr_lwd_ui bimage bimage-unix))
+
+(rule
+ (targets test.png)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run ./blur_hash.exe)))
+
+(rule
+ (alias runtest)
+ (action
+  (diff test.expected.png test.png)))

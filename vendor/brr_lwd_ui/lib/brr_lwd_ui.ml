@@ -7,3 +7,5 @@ module Controlled_scroll = Controlled_scroll
 module Forms = Forms
 module Table = Table
 module Img = Img
+module Blur_hash = Blur_hash
+module Blur_hash_canvas = Blur_hash_canvas
