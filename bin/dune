@@ -14,5 +14,6 @@
   lib
   data_source
   db
+  blur_hashes_worker_api
   duration
   containers-data))

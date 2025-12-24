@@ -1,0 +1,8 @@
+(executable
+ (name blur_hashes_worker)
+ (modes js)
+ (js_of_ocaml
+  (flags
+   (:standard --no-inline)))
+ ; TODO why the no-inline flag ?
+ (libraries std js_of_ocaml blur_hashes_worker_api brr-lwd-ui))

@@ -59,21 +59,34 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       in
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
+    let width, height = (50, 50) in
+    (* TODO should be flexible *)
     let src = img_url server_id album in
-    let cover = [ `R (Elwd.img ~at:[ `P src; `P (At.width 50) ] ()) ] in
+    let cover = [ `R (Elwd.img ~at:[ `P src; `P (At.width width) ] ()) ] in
     let blur_hash =
       let open Option in
       let* album = album in
-      String.Map.find_opt "Primary" album.blur_hashes
+      let+ hash = String.Map.find_opt "Primary" album.blur_hashes in
+      let open Brr_canvas in
+      let el = El.canvas ~at:[ At.width width; At.height height ] [] in
+      let canvas = Canvas.of_el el in
+      let () =
+        let fut =
+          Blue_hashes_worker_client.query Render { hash; w = width; h = height }
+        in
+        Fut.await fut (function
+          | Error _ -> ()
+          | Ok data ->
+              let image_data =
+                C2d.Image_data.create ~data ~w:width ~h:height ()
+              in
+              let context = C2d.get_context canvas in
+              C2d.put_image_data context image_data ~x:0 ~y:0)
+      in
+      el
     in
     let elts =
-      match blur_hash with
-      | None -> cover
-      | Some blur_hash ->
-          `P
-            (Brr_lwd_ui.Blur_hash_canvas.to_canvas ~width:50 ~height:50
-               blur_hash)
-          :: cover
+      match blur_hash with None -> cover | Some el -> `P el :: cover
     in
     Elwd.div
       ~at:[ `P (At.class' (Jstr.v "grid-cover")) ]

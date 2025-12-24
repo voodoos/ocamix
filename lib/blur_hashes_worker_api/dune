@@ -1,0 +1,5 @@
+(library
+ (name blur_hashes_worker_api)
+ (libraries std brr-lwd-ui.brrer worker_api)
+ (preprocess
+  (pps ppx_deriving_jsont)))
