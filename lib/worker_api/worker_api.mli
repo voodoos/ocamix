@@ -1,3 +1,11 @@
+type 'a transfer = {
+  encode : 'a -> (Jv.t, [ `Jv of Jv.Error.t | `Msg of string ]) result;
+  decode : Jv.t -> ('a, [ `Jv of Jv.Error.t | `Msg of string ]) result;
+  transferables : (Jv.t -> Jv.t) list;
+}
+
+type 'a transfer_or_conv = Transfer of 'a transfer | Conv of 'a Jsont.t
+
 module type Queries = sig
   type ('a, 'b) query
   (** Use a GADT to describe queries that have different parameters and return
@@ -8,7 +16,7 @@ module type Queries = sig
           | Previous_letters : (char, char) list query
       ]} *)
 
-  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b Jsont.t
+  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b transfer_or_conv
   (** Queries payloads and results encoders *)
 
   type 'a event

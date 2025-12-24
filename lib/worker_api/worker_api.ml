@@ -1,19 +1,28 @@
-open Std
 open Brr
 module List = Stdlib.List
 
 type tag = Block of int | Int of int [@@deriving jsont]
+
+open Std
 
 let tag_of v =
   (* wow wow wow. is that okayyish ?*)
   let obj = Obj.repr v in
   if Obj.is_block obj then Block (Obj.tag obj) else Int (Obj.magic obj)
 
+type 'a transfer = {
+  encode : 'a -> (Jv.t, [ `Jv of Jv.Error.t | `Msg of string ]) result;
+  decode : Jv.t -> ('a, [ `Jv of Jv.Error.t | `Msg of string ]) result;
+  transferables : (Jv.t -> Jv.t) list;
+}
+
+type 'a transfer_or_conv = Transfer of 'a transfer | Conv of 'a Jsont.t
+
 module type Queries = sig
   type ('a, 'b) query
   type 'a event
 
-  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b Jsont.t
+  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b transfer_or_conv
   val event_jsont : 'a event -> 'a Jsont.t
 end
 
@@ -72,7 +81,11 @@ module Make (Q : Queries) = struct
       let uuid = new_uuid_v4 () |> Uuidm.to_string |> Jstr.of_string in
       let fut, set = Fut.create () in
       let encoder, decoder = Q.jsont query in
-      let set jv = set (decode_jv decoder jv) in
+      let set jv =
+        match decoder with
+        | Conv d -> set (decode_jv d jv)
+        | Transfer { decode; _ } -> set (decode jv)
+      in
       let data = Jsont_brr.encode_jv encoder data |> Result.get_exn in
       let query = Encodings.to_jv query in
       let query =
@@ -96,7 +109,7 @@ module Make (Q : Queries) = struct
       let message = Brr_io.Message.Ev.data message |> decode_message in
       match message with
       | Event (tag, v) ->
-          Hashtbl.find_all listeners tag |> List.iter (fun f -> f v)
+          Hashtbl.find_all listeners tag |> List.iter ~f:(fun f -> f v)
       | Answer { uuid; data } ->
           let f = Hashtbl.find futures uuid in
           Hashtbl.remove futures uuid;
@@ -137,9 +150,20 @@ module Make (Q : Queries) = struct
       let open Fut.Result_syntax in
       let+ result = W.on_query query data in
       let uuid = Jv.to_jstr uuid in
-      let data = Jsont_brr.encode_jv' encoder result |> Result.get_exn in
-      let message = encode_message (Answer { uuid; data }) in
-      Brr_webworkers.Worker.G.post message
+      match encoder with
+      | Conv encoder ->
+          let data = Jsont_brr.encode_jv' encoder result |> Result.get_exn in
+          let message = encode_message (Answer { uuid; data }) in
+          Brr_webworkers.Worker.G.post message
+      | Transfer { encode; transferables; _ } ->
+          let data = encode result |> Result.get_exn in
+          let message = encode_message (Answer { uuid; data }) in
+          let transfer =
+            List.map transferables ~f:(fun f ->
+                Brr_io.Message.transfer @@ f (Jv.get' message j_data))
+          in
+          let opts = Brr_io.Message.opts ~transfer () in
+          Brr_webworkers.Worker.G.post ~opts message
 
     let _ = Ev.listen Brr_io.Message.Ev.message on_message G.target
   end
