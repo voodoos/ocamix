@@ -34,7 +34,7 @@ let sRGB_to_linear i =
   if v <= 0.04045 then v /. 12.92 else Float.pow ((v +. 0.055) /. 1.055) 2.4
 
 let linear_to_sRGB v =
-  let v = max 0. (min 1. v) in
+  let v = Float.(max 0. (min 1. v)) in
   if v <= 0.0031308 then Float.to_int ((v *. 12.92 *. 255.) +. 0.5)
   else
     Float.to_int ((((1.055 *. Float.pow v (1. /. 2.4)) -. 0.055) *. 255.) +. 0.5)
