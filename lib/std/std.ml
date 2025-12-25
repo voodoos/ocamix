@@ -37,54 +37,32 @@ module Set = struct
   end
 end
 
-module Int = struct
-  module T = struct
-    include Int
+module Map = struct
+  include Map
 
-    let jsont = Jsont.int
+  module type OrderedTypeJsont = sig
+    type t
+
+    include OrderedType with type t := t
+
+    val to_string : t -> string
+    val of_string : string -> t
   end
 
-  include T
-  module Set = Set.Make (T)
-
-  module Map = struct
-    include Map.Make (T)
-
-    let jsont elt_jsont =
-      let enc =
-        {
-          Jsont.Array.enc =
-            (fun f init map -> fold (fun i elt acc -> f acc i elt) map init);
-        }
-      in
-      Jsont.Array.map ~enc
-        ~dec_empty:(fun () -> empty)
-        ~dec_add:add
-        ~dec_finish:(fun _ _ map -> map)
-        elt_jsont
-      |> Jsont.Array.array
-  end
-end
-
-module String = struct
-  module T = struct
-    include String
-
-    let jsont = Jsont.string
-  end
-
-  include T
-  module Set = Set.Make (T)
-
-  module Map = struct
-    include Map.Make (T)
+  module Make (C : OrderedTypeJsont) = struct
+    include Make (C)
 
     let string_map ?kind ?doc type' =
       let dec_empty () = empty in
-      let dec_add _meta n v mems = add n v mems in
+      let dec_add _meta key v mems =
+        let key = C.of_string key in
+        add key v mems
+      in
       let dec_finish _meta mems = mems in
       let enc f mems acc =
-        fold (fun n v acc -> f Jsont.Meta.none n v acc) mems acc
+        fold
+          (fun key v acc -> f Jsont.Meta.none (C.to_string key) v acc)
+          mems acc
       in
       Jsont.Object.Mems.map ?kind ?doc type' ~dec_empty ~dec_add ~dec_finish
         ~enc:{ enc }
@@ -93,6 +71,34 @@ module String = struct
       let open Jsont.Object in
       map Fun.id |> keep_unknown (string_map t) ~enc:Fun.id |> finish
   end
+end
+
+module Int = struct
+  module T = struct
+    include Int
+
+    let jsont = Jsont.int
+    let of_string = int_of_string
+    let to_string = string_of_int
+  end
+
+  include T
+  module Set = Set.Make (T)
+  module Map = Map.Make (T)
+end
+
+module String = struct
+  module T = struct
+    include String
+
+    let jsont = Jsont.string
+    let of_string = Fun.id
+    let to_string = Fun.id
+  end
+
+  include T
+  module Set = Set.Make (T)
+  module Map = Map.Make (T)
 end
 
 module Encodings = struct
