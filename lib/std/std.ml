@@ -1,12 +1,54 @@
 include ContainersLabels
 module Brr_utils = Brr_utils
 
+module Set = struct
+  include Set
+
+  module type OrderedTypeJsont = sig
+    type t
+
+    include OrderedType with type t := t
+
+    val jsont : t Jsont.t
+  end
+
+  module Make (C : OrderedTypeJsont) = struct
+    include Make (C)
+
+    let jsont =
+      let enc =
+        {
+          Jsont.Array.enc =
+            (fun f init set ->
+              let i = ref (-1) in
+              fold
+                (fun elt acc ->
+                  incr i;
+                  f acc !i elt)
+                set init);
+        }
+      in
+      Jsont.Array.map ~enc
+        ~dec_empty:(fun () -> empty)
+        ~dec_add:(fun _ -> add)
+        ~dec_finish:(fun _ _ set -> set)
+        C.jsont
+      |> Jsont.Array.array
+  end
+end
+
 module Int = struct
-  include Int
-  module Set = Set.Make (Int)
+  module T = struct
+    include Int
+
+    let jsont = Jsont.int
+  end
+
+  include T
+  module Set = Set.Make (T)
 
   module Map = struct
-    include Map.Make (Int)
+    include Map.Make (T)
 
     let jsont elt_jsont =
       let enc =
@@ -25,11 +67,17 @@ module Int = struct
 end
 
 module String = struct
-  include String
-  module Set = Set.Make (String)
+  module T = struct
+    include String
+
+    let jsont = Jsont.string
+  end
+
+  include T
+  module Set = Set.Make (T)
 
   module Map = struct
-    include Map.Make (String)
+    include Map.Make (T)
 
     let string_map ?kind ?doc type' =
       let dec_empty () = empty in

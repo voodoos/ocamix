@@ -50,8 +50,8 @@ let int_set_jsont = Encodings.set_jsont Jsont.int
 
 type filter =
   | Search of string
-  | Genres of (Int.Set.t[@jsont int_set_jsont]) Selection.t list
-  | Artists of (Int.Set.t[@jsont int_set_jsont]) Selection.t list
+  | Genres of Int.Set.t Selection.t list
+  | Artists of Int.Set.t Selection.t list
 [@@deriving jsont]
 
 type req = {
