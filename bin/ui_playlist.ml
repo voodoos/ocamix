@@ -8,13 +8,13 @@ module Api = DS.Api
 (** Application part *)
 
 (** Columns declaration *)
-let columns () =
+let columns cover_cell_width =
   Lwd.pure
   @@ Lwd_seq.of_array
        Table.Columns.
          [|
            v "Order" (Rem 5.) @@ [ `P (El.txt' "#") ];
-           v "Cover" (Rem 5.) @@ [ `P (El.txt' "Cover") ];
+           v "Cover" cover_cell_width @@ [ `P (El.txt' "Cover") ];
            v "Title" (Fr 1.) @@ [ `P (El.txt' "Title") ];
            v "Duration" (Rem 5.) @@ [ `P (El.txt' "Duration") ];
          |]
@@ -42,6 +42,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
     in
     At.src (Jstr.v url)
   in
+  let cover_cell_width = Css_length.Em 4. in
   let cover ranged start_index server_id album =
     let play_on_click =
       let play_from (ranged : View.ranged Lwd.t) =
@@ -59,9 +60,10 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       in
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
-    let width, height = (50, 50) in
+    let width = Css_length.to_px cover_cell_width |> Float.to_int in
+    let width, height = (width, width) in
     (* TODO should be flexible *)
-    let src = img_url server_id album in
+    let src = img_url ~size:cover_cell_width server_id album in
     let cover = [ `R (Elwd.img ~at:[ `P src; `P (At.width width) ] ()) ] in
     let blur_hash =
       let open Option in
@@ -135,7 +137,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
   Lwd.bind (Lwd.get Ui_filters.grid_display) ~f:(function
     | Off ->
         let layout =
-          Table.make_fixed_row_height (columns ()) ~status
+          Table.make_fixed_row_height (columns cover_cell_width) ~status
             ~row_height:(Css_length.Em 4.) ()
         in
         let render =
