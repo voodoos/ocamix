@@ -32,5 +32,5 @@
   base64
   hector
   ubase
-  (bimage :with-tests)
-  (bimage-unix :with-tests)))
+  (bimage :with-test)
+  (bimage-unix :with-test)))
