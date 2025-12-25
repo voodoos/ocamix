@@ -92,7 +92,7 @@ module Make (Q : Queries) = struct
         Jv.obj'
           [| (j_uuid, Jv.of_jstr uuid); (j_query, query); (j_data, data) |]
       in
-      Console.debug [ "Worker posts query"; query ];
+      Console.debug [ "Client posts query"; query ];
       Brr_webworkers.Worker.post worker query;
       Hashtbl.add futures uuid set;
       fut
@@ -143,7 +143,6 @@ module Make (Q : Queries) = struct
       @@
       let+ uuid, query, data, encoder =
         let obj = Brr_io.Message.Ev.data message in
-        Console.debug [ "Worker received"; obj ];
         let uuid = Jv.get' obj j_uuid in
         let* query : _ query = Encodings.of_jv (Jv.get' obj j_query) in
         let decoder, encoder = Q.jsont query in
