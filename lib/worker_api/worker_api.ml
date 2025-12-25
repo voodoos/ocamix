@@ -92,6 +92,7 @@ module Make (Q : Queries) = struct
         Jv.obj'
           [| (j_uuid, Jv.of_jstr uuid); (j_query, query); (j_data, data) |]
       in
+      Console.debug [ "Worker posts query"; query ];
       Brr_webworkers.Worker.post worker query;
       Hashtbl.add futures uuid set;
       fut
@@ -127,6 +128,7 @@ module Make (Q : Queries) = struct
   let dispatch_event (type a) (e : a event) (v : a) =
     let v = Jsont_brr.encode_jv' (Q.event_jsont e) v |> Result.get_exn in
     let message = encode_message (Event (tag_of e, v)) in
+    Console.debug [ "Worker posts event"; message ];
     Brr_webworkers.Worker.G.post message
 
   (** Execute W's body and configure messaging *)
@@ -141,6 +143,7 @@ module Make (Q : Queries) = struct
       @@
       let+ uuid, query, data, encoder =
         let obj = Brr_io.Message.Ev.data message in
+        Console.debug [ "Worker received"; obj ];
         let uuid = Jv.get' obj j_uuid in
         let* query : _ query = Encodings.of_jv (Jv.get' obj j_query) in
         let decoder, encoder = Q.jsont query in
@@ -154,6 +157,7 @@ module Make (Q : Queries) = struct
       | Conv encoder ->
           let data = Jsont_brr.encode_jv' encoder result |> Result.get_exn in
           let message = encode_message (Answer { uuid; data }) in
+          Console.debug [ "Worker posts answer"; message ];
           Brr_webworkers.Worker.G.post message
       | Transfer { encode; transferables; _ } ->
           let data = encode result |> Result.get_exn in
@@ -163,6 +167,7 @@ module Make (Q : Queries) = struct
                 Brr_io.Message.transfer @@ f (Jv.get' message j_data))
           in
           let opts = Brr_io.Message.opts ~transfer () in
+          Console.debug [ "Worker posts answer"; message ];
           Brr_webworkers.Worker.G.post ~opts message
 
     let _ = Ev.listen Brr_io.Message.Ev.message on_message G.target
