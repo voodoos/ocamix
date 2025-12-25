@@ -44,7 +44,7 @@ end
 
 open Selection
 
-type kind = Audio [@@deriving jsont]
+type kind = Album | Track [@@deriving jsont]
 
 let int_set_jsont = Encodings.set_jsont Jsont.int
 

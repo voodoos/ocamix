@@ -28,7 +28,7 @@ let view =
       {
         request =
           {
-            kind = Audio;
+            kind = Track;
             src_views = All;
             sort = Sort.Date_added;
             filters = [];
@@ -103,7 +103,7 @@ let filter1_changed () =
   let filters =
     [ Search (Lwd.peek name_filter); Genres genres; Artists artists ]
   in
-  let req = { kind = Audio; src_views; sort; filters } in
+  let req = { kind = Track; src_views; sort; filters } in
   let open Fut.Result_syntax in
   let start_time = Performance.now_ms G.performance in
   Lwd.set status Refreshing;
@@ -119,7 +119,7 @@ let filter0_changed () =
   let src_views =
     Selection.One_of (Lwd.peek selected_libraries |> Lwd_seq.to_list)
   in
-  let req = { kind = Audio; src_views; sort = Sort.Date_added; filters = [] } in
+  let req = { kind = Track; src_views; sort = Sort.Date_added; filters = [] } in
   let open Fut.Result_syntax in
   let+ view = Worker_client.query Create_view req in
   let+ genres = Worker_client.query Get_view_genres view in
