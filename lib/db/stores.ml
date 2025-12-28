@@ -125,36 +125,8 @@ module Album = struct
   let name = "albums"
 end
 
-module Albums_store =
-  Make_object_store
-    (Album)
-    (struct
-      include Generic_schema.Album.Key
-
-      let to_jv { id; name; genres; artists } =
-        let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
-        let name = Jv.of_string name in
-        let genres = Jv.of_list Jv.of_int genres in
-        let artists = Jv.of_list Jv.of_int artists in
-        Jv.of_jv_array [| id; name; genres; artists |]
-
-      let of_jv j =
-        match Jv.to_jv_array j with
-        | [| id; name; genres; artists |] ->
-            let id =
-              match String.split_on_char ~by:' ' @@ Jv.to_string id with
-              | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
-              | _ -> assert false
-            in
-            let name = Jv.to_string name in
-            let genres = Jv.to_list Jv.to_int genres in
-            let artists = Jv.to_list Jv.to_int artists in
-            { id; name; genres; artists }
-        | _ -> assert false
-    end)
-
+module Albums_store = Make_object_store (Album) (Auto_increment)
 module Albums_by_id = Make_index (Albums_store) (Id_key)
-module Albums_by_idx = Make_index (Albums_store) (Int_key)
 
 module Track = struct
   include Jvable (Generic_schema.Track)

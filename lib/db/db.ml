@@ -39,11 +39,9 @@ let on_upgrade_needed e q =
     Artists_by_id.create ~name:"by-mbid" (Key_path.Identifier "mbid") store
   in
   let _albums =
-    let store = Albums_store.create db in
+    let store = Albums_store.create ~auto_increment:true db in
     Albums_by_id.create ~name:"by-id" (Key_path.Identifier "id") ~unique:true
       store
-    |> ignore;
-    Albums_by_idx.create ~name:"by-idx" (Key_path.Identifier "idx") store
     |> ignore
   in
   let _tracks =
@@ -54,7 +52,7 @@ let on_upgrade_needed e q =
   in
   ()
 
-let schema_version = 8
+let schema_version = 9
 
 let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in

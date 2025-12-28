@@ -220,21 +220,13 @@ module Worker () = struct
                     Fut.return None
                 | Ok (Some v) ->
                     let* album_store = get_store (module Albums_store) () in
-                    let album_by_id =
-                      Result.map
-                        (fun album_store ->
-                          Albums_store.index
-                            (module Albums_by_idx)
-                            ~name:"by-idx" album_store)
-                        album_store
-                    in
                     let+ album =
                       Option.map2
-                        (fun album_id album_by_id ->
-                          Albums_by_idx.get album_id album_by_id
+                        (fun album_id album_store ->
+                          Albums_store.get album_id album_store
                           |> IDB.Request.fut_exn)
                         v.album_id
-                        (Result.to_opt album_by_id)
+                        (Result.to_opt album_store)
                       |> Option.value ~default:(Fut.return None)
                     in
                     Some (key, v, album)

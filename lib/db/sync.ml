@@ -363,23 +363,6 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
     let store =
       Transaction.object_store (module Stores.Albums_store) transaction
     in
-    let* idx =
-      let albums_by_idx =
-        Stores.Albums_store.index
-          (module Stores.Albums_by_idx)
-          ~name:"by-idx" store
-      in
-      (* We get the last id for the manual auto-increent field *)
-      let+ result =
-        Stores.Albums_by_idx.open_key_cursor ~direction:Prev albums_by_idx
-        |> Request.fut
-      in
-      match result with
-      | None -> 0
-      | Some cursor ->
-          (Stores.Albums_by_idx.Cursor.key cursor |> Option.get_or ~default:(-1))
-          + 1
-    in
     let id = Generic_schema.Id.Jellyfin id in
     let blur_hashes =
       String.Map.filter_map
@@ -390,8 +373,7 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
         image_blur_hashes
     in
     Stores.Albums_store.add
-      ~key:{ id; name; genres; artists }
-      { idx; id; mbid; sort_name; blur_hashes }
+      { id; mbid; name; sort_name; genres; artists; blur_hashes }
       store
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut
@@ -473,10 +455,11 @@ let sync_tracks ~collection_id ~source idb items :
               ~name:"by-id" albums_store
           in
           let+ result =
-            Stores.Albums_by_id.get (Generic_schema.Id.Jellyfin id) albums_by_id
+            Stores.Albums_by_id.get_key (Generic_schema.Id.Jellyfin id)
+              albums_by_id
             |> Request.fut
           in
-          match result with None -> None | Some { idx; _ } -> Some idx)
+          match result with None -> None | Some idx -> Some idx)
       | None -> Fut.ok None
     in
     Stores.Tracks_store.add ~key

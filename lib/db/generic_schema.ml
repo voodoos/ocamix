@@ -52,20 +52,17 @@ end
 
 module Album = struct
   type t = {
-    (* name : string; *)
-    idx : int;
     id : Id.t;
     mbid : string option;  (** Musicbrainz ID *)
+    name : string;
     sort_name : string;
+    genres : int list;
+    artists : int list;
     blur_hashes : string String.Map.t;
   }
   [@@deriving jsont]
 
-  module Key = struct
-    (* TODO: we would be better of we simple auto increment keys... *)
-    type t = { id : Id.t; name : string; genres : int list; artists : int list }
-    [@@deriving jsont]
-  end
+  type nonrec with_key = (int, t) with_key
 end
 
 module Track = struct

@@ -259,21 +259,19 @@ struct
           | None -> Lwd.set album_title default_album_title
           | Some album_id ->
               let open Db.Stores in
-              let album_index =
+              let album_store =
                 (* TODO we don't need to fetch it anymore *)
                 IDB.Database.transaction
                   [ (module Albums_store) ]
                   ~mode:Readonly idb
                 |> IDB.Transaction.object_store (module Albums_store)
-                |> Albums_store.index (module Albums_by_idx) ~name:"by-idx"
               in
               let album =
-                Albums_by_idx.get_key album_id album_index
-                |> IDB.Request.fut_exn
+                Albums_store.get album_id album_store |> IDB.Request.fut_exn
               in
               Fut.await album
                 (Option.iter
-                   (fun { Db.Generic_schema.Album.Key.name; artists; _ } ->
+                   (fun { Db.Generic_schema.Album.name; artists; _ } ->
                      Lwd.set album_title name;
                      let artist =
                        match artists with
