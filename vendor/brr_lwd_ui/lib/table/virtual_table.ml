@@ -55,9 +55,9 @@ let data_source_of_random_access_table (t : 'a Random_access_table.t) =
        that the visible part of the talbe is always populated with rows. *)
 
 let prepare (state : ('layout, 'data, 'error) state) ~total_items =
+  let () = state.cache <- new_cache () in
   if state.table_length <> total_items then begin
     state.table_length <- total_items;
-    let () = state.cache <- new_cache () in
     let i = ref 0 in
     let current_row = ref (Lwd_table.first state.table) in
     while Option.is_some !current_row || !i <= total_items - 1 do
