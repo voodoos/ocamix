@@ -21,6 +21,22 @@ let tap ?(initial_trigger = false) ~f t =
   let first_sample = Lwd.quick_sample root in
   if initial_trigger then f first_sample
 
+(* See https://github.com/let-def/lwd/issues/55 *)
+let cache_changes computation ~equal k =
+  let cache = ref None in
+  Lwd.bind computation ~f:(fun value ->
+      match !cache with
+      | None ->
+          let var = Lwd.var value in
+          let result = k (Lwd.get var) in
+          cache := Some (var, result);
+          result
+      | Some (var, result) ->
+          let value' = Lwd.peek var in
+          if not (equal value value') then
+            Window.queue_micro_task G.window (fun () -> Lwd.set var value);
+          result)
+
 let collect_into_var t =
   let root = Lwd.observe t in
   let first_sample = Lwd.quick_sample root in
