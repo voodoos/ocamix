@@ -30,13 +30,13 @@ let _ =
   Worker_client.query Set_session_uuid (Lwd.peek session_uuid)
 
 let fetch ranged_view i =
-  let view = ranged_view.View.view in
+  let open View in
+  let view = ranged_view.view in
   let indexes =
     Array.map
       ~f:(fun index ->
         let index = index + view.start_offset in
-
-        Db.View.Order.apply ~size:view.item_count ranged_view.order index)
+        Order.apply ~size:view.item_count ranged_view.order index)
       i
   in
   Worker_client.(query Get (view, indexes))
@@ -66,21 +66,48 @@ let app (db : Brr_io.Indexed_db.Database.t) =
   in
   let main_view =
     (* TODO this is silly *)
-    let view = Lwd.get Ui_filters.view in
-    let request = Lwd.map view ~f:(fun { View.request; _ } -> request) in
-    let item_count =
-      Lwd.map view ~f:(fun { View.item_count; _ } -> item_count)
+    let init =
+      View.
+        {
+          request =
+            {
+              kind = Track;
+              src_views = All;
+              sort = Sort.Date_added;
+              filters = [];
+            };
+          start_offset = 0;
+          item_count = 0;
+          duration = 0.;
+        }
     in
-    let order =
-      Lwd.map2 item_count (Lwd.get Ui_filters.selected_order) ~f:(fun size ->
-          View.Order.of_string ~size)
+    let view = Lwd.var init in
+    let view =
+      Lwd.bind Ui_filters.view ~f:(fun fut ->
+          Fut.await fut (function Ok v -> Lwd.set view v | _ -> ());
+          Lwd.get view)
     in
-    { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
+    view
   in
   (* TODO filter and view does not update correctly while syncing *)
-  let main_list =
+  let main_list_of_view view =
     let status = Ui_filters.status in
+    let main_view =
+      let request = Lwd.map view ~f:(fun ({ View.request; _ }, _) -> request) in
+      let item_count =
+        Lwd.map view ~f:(fun ({ View.item_count; _ }, _) -> item_count)
+      in
+      let order =
+        Lwd.map view ~f:(fun ({ View.item_count; _ }, order) ->
+            View.Order.of_string ~size:item_count order)
+      in
+      { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
+    in
     Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch ~status main_view
+  in
+  let main_list =
+    let view = Lwd.pair main_view @@ Lwd.get Ui_filters.f_order.value in
+    Common.Utils.cache_changes view ~equal:Equal.poly main_list_of_view
   in
   let now_playing =
     let playlist =
