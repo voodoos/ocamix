@@ -342,7 +342,7 @@ let make_lazy' (type data error) state ?(scroll_target : int Lwd.t option)
   let wrapper = Dom.make_wrapper state.dom ?scroll_target scroll_handler rows in
   let () =
     Utils.tap ~initial_trigger:true total_items ~f:(function total_items ->
-        Console.log [ "Full refresh" ];
+        Console.log [ "Full refresh"; total_items ];
         prepare state ~total_items)
   in
   Dom.make_table state.dom wrapper
