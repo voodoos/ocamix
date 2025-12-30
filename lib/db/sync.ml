@@ -644,7 +644,7 @@ let check_and_sync ?(report = fun _ -> ()) ~source idb =
   let open Fut.Result_syntax in
   let initial = initial_report in
   let () = (* Send a first report *) report initial in
-  let sync_report_throttler = Brr_utils.throttle ~delay_ms:250 in
+  let sync_report_throttler = Limiter.throttle ~delay_ms:250 in
   let report' =
    fun sync_progress ->
     sync_report_throttler (fun () -> report { status = Syncing; sync_progress })
