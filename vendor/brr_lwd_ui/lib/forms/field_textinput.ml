@@ -46,7 +46,7 @@ let make ?(at = []) ?(ev = []) ?placeholder ?debounce
         (* TODO This is awful *)
         match debounce with
         | None -> fun f -> f ()
-        | Some delay_ms -> Utils.throttle ~delay_ms ~delay:true
+        | Some delay_ms -> Limiter.throttle ~delay_ms ~delay:true
       in
       Elwd.handler Ev.keyup (fun ev -> debouncer (fun () -> f ev))
     in

@@ -266,7 +266,7 @@ let make' ~(layout : 'data Layout.fixed_table) (data_source : 'data Lwd_table.t)
           (* Queuing prevents illegal updates during invalidation *)
           Window.queue_micro_task G.window (on_scroll index)
         in
-        let on_scroll = Utils.limit ~interval_ms:25 (on_scroll index) in
+        let on_scroll = Limiter.limit ~interval_ms:25 (on_scroll index) in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let render ((row_index, load_state, row, value), _) =
@@ -336,7 +336,7 @@ let make_lazy' (type data error) state ?(scroll_target : int Lwd.t option)
           (* Queuing prevents illegal updates during invalidation *)
           Window.queue_micro_task G.window (on_scroll fetch)
         in
-        let on_scroll = Utils.limit ~interval_ms:75 (on_scroll fetch) in
+        let on_scroll = Limiter.limit ~interval_ms:75 (on_scroll fetch) in
         Elwd.handler Ev.scroll (fun _ev -> on_scroll ()))
   in
   let wrapper = Dom.make_wrapper state.dom ?scroll_target scroll_handler rows in
