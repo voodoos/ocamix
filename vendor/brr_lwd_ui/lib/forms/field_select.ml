@@ -6,7 +6,7 @@ open! Brr_lwd
 type 'a reactive_field = {
   field : Elwd.t Lwd.t;
   label : Elwd.t Lwd.t;
-  value : 'a;
+  value : 'a Lwd.var;
 }
 
 let name ~id base_name =
