@@ -13,8 +13,8 @@ let name ~id base_name =
   if id then Printf.sprintf "%s--id" base_name
   else Printf.sprintf "%s" base_name
 
-let make ?(at = []) ?(ev = []) ?placeholder ?(on_change = fun ~init:_ -> ignore)
-    (desc : string option Field.desc) =
+let make ?(at = []) ?(ev = []) ?placeholder ?debounce
+    ?(on_change = fun ~init:_ -> ignore) (desc : string option Field.desc) =
   let id = name ~id:true desc.name in
   let name = name ~id:false desc.name in
   let value = Persistent.var ~key:id desc.default in
@@ -35,11 +35,20 @@ let make ?(at = []) ?(ev = []) ?placeholder ?(on_change = fun ~init:_ -> ignore)
       | None -> at
     in
     let on_change =
-      Elwd.handler Ev.keyup (fun ev ->
-          let t = Ev.target ev |> Ev.target_to_jv in
-          let value' = Jv.get t "value" |> Jv.to_string in
-          on_change ~init:false value';
-          Lwd.set value (Some value'))
+      let f =
+       fun ev ->
+        let t = Ev.target ev |> Ev.target_to_jv in
+        let value' = Jv.get t "value" |> Jv.to_string in
+        on_change ~init:false value';
+        Lwd.set value (Some value')
+      in
+      let debouncer =
+        (* TODO This is awful *)
+        match debounce with
+        | None -> fun f -> f ()
+        | Some delay_ms -> Utils.throttle ~delay_ms ~delay:true
+      in
+      Elwd.handler Ev.keyup (fun ev -> debouncer (fun () -> f ev))
     in
     let ev = `P on_change :: ev in
     Elwd.input ~at ~ev ~on_create:(fun e -> element := Some e) ()
