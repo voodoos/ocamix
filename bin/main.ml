@@ -51,8 +51,8 @@ let fetch ranged_view i =
       let open Fut.Result_syntax in
       let* data = data in
       match data.(i) with
-      | Some v -> Fut.ok v
-      | None -> Fut.error (`Msg "No result"))
+      | (exception _) | None -> Fut.error (`Msg "No result")
+      | Some v -> Fut.ok v)
 
 let app (db : Brr_io.Indexed_db.Database.t) =
   let status =
