@@ -4,7 +4,7 @@
 type t = float [@@deriving jsont]
 type time = { days : int; hours : int; minutes : int; seconds : int }
 
-let to_seconds t = t /. 10000000.
+let to_seconds t = t /. 10_000_000.
 
 let to_time t =
   let seconds = Int.of_float (to_seconds t) in
