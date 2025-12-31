@@ -147,33 +147,70 @@ module Tracks_store =
          Meanwhile, manual conversion is the best compromise. *)
 
       let to_jv
-          { id; name; genres; collections; artists; album_artists; duration } =
+          {
+            id;
+            name;
+            date_created;
+            genres;
+            collections;
+            artists;
+            album_artists;
+            duration;
+          } =
         let id = match id with Jellyfin id -> Jv.of_string ("J " ^ id) in
         let name = Jv.of_string name in
+        let date_created = Jv.of_string date_created in
         let genres = Jv.of_list Jv.of_int genres in
         let artists = Jv.of_list Jv.of_int artists in
         let album_artists = Jv.of_list Jv.of_int album_artists in
         let collections = Jv.of_list Jv.of_int collections in
         let duration = Jv.of_float duration in
         Jv.of_jv_array
-          [| id; name; genres; collections; artists; album_artists; duration |]
+          [|
+            id;
+            name;
+            date_created;
+            genres;
+            collections;
+            artists;
+            album_artists;
+            duration;
+          |]
 
       let of_jv j =
         match Jv.to_jv_array j with
-        | [| id; name; genres; collections; artists; album_artists; duration |]
-          ->
+        | [|
+         id;
+         name;
+         date_created;
+         genres;
+         collections;
+         artists;
+         album_artists;
+         duration;
+        |] ->
             let id =
               match String.split_on_char ~by:' ' @@ Jv.to_string id with
               | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
               | _ -> assert false
             in
             let name = Jv.to_string name in
+            let date_created = Jv.to_string date_created in
             let genres = Jv.to_list Jv.to_int genres in
             let artists = Jv.to_list Jv.to_int artists in
             let album_artists = Jv.to_list Jv.to_int album_artists in
             let collections = Jv.to_list Jv.to_int collections in
             let duration = Jv.to_float duration in
-            { id; name; genres; collections; artists; album_artists; duration }
+            {
+              id;
+              name;
+              date_created;
+              genres;
+              collections;
+              artists;
+              album_artists;
+              duration;
+            }
         | _ -> assert false
     end)
 

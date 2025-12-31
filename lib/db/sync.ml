@@ -452,11 +452,15 @@ let sync_tracks ~collection_id ~source idb items :
       Transaction.object_store (module Stores.Albums_store) transaction
     in
     let id = Generic_schema.Id.Jellyfin id in
+    let date_created =
+      Option.get_exn_or "Track should have an creation date" date_created
+    in
     let key =
       (* TODO: can an item be part of multiple collections ? *)
       {
         Generic_schema.Track.Key.id;
         name;
+        date_created;
         genres;
         artists;
         album_artists;
@@ -480,14 +484,10 @@ let sync_tracks ~collection_id ~source idb items :
           match result with None -> None | Some idx -> Some idx)
       | None -> Fut.ok None
     in
-    let date_created =
-      Option.get_exn_or "Track should have an creation date" date_created
-    in
     let track_index = Option.get_or ~default:1 index_number in
     Stores.Tracks_store.add ~key
       {
         id;
-        date_created;
         server_id = Jellyfin server_id;
         album_id;
         sort_name;

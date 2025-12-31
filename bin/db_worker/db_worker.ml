@@ -119,7 +119,12 @@ module Worker () = struct
                   { Db.Generic_schema.Track.Key.name = sna; _ }
                   { Db.Generic_schema.Track.Key.name = snb; _ }
                 -> String.compare sna snb)
-        | _ -> ()
+        | Date_added ->
+            Array.sort keys
+              ~cmp:(fun
+                  { Db.Generic_schema.Track.Key.date_created = sna; _ }
+                  { Db.Generic_schema.Track.Key.date_created = snb; _ }
+                -> String.compare sna snb)
       in
       Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
       Hashtbl.add view_memo (Db.View.hash req) keys;
