@@ -53,11 +53,13 @@ end
 module Album = struct
   type t = {
     id : Id.t;
+    date_created : string;
     mbid : string option;  (** Musicbrainz ID *)
     name : string;
     sort_name : string;
     genres : int list;
     artists : int list;
+    duration : Duration.t; (* 10^-7 seconds *)
     blur_hashes : string String.Map.t;
   }
   [@@deriving jsont]
@@ -69,7 +71,10 @@ module Track = struct
   type t = {
     (* name : string; *)
     id : Id.t;
+    date_created : string;
     album_id : int option;
+    track_index : int;
+    disc_index : int option;
     sort_name : string;
     server_id : Id.t;
         (* TODO this should not be here track -> collection -> server*)

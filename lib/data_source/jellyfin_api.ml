@@ -198,6 +198,7 @@ module Item = struct
   type t = {
     name : string; [@key "Name"]
     sort_name : string option; [@option] [@key "SortName"]
+    date_created : string option; [@option] [@key "DateCreated"]
     external_urls : external_url list; [@default []] [@key "ExternalUrls"]
     id : string; [@key "Id"]
     path : string option; [@option] [@key "Path"]
@@ -209,6 +210,8 @@ module Item = struct
         [@option]
         [@key "ParentId"]
     server_id : string; [@key "ServerId"]
+    parent_index_number : int option; [@option] [@key "ParentIndexNumber"]
+    index_number : int option; [@option] [@key "IndexNumber"]
     primary_image_aspect_ratio : float option;
         [@option] [@key "PrimaryImageAspectRatio"]
     image_tags : string String.Map.t;

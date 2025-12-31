@@ -341,12 +341,14 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
       {
         Source.Api.Item.name;
         id;
+        date_created;
         external_urls;
         sort_name;
         genre_items;
         album_artists = artist_items;
         image_tags;
         image_blur_hashes;
+        run_time_ticks = duration;
         _;
       } =
     let open Fut.Syntax in
@@ -372,8 +374,21 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
           String.Map.find_opt tag hashes)
         image_blur_hashes
     in
+    let date_created =
+      Option.get_exn_or "Album should have an creation date" date_created
+    in
     Stores.Albums_store.add
-      { id; mbid; name; sort_name; genres; artists; blur_hashes }
+      {
+        id;
+        date_created;
+        mbid;
+        name;
+        sort_name;
+        genres;
+        artists;
+        duration;
+        blur_hashes;
+      }
       store
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut
@@ -404,12 +419,15 @@ let sync_tracks ~collection_id ~source idb items :
       {
         Source.Api.Item.name;
         id;
+        date_created;
         sort_name;
         genre_items;
         artist_items;
         album_artists;
         server_id;
         album_id;
+        parent_index_number;
+        index_number;
         run_time_ticks;
         _;
       } =
@@ -462,8 +480,20 @@ let sync_tracks ~collection_id ~source idb items :
           match result with None -> None | Some idx -> Some idx)
       | None -> Fut.ok None
     in
+    let date_created =
+      Option.get_exn_or "Track should have an creation date" date_created
+    in
+    let track_index = Option.get_or ~default:1 index_number in
     Stores.Tracks_store.add ~key
-      { id; server_id = Jellyfin server_id; album_id; sort_name }
+      {
+        id;
+        date_created;
+        server_id = Jellyfin server_id;
+        album_id;
+        sort_name;
+        disc_index = parent_index_number;
+        track_index;
+      }
       store
     |> Request.on_error ~f:(fun e _ ->
         (* This happens when the item is already in the database *)
