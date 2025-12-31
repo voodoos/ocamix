@@ -39,7 +39,7 @@ let fetch ranged_view i =
         Order.apply ~size:view.item_count ranged_view.order index)
       i
   in
-  Worker_client.(query Get (view, indexes))
+  Worker_client.(query Get_tracks (view, indexes))
 
 module P = Player.Playback_controller (struct
   let fetch = fetch

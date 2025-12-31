@@ -26,7 +26,7 @@ module Queries = struct
     | Create_view : (create_view, view) query
     | Get_view_genres : (view, genres) query
     | Get_view_artists : (view, artists) query
-    | Get : (get, tracks) query
+    | Get_tracks : (get, tracks) query
 
   let conv a = Worker_api.Conv a
 
@@ -39,7 +39,7 @@ module Queries = struct
     | Create_view -> (create_view_jsont, conv view_jsont)
     | Get_view_genres -> (view_jsont, conv genres_jsont)
     | Get_view_artists -> (view_jsont, conv artists_jsont)
-    | Get -> (get_jsont, conv tracks_jsont)
+    | Get_tracks -> (get_jsont, conv tracks_jsont)
 
   type servers_status_update = string * Sync.report [@@deriving jsont]
   type 'a event = Servers_status_update : servers_status_update event

@@ -202,7 +202,7 @@ module Worker () = struct
               { Db.Generic_schema.count; v = artists.(key - 1) }
               (* Indexeddb auto increments starts at 1 *)
             with Invalid_argument _ -> failwith "Unknown genre")
-    | Get ->
+    | Get_tracks ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
         let view, indexes = params in
