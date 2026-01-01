@@ -148,6 +148,10 @@ struct
     let f jv = Jv.to_array (fun c -> Primary_key.of_jv c) jv in
     Jv.call t "getAllKeys" args |> Request.of_jv ~f
 
+  type prev = t
+
+  let prev_oj_jv = of_jv
+
   module Cursor = struct
     type t = Jv.t
 
@@ -155,6 +159,7 @@ struct
 
     let key t = Jv.get t "key" |> Jv.to_option Key.of_jv
     let primary_key t = Jv.get t "primaryKey" |> Jv.to_option Primary_key.of_jv
+    let source t = Jv.get t "source" |> prev_oj_jv
 
     let advance count t =
       ignore @@ Jv.call t "advance" [| Jv.of_int count |];
@@ -162,9 +167,18 @@ struct
 
     let continue ?key t =
       let args =
-        match key with None -> [||] | Some key -> [| Primary_key.to_jv key |]
+        match key with None -> [||] | Some key -> [| Key.to_jv key |]
       in
       ignore @@ Jv.call t "continue" args
+
+    let continue_primary_key key primary_key t =
+      let args = [| Key.to_jv key; Primary_key.to_jv primary_key |] in
+      ignore @@ Jv.call t "continuePrimaryKey" args
+
+    let delete t = Jv.call t "delete" [||] |> Request.of_jv ~f:(fun _ -> ())
+
+    let update v t =
+      Jv.call t "update" [| Content.to_jv v |] |> Request.of_jv ~f:Key.of_jv
   end
 
   module Cursor_with_value = struct
@@ -173,13 +187,7 @@ struct
     let value t =
       let of_jv j = Content.of_jv j in
       let v = Jv.get t "value" in
-      Jv.to_option of_jv v
-
-    let delete t = Jv.call t "delete" [||] |> Request.of_jv ~f:(fun _ -> ())
-
-    let update v t =
-      Jv.call t "update" [| Content.to_jv v |]
-      |> Request.of_jv ~f:Primary_key.of_jv
+      of_jv v
   end
 
   let open_cursor ?query ?direction t : Cursor_with_value.t option Request.t =
