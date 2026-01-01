@@ -34,7 +34,7 @@ let make ?(at = []) ?(ev = []) ?placeholder ?debounce
       | Some v -> `P (At.value @@ Jstr.v v) :: at
       | None -> at
     in
-    let on_change =
+    let on_change, on_kup =
       let f =
        fun ev ->
         let t = Ev.target ev |> Ev.target_to_jv in
@@ -48,9 +48,15 @@ let make ?(at = []) ?(ev = []) ?placeholder ?debounce
         | None -> fun f -> f ()
         | Some delay_ms -> Limiter.throttle ~delay_ms ~delay:true
       in
-      Elwd.handler Ev.keyup (fun ev -> debouncer (fun () -> f ev))
+      let f = fun ev -> debouncer (fun () -> f ev) in
+      (Elwd.handler Ev.change f, Elwd.handler Ev.keyup f)
     in
-    let ev = `P on_change :: ev in
+    (* TODO: triggering both on change and key up events prevents situations
+       were the field loses focus right after pressing a key and then not
+       receiving a key up event. However this also causes un-needed triggering
+       of the change events when the user deselects the field some time after
+       typing.  *)
+    let ev = `P on_change :: `P on_kup :: ev in
     Elwd.input ~at ~ev ~on_create:(fun e -> element := Some e) ()
   in
   let () =
