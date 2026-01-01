@@ -1,3 +1,4 @@
+open Containers
 module Caml_base64 = Base64
 open! Brr
 
@@ -30,14 +31,16 @@ module Base83 = struct
 end
 
 let sRGB_to_linear i =
-  let v = Float.of_int i /. 255. in
-  if v <= 0.04045 then v /. 12.92 else Float.pow ((v +. 0.055) /. 1.055) 2.4
+  let open Float in
+  let v = of_int i / 255. in
+  if v <= 0.04045 then v /. 12.92
+  else Stdlib.Float.pow ((v +. 0.055) /. 1.055) 2.4
 
 let linear_to_sRGB v =
-  let v = Float.(max 0. (min 1. v)) in
-  if v <= 0.0031308 then Float.to_int ((v *. 12.92 *. 255.) +. 0.5)
-  else
-    Float.to_int ((((1.055 *. Float.pow v (1. /. 2.4)) -. 0.055) *. 255.) +. 0.5)
+  let open Float in
+  let v = if v < 0. then 0. else if v > 1. then 1. else v in
+  if v <= 0.0031308 then to_int ((v * 12.92 * 255.) + 0.5)
+  else to_int ((((1.055 * Stdlib.Float.pow v (1. / 2.4)) - 0.055) * 255.) + 0.5)
 
 let decode_dc value =
   let r = value lsr 16 in
@@ -46,8 +49,8 @@ let decode_dc value =
   (sRGB_to_linear r, sRGB_to_linear g, sRGB_to_linear b)
 
 let sign_pow x y =
-  let result = Float.pow x y in
-  if x < 0. then -1. *. result else result
+  let result = Stdlib.Float.pow x y in
+  if Float.(x < 0.) then -1. *. result else result
 
 let decode_ac max_val value =
   let open Float in
@@ -62,7 +65,7 @@ let decode ?(punch = 1.) ~width ~height s =
   (* For a BlurHash with nx components along the X axis and ny components along
      the Y axis, this is equal to (nx - 1) + (ny - 1) * 9. *)
   let n_comps_x = (n_comps mod 9) + 1 in
-  let n_comps_y = Float.(floor (of_int n_comps /. 9.) |> to_int) + 1 in
+  let n_comps_y = Float.(floor (of_int n_comps / 9.) |> to_int) + 1 in
 
   let max_ac_comp_value = String.get s 1 |> Base83.decode_char in
   (* All AC components are scaled by this value. It represents a floating-point
@@ -101,7 +104,6 @@ let decode ?(punch = 1.) ~width ~height s =
   let pixels =
     Bigarray.(Array1.create int8_unsigned c_layout (bytes_per_row * height))
   in
-  let clamp i = if i < 0 then 0 else if i > 255 then 255 else i in
   for y = 0 to height - 1 do
     for x = 0 to width - 1 do
       let r = ref 0. in
@@ -109,12 +111,10 @@ let decode ?(punch = 1.) ~width ~height s =
       let b = ref 0. in
 
       for j = 0 to n_comps_y - 1 do
-        let basis_y =
-          Float.(cos (pi *. of_int y *. of_int j /. of_int height))
-        in
+        let basis_y = Float.(cos (pi * of_int y * of_int j / of_int height)) in
         for i = 0 to n_comps_x - 1 do
           let basis =
-            Float.(cos (pi *. of_int x *. of_int i /. of_int width) *. basis_y)
+            Float.(cos (pi * of_int x * of_int i / of_int width) * basis_y)
           in
           let r', g', b' = colors.(i + (j * n_comps_x)) in
           r := !r +. (r' *. basis);
@@ -126,9 +126,9 @@ let decode ?(punch = 1.) ~width ~height s =
       let r = linear_to_sRGB !r in
       let g = linear_to_sRGB !g in
       let b = linear_to_sRGB !b in
-      pixels.{(4 * x) + 0 + (y * bytes_per_row)} <- clamp r;
-      pixels.{(4 * x) + 1 + (y * bytes_per_row)} <- clamp g;
-      pixels.{(4 * x) + 2 + (y * bytes_per_row)} <- clamp b;
+      pixels.{(4 * x) + 0 + (y * bytes_per_row)} <- r;
+      pixels.{(4 * x) + 1 + (y * bytes_per_row)} <- g;
+      pixels.{(4 * x) + 2 + (y * bytes_per_row)} <- b;
       pixels.{(4 * x) + 3 + (y * bytes_per_row)} <- 255
     done
   done;
