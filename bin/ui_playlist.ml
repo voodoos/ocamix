@@ -74,7 +74,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       let canvas = Canvas.of_el el in
       let () =
         let fut =
-          Blue_hashes_worker_client.query Render { hash; w = width; h = height }
+          Blur_hashes_worker_client.query Render { hash; w = width; h = height }
         in
         Fut.await fut (function
           | Error _ -> ()
