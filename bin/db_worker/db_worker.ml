@@ -61,7 +61,7 @@ module Worker () = struct
       | None_of none_of ->
           acc && (Int.Set.is_empty none_of || Int.Set.disjoint elements none_of))
 
-  let get_view_keys store
+  let get_tracks_view_keys store
       ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
     let open Fut.Result_syntax in
@@ -160,7 +160,7 @@ module Worker () = struct
     | Create_view ->
         let request = params in
         let* store = get_store (module Db.Stores.Tracks_store) () in
-        let+ keys = get_view_keys store request in
+        let+ keys = get_tracks_view_keys store request in
         let item_count = Array.length keys in
         let duration =
           Array.fold_left keys ~init:0.
@@ -170,7 +170,7 @@ module Worker () = struct
         { Db.View.request; start_offset = 0; item_count; duration }
     | Get_view_genres ->
         let* store = get_store (module Tracks_store) () in
-        let* keys = get_view_keys store params.request in
+        let* keys = get_tracks_view_keys store params.request in
         let* s_genres = get_store (module Genres_store) () in
         let+ genres = Genres_store.get_all s_genres |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
@@ -186,7 +186,7 @@ module Worker () = struct
             with Invalid_argument _ -> failwith "Unknown genre")
     | Get_view_artists ->
         let* store = get_store (module Tracks_store) () in
-        let* keys = get_view_keys store params.request in
+        let* keys = get_tracks_view_keys store params.request in
         let* s_artists = get_store (module Artists_store) () in
         let+ artists = Artists_store.get_all s_artists |> as_fut in
         Array.fold_left keys ~init:Int.Map.empty
@@ -201,13 +201,24 @@ module Worker () = struct
             try
               { Db.Generic_schema.count; v = artists.(key - 1) }
               (* Indexeddb auto increments starts at 1 *)
-            with Invalid_argument _ -> failwith "Unknown genre")
+            with Invalid_argument _ -> failwith "Unknown artist")
     | Get_tracks ->
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
         let view, indexes = params in
-        let* store = get_store (module Db.Stores.Tracks_store) () in
-        let* keys = get_view_keys store view.request in
+        let* tracks_store, album_store =
+          let open Db.Stores in
+          let mode = IDB.Transaction.Readonly in
+          let+ idb = idb in
+          let t =
+            IDB.Database.transaction
+              [ (module Tracks_store); (module Albums_store) ]
+              ~mode idb
+          in
+          ( IDB.Transaction.object_store (module Tracks_store) t,
+            IDB.Transaction.object_store (module Albums_store) t )
+        in
+        let* keys = get_tracks_view_keys tracks_store view.request in
         let open Fut.Syntax in
         let+ results =
           Array.map indexes ~f:(fun index ->
@@ -215,7 +226,7 @@ module Worker () = struct
                 let key = keys.(index) in
                 let open Fut.Syntax in
                 let* result =
-                  Db.Stores.Tracks_store.get key store |> IDB.Request.fut
+                  Db.Stores.Tracks_store.get key tracks_store |> IDB.Request.fut
                 in
                 match result with
                 | Ok None -> Fut.return None
@@ -224,14 +235,12 @@ module Worker () = struct
                       [ "An error occured while loading item"; key; err ];
                     Fut.return None
                 | Ok (Some v) ->
-                    let* album_store = get_store (module Albums_store) () in
                     let+ album =
-                      Option.map2
-                        (fun album_id album_store ->
+                      Option.map
+                        (fun album_id ->
                           Albums_store.get album_id album_store
                           |> IDB.Request.fut_exn)
                         v.album_id
-                        (Result.to_opt album_store)
                       |> Option.value ~default:(Fut.return None)
                     in
                     Some (key, v, album)
