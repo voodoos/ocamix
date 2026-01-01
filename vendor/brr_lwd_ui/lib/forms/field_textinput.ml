@@ -55,7 +55,13 @@ let make ?(at = []) ?(ev = []) ?placeholder ?debounce
        were the field loses focus right after pressing a key and then not
        receiving a key up event. However this also causes un-needed triggering
        of the change events when the user deselects the field some time after
-       typing.  *)
+       typing.
+
+       See: https://developer.mozilla.org/en-US/docs/Web/API/Element/keyup_event
+
+       > The event target might change between different key events. For
+       > example, the keydown target for pressing the Tab key would be different
+       > from the keyup target, because the focus has changed.*)
     let ev = `P on_change :: `P on_kup :: ev in
     Elwd.input ~at ~ev ~on_create:(fun e -> element := Some e) ()
   in
