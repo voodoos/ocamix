@@ -73,7 +73,7 @@ let genres_choices =
 let view_kind =
   let open Field_select in
   let options =
-    Lwd.pure (Lwd_seq.of_list [ ("album", "Albums"); ("track", "Tracks") ])
+    Lwd.pure (Lwd_seq.of_list [ ("albums", "Albums"); ("tracks", "Tracks") ])
   in
   make { name = "view-sort"; default = "date_added"; label = [] } options
 
