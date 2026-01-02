@@ -50,7 +50,7 @@ let app (db : Brr_io.Indexed_db.Database.t) =
         {
           request =
             {
-              kind = Track;
+              kind = Tracks;
               src_views = All;
               sort = Sort.Date_added;
               filters = [];
