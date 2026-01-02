@@ -19,11 +19,11 @@ let columns cover_cell_width =
            v "Duration" (Rem 5.) @@ [ `P (El.txt' "Duration") ];
          |]
 
-let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
-    =
+let make db ~reset_playlist ?(status = []) ?scroll_target
+    (view : Lwd_view.ordered) =
   let ranged =
-    Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun (view, _) order ->
-        { View.view; first = 0; last = 0; order })
+    Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun (view, keys) order ->
+        ({ View.view; first = 0; last = 0; order }, keys))
   in
   let img_url ?size server_id album =
     let servers =
@@ -95,7 +95,7 @@ let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
       ~ev:[ `R play_on_click ]
       elts
   in
-  let render ranged start_index
+  let render_track ranged start_index
       Db.Generic_schema.Track.(
         ( { Key.name; duration; _ },
           { id = Jellyfin id; server_id = Jellyfin server_id; _ },
@@ -112,10 +112,39 @@ let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
       (Lwd_seq.of_list
          [
            status;
-           cover ranged start_index server_id album;
+           cover (Lwd.map ~f:fst ranged) start_index server_id album;
            Lwd.return (El.div [ El.span [ El.txt' name ] ]);
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])
+  in
+  let render_album ranged start_index
+      ({
+         Db.Generic_schema.Album.id = Jellyfin id;
+         server_id = Jellyfin server_id;
+         name;
+         duration;
+         _;
+       } as album) =
+    let status =
+      Lwd.map (Lwd.get Player.now_playing) ~f:(function
+        | Some { item = _, { id = Jellyfin item_id; _ }, _; _ }
+          when String.equal item_id id ->
+            El.div ~at:[ At.class' (Jstr.v "playing") ] [ El.txt' "▷" ]
+        | Some _ | None -> El.div [ El.txt' (string_of_int (start_index + 1)) ])
+    in
+    let duration = Duration.pp_track_duration duration in
+    Lwd.return
+      (Lwd_seq.of_list
+         [
+           status;
+           cover (Lwd.map ~f:fst ranged) start_index server_id (Some album);
+           Lwd.return (El.div [ El.span [ El.txt' name ] ]);
+           Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
+         ])
+  in
+  let render ranged start_index = function
+    | Fetch.Track (k, t, a) -> render_track ranged start_index (k, t, a)
+    | Fetch.Album a -> render_album ranged start_index a
   in
   let placeholder i =
     Lwd.return
@@ -130,7 +159,10 @@ let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
   let placeholder_grid _i = Lwd.return Lwd_seq.empty in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
-    let fetch = Lwd.map ranged ~f:(fun ranged i -> Fetch.tracks ranged i) in
+    let fetch =
+      Lwd.map ranged ~f:(fun (ranged, keys) i ->
+          Fetch.view_indexes db ranged ?keys i)
+    in
     Table.Data_source.Lazy { total_items; fetch }
   in
   (* TODO: not for the playlist... and move the bind deeper *)
@@ -149,21 +181,25 @@ let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
         let layout_grid =
           Table.make_fixed_grid ~status ~item_width:size ~row_height:size ()
         in
-        let render (ranged : View.ranged Lwd.t) start_index
-            Db.Generic_schema.Track.(
-              _, { server_id = Jellyfin server_id; _ }, album) =
+        let render (ranged : View.ranged Lwd.t) start_index data =
+          let server_id, album =
+            match data with
+            | Fetch.Track (_, { server_id = Jellyfin server_id; _ }, album) ->
+                (server_id, album)
+            | Fetch.Album ({ server_id = Jellyfin server_id; _ } as album) ->
+                (server_id, Some album)
+          in
           let cover = cover ranged start_index server_id album in
           Lwd.return (Lwd_seq.of_list [ cover ])
         in
         let render_grid =
-          render ranged
+          render (Lwd.map ~f:fst ranged)
           |> Table.Virtual.with_placeholder_or_error
                ~placeholder:placeholder_grid
         in
-
         Table.Virtual_grid.make ?scroll_target layout_grid render_grid
           data_source)
 
-let make_now_playing ~reset_playlist view =
+let make_now_playing db ~reset_playlist view =
   let scroll_target = Lwd.get Player.playstate.current_index in
-  make ~scroll_target ~reset_playlist view
+  make db ~scroll_target ~reset_playlist view

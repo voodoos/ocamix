@@ -46,7 +46,7 @@ open Selection
 
 type kind = Albums | Tracks [@@deriving jsont]
 
-let kind_of_string = function "Albums" -> Albums | _ -> Tracks
+let kind_of_string = function "albums" -> Albums | _ -> Tracks
 let int_set_jsont = Encodings.set_jsont Jsont.int
 
 type filter =

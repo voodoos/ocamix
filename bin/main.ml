@@ -60,7 +60,7 @@ let app (db : Brr_io.Indexed_db.Database.t) =
           duration = 0.;
         }
     in
-    let view = Lwd.var init in
+    let view = Lwd.var (init, None) in
     let view =
       Lwd.bind Ui_filters.view ~f:(fun fut ->
           Fut.await fut (function Ok v -> Lwd.set view v | _ -> ());
@@ -72,17 +72,20 @@ let app (db : Brr_io.Indexed_db.Database.t) =
   let main_list_of_view view =
     let status = Ui_filters.status in
     let main_view =
-      let request = Lwd.map view ~f:(fun ({ View.request; _ }, _) -> request) in
+      let request =
+        Lwd.map view ~f:(fun (({ View.request; _ }, _), _) -> request)
+      in
+      let keys = Lwd.map view ~f:(fun ((_, keys), _) -> keys) in
       let item_count =
-        Lwd.map view ~f:(fun ({ View.item_count; _ }, _) -> item_count)
+        Lwd.map view ~f:(fun (({ View.item_count; _ }, _), _) -> item_count)
       in
       let order =
-        Lwd.map view ~f:(fun ({ View.item_count; _ }, order) ->
+        Lwd.map view ~f:(fun (({ View.item_count; _ }, _), order) ->
             View.Order.of_string ~size:item_count order)
       in
-      { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
+      { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order; keys }
     in
-    Ui_playlist.make ~reset_playlist:P.reset_playlist ~status main_view
+    Ui_playlist.make db ~reset_playlist:P.reset_playlist ~status main_view
   in
   let main_list =
     let view = Lwd.pair main_view @@ Lwd.get Ui_filters.f_order.value in
@@ -99,9 +102,11 @@ let app (db : Brr_io.Indexed_db.Database.t) =
                 item_count = Lwd.pure playlist.view.item_count;
                 start_offset = Lwd.pure playlist.view.start_offset;
                 order = Lwd.pure playlist.order;
+                keys = Lwd.pure None;
               }
             in
-            Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist view)
+            Ui_playlist.make_now_playing db ~reset_playlist:P.reset_playlist
+              view)
     in
     (*todo: do we need that join ?*)
     Lwd.join playlist

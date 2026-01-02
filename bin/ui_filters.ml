@@ -187,11 +187,21 @@ let view =
       let req = { view.request with filters; sort } in
       let () = Lwd.set status Refreshing in
       let start_time = Performance.now_ms G.performance in
-      Worker_client.query Create_view req
-      |> Fut.map (fun v ->
+      let result =
+        match req.kind with
+        | Tracks ->
+            let+ v = Worker_client.query Create_view req in
+            (v, None)
+        | Albums ->
+            let+ v, a = Worker_client.query Create_album_view req in
+            (v, Some a)
+      in
+      Fut.map
+        (fun v ->
           let now = Performance.now_ms G.performance in
           let () = Lwd.set status (Ready (Float.to_int (now -. start_time))) in
-          v))
+          v)
+        result)
 
 let search_and_sort = [ `R f_sort.field; `R f_order.field; `R f_search.field ]
 
@@ -247,7 +257,8 @@ let status =
           Fut.map
             (function
               | Error _ -> (0, 0.)
-              | Ok { View.duration; item_count; _ } -> (item_count, duration))
+              | Ok ({ View.duration; item_count; _ }, _) ->
+                  (item_count, duration))
             fut_view
         in
         let v = Common.Utils.var_of_fut ~init:(0, 0.) f in
