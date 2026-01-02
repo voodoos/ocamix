@@ -29,30 +29,9 @@ let _ =
   Data_source.Jellyfin_api.set_session_uuid uuid;
   Worker_client.query Set_session_uuid (Lwd.peek session_uuid)
 
-let fetch ranged_view i =
-  let open View in
-  let view = ranged_view.view in
-  let indexes =
-    Array.map
-      ~f:(fun index ->
-        let index = index + view.start_offset in
-        Order.apply ~size:view.item_count ranged_view.order index)
-      i
-  in
-  Worker_client.(query Get_tracks (view, indexes))
-
 module P = Player.Playback_controller (struct
-  let fetch = fetch
+  let fetch = Fetch.tracks'
 end)
-
-let fetch ranged_view i =
-  let data = fetch ranged_view i in
-  Array.mapi i ~f:(fun i _ ->
-      let open Fut.Result_syntax in
-      let* data = data in
-      match data.(i) with
-      | (exception _) | None -> Fut.error (`Msg "No result")
-      | Some v -> Fut.ok v)
 
 let app (db : Brr_io.Indexed_db.Database.t) =
   let status =
@@ -103,7 +82,7 @@ let app (db : Brr_io.Indexed_db.Database.t) =
       in
       { Lwd_view.request; item_count; start_offset = Lwd.pure 0; order }
     in
-    Ui_playlist.make ~reset_playlist:P.reset_playlist ~fetch ~status main_view
+    Ui_playlist.make ~reset_playlist:P.reset_playlist ~status main_view
   in
   let main_list =
     let view = Lwd.pair main_view @@ Lwd.get Ui_filters.f_order.value in
@@ -122,8 +101,7 @@ let app (db : Brr_io.Indexed_db.Database.t) =
                 order = Lwd.pure playlist.order;
               }
             in
-            Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist ~fetch
-              view)
+            Ui_playlist.make_now_playing ~reset_playlist:P.reset_playlist view)
     in
     (*todo: do we need that join ?*)
     Lwd.join playlist

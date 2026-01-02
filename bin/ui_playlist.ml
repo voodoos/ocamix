@@ -19,10 +19,10 @@ let columns cover_cell_width =
            v "Duration" (Rem 5.) @@ [ `P (El.txt' "Duration") ];
          |]
 
-let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
-    (view : Lwd_view.ordered) =
+let make ~reset_playlist ?(status = []) ?scroll_target (view : Lwd_view.ordered)
+    =
   let ranged =
-    Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun view order ->
+    Lwd.map2 (Lwd_view.to_view view) view.order ~f:(fun (view, _) order ->
         { View.view; first = 0; last = 0; order })
   in
   let img_url ?size server_id album =
@@ -95,7 +95,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
       ~ev:[ `R play_on_click ]
       elts
   in
-  let render (ranged : View.ranged Lwd.t) start_index
+  let render ranged start_index
       Db.Generic_schema.Track.(
         ( { Key.name; duration; _ },
           { id = Jellyfin id; server_id = Jellyfin server_id; _ },
@@ -130,7 +130,7 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
   let placeholder_grid _i = Lwd.return Lwd_seq.empty in
   let data_source =
     let total_items = Lwd.map2 view.item_count ~f:( - ) view.start_offset in
-    let fetch = Lwd.map ranged ~f:(fun ranged i -> fetch ranged i) in
+    let fetch = Lwd.map ranged ~f:(fun ranged i -> Fetch.tracks ranged i) in
     Table.Data_source.Lazy { total_items; fetch }
   in
   (* TODO: not for the playlist... and move the bind deeper *)
@@ -164,6 +164,6 @@ let make ~reset_playlist ~fetch ?(status = []) ?scroll_target
         Table.Virtual_grid.make ?scroll_target layout_grid render_grid
           data_source)
 
-let make_now_playing ~reset_playlist ~fetch view =
+let make_now_playing ~reset_playlist view =
   let scroll_target = Lwd.get Player.playstate.current_index in
-  make ~scroll_target ~reset_playlist ~fetch view
+  make ~scroll_target ~reset_playlist view
