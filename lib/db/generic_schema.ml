@@ -53,6 +53,8 @@ end
 module Album = struct
   type t = {
     id : Id.t;
+    server_id : Id.t;
+    collections : int list;
     date_created : string;
     mbid : string option;  (** Musicbrainz ID *)
     name : string;

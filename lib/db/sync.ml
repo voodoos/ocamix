@@ -334,13 +334,15 @@ let prepare_genres idb genre_items =
       |> List.map ~f:get_or_set_genre)
   |> Fut.of_list |> Fut.map Result.flatten_l
 
-let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
+let sync_albums ~collection_id ~source idb items :
+    (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
   let sync_album
       {
         Source.Api.Item.name;
         id;
+        server_id;
         date_created;
         external_urls;
         sort_name;
@@ -380,6 +382,8 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
     Stores.Albums_store.add
       {
         id;
+        server_id = Jellyfin server_id;
+        collections = [ collection_id ];
         date_created;
         mbid;
         name;
@@ -543,7 +547,7 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
     query source (module Api.Items) req ()
   in
   let* remaining = sync_artists ~source idb items in
-  let* remaining = sync_albums ~source idb remaining in
+  let* remaining = sync_albums ~collection_id ~source idb remaining in
   let+ _remaining = sync_tracks ~collection_id ~source idb remaining in
   if recursive then []
   else

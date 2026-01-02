@@ -1,4 +1,6 @@
 open! Std
+open Brr
+open Worker_api
 module DS = Data_source.Jellyfin
 module Api = DS.Api
 open Generic_schema
@@ -24,22 +26,62 @@ module Queries = struct
     | Add_servers : (add_servers, unit) query
     | Get_libraries : (unit, libraries) query
     | Create_view : (create_view, view) query
+    | Create_album_view :
+        ( create_view,
+          view
+          * (int32, Bigarray.int32_elt, Bigarray.c_layout) Bigarray.Array1.t )
+        query
     | Get_view_genres : (view, genres) query
     | Get_view_artists : (view, artists) query
     | Get_tracks : (get, tracks) query
 
-  let conv a = Worker_api.Conv a
+  let conv a = Conv a
+
+  let view_keys_array_transfert =
+    let open Result.Infix in
+    let j_view = Jstr.v "v" in
+    let j_keys = Jstr.v "k" in
+    {
+      encode =
+        (fun (view, tarray) ->
+          let+ view =
+            Jsont_brr.encode_jv view_jsont view
+            |> Result.map_err (fun e -> `Jv e)
+          in
+          Jv.obj'
+            [|
+              (j_view, view); (j_keys, Tarray.to_jv (Tarray.of_bigarray1 tarray));
+            |]);
+      decode =
+        (fun jv ->
+          let v = Jv.get' jv j_view in
+          let k = Jv.get' jv j_keys in
+          let+ view =
+            Jsont_brr.decode_jv view_jsont v |> Result.map_err (fun e -> `Jv e)
+          in
+          (view, Tarray.of_jv k |> Tarray.to_bigarray1));
+      transferables =
+        [
+          (fun jv ->
+            Jv.get' jv j_keys |> Tarray.of_jv |> Tarray.buffer
+            |> Tarray.Buffer.to_jv);
+        ];
+    }
+
+  let null = Conv (Jsont.null ())
 
   let jsont (type a b) (q : (a, b) query) :
       a Jsont.t * b Worker_api.transfer_or_conv =
     match q with
-    | Set_session_uuid -> (set_session_uuid_jsont, conv @@ Jsont.null ())
-    | Add_servers -> (add_servers_jsont, conv @@ Jsont.null ())
-    | Get_libraries -> (Jsont.null (), conv libraries_jsont)
-    | Create_view -> (create_view_jsont, conv view_jsont)
-    | Get_view_genres -> (view_jsont, conv genres_jsont)
-    | Get_view_artists -> (view_jsont, conv artists_jsont)
-    | Get_tracks -> (get_jsont, conv tracks_jsont)
+    | Set_session_uuid -> (set_session_uuid_jsont, null)
+    | Add_servers -> (add_servers_jsont, null)
+    | Get_libraries -> (Jsont.null (), Conv libraries_jsont)
+    | Create_view -> (create_view_jsont, Conv view_jsont)
+    | Create_album_view ->
+        (create_view_jsont, Transfer view_keys_array_transfert)
+    | Get_view_genres -> (view_jsont, Conv genres_jsont)
+    | Get_view_artists -> (view_jsont, Conv artists_jsont)
+    | Get_tracks -> (get_jsont, Conv tracks_jsont)
 
   type servers_status_update = string * Sync.report [@@deriving jsont]
   type 'a event = Servers_status_update : servers_status_update event

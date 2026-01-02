@@ -61,6 +61,64 @@ module Worker () = struct
       | None_of none_of ->
           acc && (Int.Set.is_empty none_of || Int.Set.disjoint elements none_of))
 
+  let get_albums_view_keys
+      ({ Db.View.kind = _; src_views; sort; filters = _ } as request) =
+    let open Fut.Result_syntax in
+    let view_filter (album : Db.Generic_schema.Album.t) =
+      match src_views with
+      | All -> Some album
+      | One_of src_views ->
+          if
+            List.exists album.collections ~f:(fun v ->
+                List.memq v ~set:src_views)
+          then Some album
+          else None
+      | None_of _ -> failwith "not implemented"
+    in
+    let* store = get_store (module Db.Stores.Albums_store) () in
+    let module Set = ContainersLabels.Set.Make (struct
+      open Db.Generic_schema
+
+      type t = Album.with_key
+
+      let compare =
+        match sort with
+        | _ -> fun { key; _ } { key = key'; _ } -> Int.compare key key'
+    end) in
+    let req = Db.Stores.Albums_store.open_cursor store in
+    let keys = ref Set.empty in
+    let fut, resolve = Fut.create () in
+    let f _ req =
+      match IDB.Request.result req with
+      | None -> (* End of iteration *) resolve (Ok !keys)
+      | Some cursor ->
+          let open Albums_store.Cursor_with_value in
+          let () =
+            value cursor |> view_filter
+            |> Option.iter @@ fun value ->
+               let key =
+                 Option.get_exn_or "The cursor must have a primary key here."
+                   (primary_key cursor)
+               in
+               keys := Set.add { key; value } !keys
+          in
+          continue cursor
+    in
+    let _ = IDB.Request.on_success ~f req in
+    let+ keys = fut in
+    let item_count = Set.cardinal keys in
+    let array = Bigarray.(Array1.create int32 c_layout item_count) in
+    let i = ref (-1) in
+    let duration = ref 0. in
+    Set.iter
+      (fun { key; value = { duration = d; _ } } ->
+        incr i;
+        duration := !duration +. d;
+        Bigarray.Array1.set array !i @@ Int32.of_int key)
+      keys;
+    ( { Db.View.request; start_offset = 0; item_count; duration = !duration },
+      array )
+
   let get_tracks_view_keys store
       ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
@@ -168,6 +226,12 @@ module Worker () = struct
               acc +. duration)
         in
         { Db.View.request; start_offset = 0; item_count; duration }
+    | Create_album_view ->
+        (* We experiment with an alternative functionning were keys are sent to
+           to the main thread for it to actually perform the "Get" lookups. If
+           that turns ou to be more performant we could do the same for
+           Create_view and maybe unify the two queries.*)
+        get_albums_view_keys params
     | Get_view_genres ->
         let* store = get_store (module Tracks_store) () in
         let* keys = get_tracks_view_keys store params.request in
