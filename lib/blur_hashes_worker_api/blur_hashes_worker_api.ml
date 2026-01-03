@@ -19,8 +19,9 @@ module Queries = struct
         ];
     }
 
-  let jsont (type a b) (q : (a, b) query) : a Jsont.t * b transfer_or_conv =
-    match q with Render -> (hash_req_jsont, Transfer array_transfert)
+  let jsont (type a b) (q : (a, b) query) :
+      a transfer_or_conv * b transfer_or_conv =
+    match q with Render -> (Conv hash_req_jsont, Transfer array_transfert)
 
   type _ event
 

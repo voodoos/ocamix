@@ -24,7 +24,7 @@ module type Queries = sig
   type ('a, 'b) query
   type 'a event
 
-  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b transfer_or_conv
+  val jsont : ('a, 'b) query -> 'a transfer_or_conv * 'b transfer_or_conv
   val event_jsont : 'a event -> 'a Jsont.t
 end
 
@@ -95,14 +95,29 @@ module Make (Q : Queries) = struct
         | Conv d -> set (decode_jv d jv)
         | Transfer { decode; _ } -> set (decode jv)
       in
-      let data = Jsont_brr.encode_jv encoder data |> Result.get_exn in
-      let query = Encodings.to_jv query in
-      let query =
+      let encode_query data =
+        let query = Encodings.to_jv query in
         Jv.obj'
           [| (j_uuid, Jv.of_int32 uuid); (j_query, query); (j_data, data) |]
       in
+      let message, opts =
+        match encoder with
+        | Conv encoder ->
+            let data = Jsont_brr.encode_jv encoder data |> Result.get_exn in
+            let message = encode_query data in
+            (message, None)
+        | Transfer { encode; transferables; _ } ->
+            let data = encode data |> Result.get_exn in
+            let message = encode_query data in
+            let transfer =
+              List.map transferables ~f:(fun f ->
+                  Brr_io.Message.transfer @@ f (Jv.get' message j_data))
+            in
+            let opts = Brr_io.Message.opts ~transfer () in
+            (message, Some opts)
+      in
       if debug then Console.debug [ "Client posts query"; query ];
-      Brr_webworkers.Worker.post worker query;
+      Brr_webworkers.Worker.post ?opts worker message;
       Hashtbl.add futures uuid set;
       fut
 
@@ -155,7 +170,11 @@ module Make (Q : Queries) = struct
         let uuid = Jv.get' obj j_uuid in
         let* query : _ query = Encodings.of_jv (Jv.get' obj j_query) in
         let decoder, encoder = Q.jsont query in
-        let+ data = decode_jv decoder (Jv.get' obj j_data) in
+        let+ data =
+          match decoder with
+          | Conv decoder -> decode_jv decoder (Jv.get' obj j_data)
+          | Transfer { decode; _ } -> decode (Jv.get' obj j_data)
+        in
         (uuid, query, data, encoder)
       in
       let open Fut.Result_syntax in

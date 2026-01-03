@@ -71,17 +71,17 @@ module Queries = struct
   let null = Conv (Jsont.null ())
 
   let jsont (type a b) (q : (a, b) query) :
-      a Jsont.t * b Worker_api.transfer_or_conv =
+      a transfer_or_conv * b Worker_api.transfer_or_conv =
     match q with
-    | Set_session_uuid -> (set_session_uuid_jsont, null)
-    | Add_servers -> (add_servers_jsont, null)
-    | Get_libraries -> (Jsont.null (), Conv libraries_jsont)
-    | Create_view -> (create_view_jsont, Conv view_jsont)
+    | Set_session_uuid -> (Conv set_session_uuid_jsont, null)
+    | Add_servers -> (Conv add_servers_jsont, null)
+    | Get_libraries -> (null, Conv libraries_jsont)
+    | Create_view -> (Conv create_view_jsont, Conv view_jsont)
     | Create_album_view ->
-        (create_view_jsont, Transfer view_keys_array_transfert)
-    | Get_view_genres -> (view_jsont, Conv genres_jsont)
-    | Get_view_artists -> (view_jsont, Conv artists_jsont)
-    | Get_tracks -> (get_jsont, Conv tracks_jsont)
+        (Conv create_view_jsont, Transfer view_keys_array_transfert)
+    | Get_view_genres -> (Conv view_jsont, Conv genres_jsont)
+    | Get_view_artists -> (Conv view_jsont, Conv artists_jsont)
+    | Get_tracks -> (Conv get_jsont, Conv tracks_jsont)
 
   type servers_status_update = string * Sync.report [@@deriving jsont]
   type 'a event = Servers_status_update : servers_status_update event

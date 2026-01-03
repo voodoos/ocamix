@@ -16,7 +16,7 @@ module type Queries = sig
           | Previous_letters : (char, char) list query
       ]} *)
 
-  val jsont : ('a, 'b) query -> 'a Jsont.t * 'b transfer_or_conv
+  val jsont : ('a, 'b) query -> 'a transfer_or_conv * 'b transfer_or_conv
   (** Queries payloads and results encoders *)
 
   type 'a event
