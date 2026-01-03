@@ -74,6 +74,7 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
       let canvas = Canvas.of_el el in
       let () =
         let fut =
+          (* TODO this is slow. Too slow for fast scrolling in large grids. *)
           Blur_hashes_worker_client.query Render { hash; w = width; h = height }
         in
         Fut.await fut (function
