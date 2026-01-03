@@ -133,10 +133,8 @@ let _ =
     Console.log [ "Persist ?"; is_storage_persistent ];
     Db.with_idb (fun idb ->
         let app = Lwd.observe @@ app idb in
-        let on_invalidate _ =
-          ignore @@ G.request_animation_frame
-          @@ fun _ -> ignore @@ Lwd.quick_sample app
-        in
+        let f _ = ignore @@ Lwd.quick_sample app in
+        let on_invalidate _ = ignore @@ G.request_animation_frame f in
         El.append_children (Document.body G.document) [ Lwd.quick_sample app ];
         Lwd.set_on_invalidate app on_invalidate)
   in
