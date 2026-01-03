@@ -5,6 +5,8 @@ type tag = Block of int | Int of int [@@deriving jsont]
 
 open Std
 
+let debug = false
+
 let tag_of v =
   (* wow wow wow. is that okayyish ?*)
   let obj = Obj.repr v in
@@ -30,9 +32,16 @@ module Make (Q : Queries) = struct
   type error = [ `Jv of Jv.Error.t | `Msg of string ]
   type ('a, 'b) query = ('a, 'b) Q.query
   type 'a event = 'a Q.event
-  type 'a with_uuid = { uuid : Jstr.t; data : 'a }
+  type 'a with_uuid = { uuid : int32; data : 'a }
   type 'a message = Answer of Jv.t with_uuid | Event of (tag * Jv.t)
   type listener = string
+
+  let monotonic_uuid = ref 0l
+
+  let next_uuid () =
+    let v = !monotonic_uuid in
+    (monotonic_uuid := Int32.(1l + v));
+    v
 
   (* todo:check that the worker and the client share the same api? *)
 
@@ -50,7 +59,7 @@ module Make (Q : Queries) = struct
 
   let encode_message = function
     | Answer { uuid; data } ->
-        Jv.obj' [| j_kind_answer; (j_uuid, Jv.of_jstr uuid); (j_data, data) |]
+        Jv.obj' [| j_kind_answer; (j_uuid, Jv.of_int32 uuid); (j_data, data) |]
     | Event (tag, data) ->
         let tag = Jsont_brr.encode_jv' tag_jsont tag |> Result.get_exn in
         Jv.obj' [| j_kind_event; (j_tag, tag); (j_data, data) |]
@@ -58,7 +67,7 @@ module Make (Q : Queries) = struct
   let decode_message obj =
     match Jv.get' obj j_kind with
     | k when Jv.equal j_kind_a k ->
-        let uuid = Jv.get' obj j_uuid |> Jv.to_jstr in
+        let uuid = Jv.get' obj j_uuid |> Jv.to_int32 in
         let data = Jv.get' obj j_data in
         Answer { uuid; data }
     | _ ->
@@ -72,13 +81,13 @@ module Make (Q : Queries) = struct
     val url : string
   end) =
   struct
-    let futures : (Jstr.t, Jv.t -> unit) Hashtbl.t = Hashtbl.create 64
+    let futures : (int32, Jv.t -> unit) Hashtbl.t = Hashtbl.create 64
     let listeners : (tag, Jv.t -> unit) Hashtbl.t = Hashtbl.create 64
     let worker = Brr_webworkers.Worker.create @@ Jstr.of_string P.url
 
     let query (type a b) (query : (a, b) query) (data : a) :
         (b, error) Fut.result =
-      let uuid = new_uuid_v4 () |> Uuidm.to_string |> Jstr.of_string in
+      let uuid = next_uuid () in
       let fut, set = Fut.create () in
       let encoder, decoder = Q.jsont query in
       let set jv =
@@ -90,9 +99,9 @@ module Make (Q : Queries) = struct
       let query = Encodings.to_jv query in
       let query =
         Jv.obj'
-          [| (j_uuid, Jv.of_jstr uuid); (j_query, query); (j_data, data) |]
+          [| (j_uuid, Jv.of_int32 uuid); (j_query, query); (j_data, data) |]
       in
-      Console.debug [ "Client posts query"; query ];
+      if debug then Console.debug [ "Client posts query"; query ];
       Brr_webworkers.Worker.post worker query;
       Hashtbl.add futures uuid set;
       fut
@@ -128,7 +137,7 @@ module Make (Q : Queries) = struct
   let dispatch_event (type a) (e : a event) (v : a) =
     let v = Jsont_brr.encode_jv' (Q.event_jsont e) v |> Result.get_exn in
     let message = encode_message (Event (tag_of e, v)) in
-    Console.debug [ "Worker posts event"; message ];
+    if debug then Console.debug [ "Worker posts event"; message ];
     Brr_webworkers.Worker.G.post message
 
   (** Execute W's body and configure messaging *)
@@ -151,12 +160,12 @@ module Make (Q : Queries) = struct
       in
       let open Fut.Result_syntax in
       let+ result = W.on_query query data in
-      let uuid = Jv.to_jstr uuid in
+      let uuid = Jv.to_int32 uuid in
       match encoder with
       | Conv encoder ->
           let data = Jsont_brr.encode_jv' encoder result |> Result.get_exn in
           let message = encode_message (Answer { uuid; data }) in
-          Console.debug [ "Worker posts answer"; message ];
+          if debug then Console.debug [ "Worker posts answer"; message ];
           Brr_webworkers.Worker.G.post message
       | Transfer { encode; transferables; _ } ->
           let data = encode result |> Result.get_exn in
@@ -166,7 +175,7 @@ module Make (Q : Queries) = struct
                 Brr_io.Message.transfer @@ f (Jv.get' message j_data))
           in
           let opts = Brr_io.Message.opts ~transfer () in
-          Console.debug [ "Worker posts answer"; message ];
+          if debug then Console.debug [ "Worker posts answer"; message ];
           Brr_webworkers.Worker.G.post ~opts message
 
     let _ = Ev.listen Brr_io.Message.Ev.message on_message G.target
