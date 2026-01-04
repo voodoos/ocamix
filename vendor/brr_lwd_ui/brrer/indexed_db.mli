@@ -129,7 +129,7 @@ module Content_access
   val get_key : Key.t -> t -> Primary_key.t option Request.t
   (* TODO: other parameters are possible *)
 
-  val get_all : t -> Content.t Array.t Request.t
+  val get_all : ?query:Key_range.t -> t -> Content.t Array.t Request.t
   (** [get_all] retrieves all objects that are inside the index. There is a
       performance cost associated with looking at the value property of a
       cursor, because the object is created lazily and [get_all] force the

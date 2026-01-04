@@ -139,9 +139,10 @@ struct
     let f jv = Jv.to_option (fun j -> Primary_key.of_jv j) jv in
     Jv.call t "getKey" [| Key.to_jv key |] |> Request.of_jv ~f
 
-  let get_all t =
+  let get_all ?query t =
+    let args = match query with None -> [||] | Some query -> [| query |] in
     let f jv = Jv.to_array (fun c -> Content.of_jv c) jv in
-    Jv.call t "getAll" [||] |> Request.of_jv ~f
+    Jv.call t "getAll" args |> Request.of_jv ~f
 
   let get_all_keys ?query t =
     let args = match query with None -> [||] | Some query -> [| query |] in
