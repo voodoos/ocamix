@@ -75,7 +75,7 @@ module Track = struct
     id : Id.t;
     album_id : int option;
     track_index : int;
-    disc_index : int option;
+    disc_index : int;
     sort_name : string;
     server_id : Id.t;
         (* TODO this should not be here track -> collection -> server*)

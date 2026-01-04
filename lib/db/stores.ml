@@ -215,3 +215,28 @@ module Tracks_store =
     end)
 
 module Tracks_by_id = Make_index (Tracks_store) (Id_key)
+
+module Tracks_by_album =
+  Make_index
+    (Tracks_store)
+    (struct
+      type t = { album : int option; disc : int; track : int }
+
+      let to_jv { album; disc; track } =
+        Jv.of_jv_array
+          [|
+            Jv.of_option ~none:Jv.null Jv.of_int album;
+            Jv.of_int disc;
+            Jv.of_int track;
+          |]
+
+      let of_jv jv =
+        match Jv.to_jv_array jv with
+        | [| a; d; t |] ->
+            {
+              album = Jv.to_option Jv.to_int a;
+              disc = Jv.to_int d;
+              track = Jv.to_int t;
+            }
+        | _ -> assert false
+    end)

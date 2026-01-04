@@ -489,13 +489,14 @@ let sync_tracks ~collection_id ~source idb items :
       | None -> Fut.ok None
     in
     let track_index = Option.get_or ~default:1 index_number in
+    let disc_index = Option.get_or ~default:1 parent_index_number in
     Stores.Tracks_store.add ~key
       {
         id;
         server_id = Jellyfin server_id;
         album_id;
         sort_name;
-        disc_index = parent_index_number;
+        disc_index;
         track_index;
       }
       store

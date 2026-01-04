@@ -48,11 +48,14 @@ let on_upgrade_needed e q =
     let store = Tracks_store.create db in
     Tracks_by_id.create ~unique:true ~name:"by-id" (Key_path.Identifier "id")
       store
-    |> ignore
+    |> ignore;
+    Tracks_by_album.create ~name:"by-album"
+      (Key_path.Identifiers [| "album_id"; "disc_index"; "track_index" |])
+      store
   in
   ()
 
-let schema_version = 11
+let schema_version = 12
 
 let with_idb ?(version = schema_version) ?(name = "tracks") f =
   let open Brr_io.Indexed_db in
