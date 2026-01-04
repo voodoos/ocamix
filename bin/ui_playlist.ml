@@ -118,7 +118,7 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])
   in
-  let render_album ranged start_index
+  let render_album db ranged start_index key
       ({
          Db.Generic_schema.Album.id = Jellyfin id;
          server_id = Jellyfin server_id;
@@ -126,6 +126,25 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
          duration;
          _;
        } as album) =
+    let on_click _ =
+      let open Db.Stores in
+      let store =
+        IDB.Database.transaction [ (module Tracks_store) ] ~mode:Readonly db
+        |> IDB.Transaction.object_store (module Tracks_store)
+        |> Tracks_store.index (module Tracks_by_album) ~name:"by-album"
+      in
+      let query =
+        let i = key in
+        let lower = Jv.of_array Jv.of_int [| i; 0; 0 |] in
+        let upper = Jv.of_array Jv.of_int [| i + 1; 0; 0 |] in
+        IDB.Key_range.bound ~lower ~upper ~lower_open:false ~upper_open:true ()
+      in
+      let open Fut.Syntax in
+      ignore
+      @@
+      let+ r = Tracks_by_album.get_all ~query store |> IDB.Request.fut_exn in
+      Console.log [ "TRACKS "; r ]
+    in
     let status =
       Lwd.map (Lwd.get Player.now_playing) ~f:(function
         | Some { item = _, { id = Jellyfin item_id; _ }, _; _ }
@@ -143,9 +162,9 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])
   in
-  let render ranged start_index = function
+  let render db ranged start_index = function
     | Fetch.Track (k, t, a) -> render_track ranged start_index (k, t, a)
-    | Fetch.Album a -> render_album ranged start_index a
+    | Fetch.Album (key, a) -> render_album db ranged start_index key a
   in
   let placeholder i =
     Lwd.return
@@ -174,7 +193,8 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
             ~row_height:(Css_length.Em 4.) ()
         in
         let render =
-          render ranged |> Table.Virtual.with_placeholder_or_error ~placeholder
+          render db ranged
+          |> Table.Virtual.with_placeholder_or_error ~placeholder
         in
         Table.Virtual.make ~layout ?scroll_target render data_source
     | On ->
@@ -187,7 +207,8 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
             match data with
             | Fetch.Track (_, { server_id = Jellyfin server_id; _ }, album) ->
                 (server_id, album)
-            | Fetch.Album ({ server_id = Jellyfin server_id; _ } as album) ->
+            | Fetch.Album (_, ({ server_id = Jellyfin server_id; _ } as album))
+              ->
                 (server_id, Some album)
           in
           let cover = cover ranged start_index server_id album in

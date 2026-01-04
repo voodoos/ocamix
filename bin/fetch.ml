@@ -5,7 +5,7 @@ type data =
       Db.Generic_schema.Track.Key.t
       * Db.Generic_schema.Track.t
       * Db.Generic_schema.Album.t option
-  | Album of Db.Generic_schema.Album.t
+  | Album of int * Db.Generic_schema.Album.t
 
 let tracks' ranged_view i =
   let open View in
@@ -45,7 +45,7 @@ let album store (ranged_view : View.ranged) keys index =
     in
     match album with
     | None -> Fut.error (`Msg "No result")
-    | Some album -> Fut.ok (Album album)
+    | Some album -> Fut.ok (Album (key, album))
   with Invalid_argument _ -> Fut.error (`Msg "No result")
 
 let albums db (ranged_view : View.ranged) keys indexes =
