@@ -46,6 +46,7 @@ end
 
 module Brr_io = struct
   include Brr_io
+  module Event_source = Event_source
   module Indexed_db = Indexed_db
 
   module Media = struct
