@@ -126,10 +126,10 @@ let decode ?(punch = 1.) ~width ~height s =
       let r = linear_to_sRGB !r in
       let g = linear_to_sRGB !g in
       let b = linear_to_sRGB !b in
-      pixels.{(4 * x) + 0 + (y * bytes_per_row)} <- r;
-      pixels.{(4 * x) + 1 + (y * bytes_per_row)} <- g;
-      pixels.{(4 * x) + 2 + (y * bytes_per_row)} <- b;
-      pixels.{(4 * x) + 3 + (y * bytes_per_row)} <- 255
+      Bigarray.Array1.unsafe_set pixels ((4 * x) + 0 + (y * bytes_per_row)) r;
+      Bigarray.Array1.unsafe_set pixels ((4 * x) + 1 + (y * bytes_per_row)) g;
+      Bigarray.Array1.unsafe_set pixels ((4 * x) + 2 + (y * bytes_per_row)) b;
+      Bigarray.Array1.unsafe_set pixels ((4 * x) + 3 + (y * bytes_per_row)) 255
     done
   done;
   pixels
