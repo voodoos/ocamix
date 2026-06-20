@@ -42,8 +42,7 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
     in
     At.src (Jstr.v url)
   in
-  let cover_cell_width = Css_length.Em 4. in
-  let cover ranged start_index server_id album =
+  let cover ?(size = Css_length.Em 4.) ranged start_index server_id album =
     let play_on_click =
       let play_from (ranged : View.ranged Lwd.t) =
         Lwd.map ranged ~f:(fun ranged _ ->
@@ -60,10 +59,10 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
       in
       Lwd.map (play_from ranged) ~f:(fun cb -> Elwd.handler Ev.click cb)
     in
-    let width = Css_length.to_px cover_cell_width |> Float.to_int in
+    let width = Css_length.to_px size |> Float.to_int in
     let width, height = (width, width) in
     (* TODO should be flexible *)
-    let src = img_url ~size:cover_cell_width server_id album in
+    let src = img_url ~size server_id album in
     let cover = [ `R (Elwd.img ~at:[ `P src; `P (At.width width) ] ()) ] in
     let blur_hash =
       let open Option in
@@ -158,7 +157,10 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
          [
            status;
            cover (Lwd.map ~f:fst ranged) start_index server_id (Some album);
-           Lwd.return (El.div [ El.span [ El.txt' name ] ]);
+           (* Lwd.return (El.div [ El.span [ El.txt' name ] ]); *)
+           Elwd.button
+             ~ev:[ `P (Elwd.handler Ev.click on_click) ]
+             [ `P (El.txt' name) ];
            Lwd.return (El.div [ El.span [ El.txt' duration ] ]);
          ])
   in
@@ -189,8 +191,9 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
   Lwd.bind (Lwd.get Ui_filters.grid_display) ~f:(function
     | Off ->
         let layout =
-          Table.make_fixed_row_height (columns cover_cell_width) ~status
-            ~row_height:(Css_length.Em 4.) ()
+          Table.make_fixed_row_height
+            (columns (Css_length.Em 4.))
+            ~status ~row_height:(Css_length.Em 4.) ()
         in
         let render =
           render db ranged
@@ -198,7 +201,7 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
         in
         Table.Virtual.make ~layout ?scroll_target render data_source
     | On ->
-        let size = Css_length.Em 6. in
+        let size = Css_length.Em 12. in
         let layout_grid =
           Table.make_fixed_grid ~status ~item_width:size ~row_height:size ()
         in
@@ -211,7 +214,7 @@ let make db ~reset_playlist ?(status = []) ?scroll_target
               ->
                 (server_id, Some album)
           in
-          let cover = cover ranged start_index server_id album in
+          let cover = cover ~size ranged start_index server_id album in
           Lwd.return (Lwd_seq.of_list [ cover ])
         in
         let render_grid =
