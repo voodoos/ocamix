@@ -374,8 +374,7 @@ let request (type pp p r) ~base_url ?token ?headers
     Headers.of_assoc ?init:headers
       Jstr.
         [
-          (v "content-type", v "text/json");
-          (v "X-Emby-Authorization", v authorization);
+          (v "content-type", v "text/json"); (v "Authorization", v authorization);
         ]
   in
   let method' = jstr_of_method Q.method' in
