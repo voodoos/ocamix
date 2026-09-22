@@ -243,6 +243,7 @@ module Items = struct
     recursive : bool;
     enable_user_data : bool; [@key "enableUserData"]
     enable_images : bool; [@key "enableImages"]
+    enable_total_record_count : bool; [@key "enableTotalRecordCount"]
   }
   [@@deriving jsont]
 

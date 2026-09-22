@@ -259,6 +259,7 @@ let find_artists_idx source idb artist_items =
             recursive = false;
             enable_user_data = false;
             enable_images = false;
+            enable_total_record_count = false;
           }
         in
         let* result = query source (module Api.Items) params () in
@@ -580,6 +581,7 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
         recursive;
         enable_user_data = false;
         enable_images = true;
+        enable_total_record_count = false;
       }
   in
   let* { Api.Items.start_index = _; items; _ } =
@@ -612,6 +614,7 @@ let get_source_track_count source view =
         recursive = true;
         enable_user_data = false;
         enable_images = false;
+        enable_total_record_count = true;
       }
   in
   let+ result = query source (module Api.Items) req () in
