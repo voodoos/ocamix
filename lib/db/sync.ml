@@ -141,13 +141,19 @@ let update_collections source idb =
         (collection_id, item) :: acc
       else Fut.ok acc)
 
-(* The new sync process is not based on the full list of items anymore since
-   this is too slow. It's a classic recursive search. The queue is initially
-   populated with the top-level views and each time new folders are found they are
-   added to the queue. The synchronization process ends when the queue is empty.
+(* The synchronization is a flat traversal of the source: for each view we ask
+   the server for every item it contains, with pagination. It used to be a
+   recursive search issuing one query per folder, which turned into thousands of
+   small round-trips on a large library.
 
-   Additionnal queries to find missing artists are performed on demand by the
-   [find_artists_idx] function *)
+   It runs in three phases, artists, then albums, then tracks, because
+   [sync_track] resolves a track's album through the [Albums_by_id] index: the
+   albums have to be in the database before the first track is stored. The
+   recursive traversal used to guarantee that by visiting parents first.
+
+   Artists only appearing in the tags are resolved on demand by
+   [find_artists_idx]. TODO is that still the happening with the new "flat" sync
+   ? *)
 
 let get_music_brainz_id external_urls =
   List.find_map external_urls ~f:(fun { Source.Api.Item.name; url } ->
@@ -163,7 +169,6 @@ let store_artist store { Item.type_; name; id; external_urls; _ } =
   else
     let mbid = get_music_brainz_id external_urls in
     let canon = canonicalize_string name in
-    if String.equal name "ABBA" then Console.error [ "FOUND "; name; id ];
     (* TODO There is no sort name in jellyfin's db... *)
     let sort_name = "" in
     Stores.Artists_store.add
@@ -561,52 +566,52 @@ let sync_tracks ~collection_id ~source idb items :
           let+ acc = acc in
           item :: acc)
 
-let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
-  let open Fut.Result_syntax in
-  let open Source in
-  (* We delegate recursive search to the server once we reached the artist's level *)
-  let recursive = Equal.poly folder.type_ Item.MusicArtist in
-  let req =
-    Api.Items.
-      {
-        ids = [];
-        parent_id = Some folder.id;
-        user_id = source.auth_response.user.id;
-        fields = [ ParentId; Path; Genres; DateCreated; ExternalUrls; Tags ];
-        include_item_types = [ Source.Api.Item.MusicArtist; MusicAlbum; Audio ];
-        start_index = None;
-        limit = None;
-        sort_by = [ DateCreated ];
-        sort_order = Some Ascending;
-        recursive;
-        enable_user_data = false;
-        enable_images = true;
-        enable_total_record_count = false;
-      }
-  in
-  let* { Api.Items.start_index = _; items; _ } =
-    query source (module Api.Items) req ()
-  in
-  let* remaining = sync_artists ~source idb items in
-  let* remaining = sync_albums ~source idb remaining in
-  let+ _remaining = sync_tracks ~collection_id ~source idb remaining in
-  if recursive then []
-  else
-    List.fold_left items ~init:[] ~f:(fun acc -> function
-      | { Item.is_folder = true; _ } as item -> (collection_id, item) :: acc
-      | _ -> acc)
+(* A sync phase. The order matters: [sync_track] resolves a track's album
+   through the [Albums_by_id] index, so every album must have been stored
+   before the first track is. *)
+type phase = Artists | Albums | Tracks
 
-let get_source_track_count source view =
+type job = {
+  collection_id : int;
+  view_id : string;
+  phase : phase;
+  start_index : int;
+  count : int;  (** used to report progress *)
+}
+
+let string_of_phase = function
+  | Artists -> "artists"
+  | Albums -> "albums"
+  | Tracks -> "tracks"
+
+let item_types_of_phase = function
+  | Artists -> [ Item.MusicArtist ]
+  | Albums -> [ Item.MusicAlbum ]
+  | Tracks -> [ Item.Audio ]
+
+let fields_of_phase = function
+  | Artists -> [ Item.ExternalUrls ] (* mbid *)
+  | Albums -> [ Item.Genres; DateCreated; ExternalUrls ]
+  | Tracks -> [ Item.Genres; DateCreated ]
+
+let enable_images_of_phase = function
+  | Albums -> true
+  | Artists | Tracks -> false
+
+let pool_size = 10
+let page_size = function Artists -> 500 | Albums -> 250 | Tracks -> 1000
+
+let count_items ~source ~parent_id ~types =
   let open Fut.Result_syntax in
   let open Source in
   let req =
     Api.Items.
       {
         ids = [];
-        parent_id = Some view.Item.id;
+        parent_id = Some parent_id;
         user_id = source.auth_response.user.id;
         fields = [];
-        include_item_types = [ Audio ];
+        include_item_types = types;
         start_index = None;
         limit = Some 0;
         sort_by = [];
@@ -619,6 +624,88 @@ let get_source_track_count source view =
   in
   let+ result = query source (module Api.Items) req () in
   result.total_record_count
+
+(* Fetch one page and store what it contains. The three [sync_*] functions
+   filter on the item type and pass the rest through, so they are no-ops on
+   items of the other phases. *)
+let sync_page ~source ~idb { collection_id; view_id; phase; start_index; count }
+    =
+  let open Fut.Result_syntax in
+  let open Source in
+  let req =
+    Api.Items.
+      {
+        ids = [];
+        parent_id = Some view_id;
+        user_id = source.auth_response.user.id;
+        fields = fields_of_phase phase;
+        include_item_types = item_types_of_phase phase;
+        start_index = Some start_index;
+        limit = Some count;
+        sort_by = [];
+        sort_order = None;
+        recursive = true;
+        enable_user_data = false;
+        enable_images = enable_images_of_phase phase;
+        enable_total_record_count = false;
+      }
+  in
+  let* { Api.Items.items; _ } = query source (module Api.Items) req () in
+  let+ _remaining =
+    match phase with
+    | Artists -> sync_artists ~source idb items
+    | Albums -> sync_albums ~source idb items
+    | Tracks -> sync_tracks ~collection_id ~source idb items
+  in
+  ()
+
+let pool_iter ~parallelism ?(on_start = fun _ -> ()) ?(on_done = fun _ _ -> ())
+    ~f jobs =
+  let jobs = Array.of_list jobs in
+  let n = Array.length jobs in
+  let next = ref 0 in
+  let failures = ref 0 in
+  let rec worker () =
+    let i = !next in
+    if i >= n then Fut.return ()
+    else begin
+      (* No await between the read and the write above: nothing else can be
+         handed this index. *)
+      incr next;
+      let job = jobs.(i) in
+      on_start job;
+      let open Fut.Syntax in
+      let* result = f job in
+      let () =
+        match result with
+        | Error err ->
+            incr failures;
+            Console.warn [ "Sync job failed: "; err ]
+        | Ok () -> ()
+      in
+      on_done job result;
+      (worker [@tailcall]) ()
+    end
+  in
+  let open Fut.Syntax in
+  let+ _ =
+    List.init (min parallelism n) ~f:(fun _ -> worker ()) |> Fut.of_list
+  in
+  !failures
+
+let pages_of_count ~collection_id ~view_id ~phase total =
+  let size = page_size phase in
+  List.init
+    ((total + size - 1) / size)
+    ~f:(fun i ->
+      let start_index = i * size in
+      {
+        collection_id;
+        view_id;
+        phase;
+        start_index;
+        count = min size (total - start_index);
+      })
 
 let get_db_track_count idb ~collection_id =
   let open Fut.Result_syntax in
@@ -638,12 +725,13 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   Console.info [ "Syncing database" ];
   let* views = update_collections source idb in
-  let queue = Queue.create () in
-  let workers : int Fut.t Queue.t = Queue.create () in
-  let* _ =
-    List.map views ~f:(fun (collection_id, view) ->
-        let* src_track_count = get_source_track_count source view in
-        let+ db_track_count = get_db_track_count idb ~collection_id in
+  let* jobs =
+    List.map views ~f:(fun (collection_id, (view : Item.t)) ->
+        let view_id = view.id in
+        let* src_track_count =
+          count_items ~source ~parent_id:view_id ~types:[ Audio ]
+        in
+        let* db_track_count = get_db_track_count idb ~collection_id in
         let () =
           Console.log
             [
@@ -656,62 +744,70 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
               " in db)";
             ]
         in
-        if src_track_count > db_track_count then
-          Queue.add (collection_id, view) queue)
+        if src_track_count <= db_track_count then Fut.ok []
+        else
+          let* artist_count =
+            count_items ~source ~parent_id:view_id ~types:[ MusicArtist ]
+          in
+          let+ album_count =
+            count_items ~source ~parent_id:view_id ~types:[ MusicAlbum ]
+          in
+          let () =
+            Console.log
+              [ "  -> "; artist_count; " artists, "; album_count; " albums" ]
+          in
+          (* Artists only appear here when they exist as actual folders in the
+             library. When they don't, [find_artists_idx] resolves them by id
+             instead and this phase is simply empty. *)
+          if Int.equal 0 album_count then
+            Console.warn
+              [
+                "No album is reachable from view ";
+                view.name;
+                ": its tracks will have no album.";
+              ];
+          List.concat
+            [
+              pages_of_count ~collection_id ~view_id ~phase:Artists artist_count;
+              pages_of_count ~collection_id ~view_id ~phase:Albums album_count;
+              pages_of_count ~collection_id ~view_id ~phase:Tracks
+                src_track_count;
+            ])
     |> Fut.of_list |> Fut.map Result.flatten_l
+    |> Fut.map (Result.map List.concat)
   in
-  let max_queue_length = ref (Queue.length queue) in
-  let add_to_queue v =
-    max_queue_length := !max_queue_length + 1;
-    Queue.add v queue
-  in
+  let total = List.fold_left jobs ~init:0 ~f:(fun acc job -> acc + job.count) in
+  let processed = ref 0 in
   let running_jobs = ref 0 in
-  let run_job ~worker ~worker_is_ready (collection_id, folder) =
-    incr running_jobs;
-    let+ children = sync_folder ~source ~collection_id ~folder idb in
-    List.iter children ~f:add_to_queue;
-    decr running_jobs;
-    worker_is_ready worker
+  let report_progress () =
+    if total > 0 then
+      report
+        (Some { total; remaining = total - !processed; jobs = !running_jobs })
   in
-  let sync_all ~threads =
-    let () =
-      for i = 1 to threads do
-        Queue.add (Fut.return i) workers
-      done
+  let run_phase phase =
+    let phase_jobs =
+      List.filter jobs ~f:(fun job -> Equal.poly job.phase phase)
     in
-    let renaming () = Queue.length queue + !running_jobs in
-    let rec assign_work acc () =
-      (* Wait for a worker *)
-      let next_worker = Queue.take_opt workers in
-      match next_worker with
-      | None -> acc
-      | Some next_worker -> (
-          let future_worker, worker_is_ready = Fut.create () in
-          let () = Queue.add future_worker workers in
-          Fut.bind next_worker @@ fun worker ->
-          match Queue.take_opt queue with
-          | None ->
-              worker_is_ready worker;
-              acc
-          | Some job ->
-              let () =
-                report
-                @@ Some
-                     {
-                       total = !max_queue_length;
-                       remaining = renaming ();
-                       jobs = !running_jobs;
-                     }
-              in
-              let worker =
-                let* () = run_job ~worker ~worker_is_ready job in
-                (assign_work (Fut.ok ()) [@tailcall]) ()
-              in
-              (assign_work (Fut.bind acc (fun _ -> worker)) [@tailcall]) ())
+    let open Fut.Syntax in
+    let+ failures =
+      pool_iter ~parallelism:pool_size
+        ~on_start:(fun _ ->
+          incr running_jobs;
+          report_progress ())
+        ~on_done:(fun job _ ->
+          decr running_jobs;
+          processed := !processed + job.count;
+          report_progress ())
+        ~f:(sync_page ~source ~idb) phase_jobs
     in
-    assign_work (Fut.ok ()) ()
+    if failures > 0 then
+      Console.warn
+        [ "Sync: "; failures; " "; string_of_phase phase; " pages failed" ];
+    Ok ()
   in
-  let+ () = sync_all ~threads:50 in
+  let* () = run_phase Artists in
+  let* () = run_phase Albums in
+  let+ () = run_phase Tracks in
   Hashtbl.reset genres_memo;
   Hashtbl.reset artists_ids;
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]

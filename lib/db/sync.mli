@@ -1,33 +1,20 @@
-(** This module provide utilities to synchronize he local (Indexed_db) database
-    with the remote source.
+(** This module provides utilities to synchronize the local (Indexed_db)
+    database with the remote source.
 
-    The syncing mechanism makes the assumption that the source can provide a
-    list of items ordered by the date of their addition to the source. Items
-    should have a stable index in this reference query unless some of them have
-    been deleted from the source.
+    For each of the source's music views we fetch every item it contains through
+    a flat, unsorted, paginated query, several pages at a time. This is done in
+    three phases -- artists, albums, then tracks -- because a track can only be
+    linked to its album once that album is in the database.
 
-    Fetching this list can take a lot of time for big collections, so we use a
-    table with placeholders that are progressively populated with items ids.
-
-    This list is used to check consistency and freshness of the database without
-    massive queries:
-
-    - If the the last fetched record has the same id as the corresponding item
-      in the source, the database is consistent.
-    - If the last fetched record coincides with the latest item of the source,
-      then the database is fully synchronized.
-
-    The database might become out-of-sync if new items have been added to the
-    source. In that case new placeholders are added and fetched.
-
-    The database might become inconsistent if items are removed from the source,
-    thus changing all following items' index in the reference query.
-
-    TODO: inconsistency is not handled yet: the simplest workaround would be to
-    simply re-synchronize the complete database.
+    Whether a view needs to be synchronized at all is decided by comparing its
+    number of tracks in the source with the number we have locally. Items
+    already present are rejected by the stores' unique indexes, so a
+    re-synchronization converges instead of duplicating.
 
     TODO: we only keep track of added / removed items, but items details can
-    change (like changes in metadata, genrs, etc) *)
+    change (like changes in metadata, genres, etc)
+
+    TODO: items removed from the source are never removed locally. *)
 
 type status =
   | Unknown
