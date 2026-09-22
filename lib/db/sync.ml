@@ -299,6 +299,17 @@ let find_artists_idx source idb artist_items =
   let+ all = Fut.of_list future_artists in
   List.filter_map ~f:Fun.id all
 
+(* Resolve every artist referenced by a batch of items in one go, so that the
+   per-item [find_artists_idx] calls performed while storing them all hit the
+   memo. Without it a batch whose artists are unknown costs one request per
+   item instead of one per batch. *)
+(* let prewarm_artists ~source idb items ~f =
+  List.concat_map items ~f
+  |> List.sort_uniq ~cmp:(fun (a : Item.artist_item) b ->
+      String.compare a.id b.id)
+  |> find_artists_idx source idb
+  |> Fut.map ignore *)
+
 let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
   let open Fut.Result_syntax in
   let open Brr_io.Indexed_db in
@@ -586,6 +597,14 @@ let sync_folder ~source ~collection_id ~(folder : Item.t) idb =
     query source (module Api.Items) req ()
   in
   let* remaining = sync_artists ~source idb items in
+  (* let* () =
+    let open Fut.Syntax in
+    let+ () =
+      prewarm_artists ~source idb remaining ~f:(fun (item : Item.t) ->
+          List.rev_append item.artist_items item.album_artists)
+    in
+    Ok ()
+  in *)
   let* remaining = sync_albums ~source idb remaining in
   let+ _remaining = sync_tracks ~collection_id ~source idb remaining in
   if recursive then []
