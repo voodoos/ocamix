@@ -177,9 +177,10 @@ let store_artist store { Item.type_; name; id; external_urls; _ } =
       - Thread a map through the folds
       - Query the DB itself *)
 let artists_ids : (string, int option Fut.t) Hashtbl.t = Hashtbl.create 128
-let genres_memo = Hashtbl.create 256
 
-(* Only album arstis are accessible via the recursive traversal. Other artists
+let genres_memo : (string, (int, Jv.Error.t) Fut.result) Hashtbl.t =
+  Hashtbl.create 256
+
    items have no parent and must be fetch specifically. *)
 let find_artists_idx source idb artist_items =
   (* Some artists might already have been queried for, others not. Note that it
@@ -294,9 +295,8 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
 
 let prepare_genres idb genre_items =
   let get_or_set_genre (name, canon) =
-    let open Fut.Result_syntax in
     match Hashtbl.get genres_memo canon with
-    | Some key -> Fut.ok key
+    | Some key -> key
     | None ->
         let transaction =
           Database.transaction
@@ -311,15 +311,20 @@ let prepare_genres idb genre_items =
             (module Stores.Genres_by_canonical_name)
             ~name:"genres_by_canon_name" s_genres
         in
-        let+ key =
+        let key =
           Stores.Genres_by_canonical_name.get_key canon i_genres
           |> Request.fut_exn
           |> Fun.flip Fut.bind (function
             | Some key -> Fut.ok key
             | None ->
                 let genre = Generic_schema.{ Genre.name; canon } in
-                Stores.Genres_store.add genre s_genres |> Request.fut)
+                Stores.Genres_store.add genre s_genres
+                (* Without this a duplicate would abort the whole transaction,
+                   and with it the album or track being synchronized. *)
+                |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
+                |> Request.fut)
         in
+        (* Memoized before any await: see [genres_memo]. *)
         Hashtbl.add genres_memo canon key;
         key
   in
