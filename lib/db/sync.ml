@@ -172,6 +172,28 @@ let store_artist store { Item.type_; name; id; external_urls; _ } =
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut
 
+let find_artist_idx idb id =
+  let open Fut.Syntax in
+  let transaction =
+    Database.transaction [ (module Stores.Artists_store) ] ~mode:Readonly idb
+  in
+  let index =
+    Transaction.object_store (module Stores.Artists_store) transaction
+    |> Stores.Artists_store.index (module Stores.Artists_by_id) ~name:"by-id"
+  in
+  let+ result =
+    Stores.Artists_by_id.get_key (Generic_schema.Id.Jellyfin id) index
+    |> Request.fut
+  in
+  match result with Ok idx -> idx | Error _ -> None
+
+let store_or_find_artist idb store ({ Item.id; _ } as artist) =
+  let open Fut.Syntax in
+  let* result = store_artist store artist in
+  match result with
+  | Ok idx -> Fut.return (Some idx)
+  | Error _ -> find_artist_idx idb id
+
 (* Todo: that's okay for the prototype, but there are alternative to these global
    tables:
       - Thread a map through the folds
@@ -181,8 +203,13 @@ let artists_ids : (string, int option Fut.t) Hashtbl.t = Hashtbl.create 128
 let genres_memo : (string, (int, Jv.Error.t) Fut.result) Hashtbl.t =
   Hashtbl.create 256
 
+(* Max size for a [find_artists_idx] query batch *)
+let artists_query_batch = 100
+
+(* Only album artists are accessible via the recursive traversal. Other artists
    items have no parent and must be fetch specifically. *)
 let find_artists_idx source idb artist_items =
+  let open Fut.Syntax in
   (* Some artists might already have been queried for, others not. Note that it
      is important to preserve the order of the initial list. Order matters in
      the original files metadata and hopefully Jellyfin preserves it. *)
@@ -193,73 +220,81 @@ let find_artists_idx source idb artist_items =
     List.map artist_items ~f:(fun ({ id; _ } : Item.artist_item) ->
         match Hashtbl.get artists_ids id with
         | Some fut -> fut
-        | None ->
-            let fut, set = Fut.create () in
-            let set v =
-              (* We remove elements when set. That allows us to tracked stalled
+        | None -> begin
+            let* result = find_artist_idx idb id in
+            match result with
+            | Some v -> Fut.return (Some v)
+            | None ->
+                let fut, set = Fut.create () in
+                let set v =
+                  (* We remove elements when set. That allows us to tracked stalled
                  queries by looking at the remaining elements in the table. *)
-              Hashtbl.remove now_futures id;
-              set v
-            in
-            Hashtbl.add artists_ids id fut;
-            Hashtbl.add now_futures id set;
-            fut)
+                  Hashtbl.remove now_futures id;
+                  set v
+                in
+                Hashtbl.add artists_ids id fut;
+                Hashtbl.add now_futures id set;
+                fut
+          end)
   in
-  let open Fut.Syntax in
   let () =
     let todo = Hashtbl.keys_list now_futures in
-    let todo_n = List.length todo in
-    if Int.equal 0 todo_n then ()
+    if List.is_empty todo then ()
     else
       let open Source in
       let user_id = source.auth_response.user.id in
-      let params =
-        {
-          Api.Items.ids = todo;
-          parent_id = None;
-          user_id;
-          fields = [];
-          include_item_types = [ MusicArtist ];
-          start_index = None;
-          limit = None;
-          sort_order = None;
-          sort_by = [];
-          recursive = false;
-          enable_user_data = false;
-          enable_images = false;
-        }
+      let fetch_chunk ids =
+        let params =
+          {
+            Api.Items.ids;
+            parent_id = None;
+            user_id;
+            (* [ExternalUrls] carries the MusicBrainz id *)
+            fields = [ ExternalUrls ];
+            include_item_types = [ MusicArtist ];
+            start_index = None;
+            limit = None;
+            sort_order = None;
+            sort_by = [];
+            recursive = false;
+            enable_user_data = false;
+            enable_images = false;
+          }
+        in
+        let* result = query source (module Api.Items) params () in
+        match result with
+        | Ok { items; _ } ->
+            let transaction =
+              Database.transaction
+                [ (module Stores.Artists_store) ]
+                ~mode:Readwrite idb
+            in
+            let store =
+              Transaction.object_store (module Stores.Artists_store) transaction
+            in
+            List.map items ~f:(fun (artist : Item.t) ->
+                match Hashtbl.get now_futures artist.id with
+                | None -> Fut.return ()
+                | Some set ->
+                    let+ idx = store_or_find_artist idb store artist in
+                    if Option.is_none idx then
+                      Console.warn [ "Store artist not found:"; artist.name ];
+                    set idx)
+            |> Fut.of_list |> Fut.map ignore
+        | Error err ->
+            Console.error [ "Artists fetch failed: "; err ];
+            Fut.return ()
       in
+      let chunks = List.chunks artists_query_batch todo in
+      (* Invalidate not found artists. *)
       Fut.await
-        (query source (module Api.Items) params ())
-        (function
-          | Ok { items; _ } ->
-              let transaction =
-                Database.transaction
-                  [ (module Stores.Artists_store) ]
-                  ~mode:Readwrite idb
-              in
-              let store =
-                Transaction.object_store
-                  (module Stores.Artists_store)
-                  transaction
-              in
-              let store_operation =
-                List.map items ~f:(fun (artist : Item.t) ->
-                    let set = Hashtbl.find now_futures artist.id in
-                    store_artist store artist
-                    |> Fut.map @@ function
-                       | Error err ->
-                           Console.warn [ "Store artist:"; artist.name; err ];
-                           set None
-                       | Ok idx -> set (Some idx))
-                |> Fut.of_list
-              in
-              (* We invalidate remaining futures *)
-              Fut.await store_operation (fun _ ->
-                  Hashtbl.iter (fun _ set -> set None) now_futures)
-          | Error err ->
-              Console.error [ "Artists fetch failed: "; err ];
-              Hashtbl.iter (fun _ set -> set None) now_futures)
+        (List.map chunks ~f:fetch_chunk |> Fut.of_list)
+        (fun _ ->
+          Hashtbl.iter
+            (fun v set ->
+              Console.error [ "Artist not found: "; v ];
+              set None)
+            now_futures)
   in
   let+ all = Fut.of_list future_artists in
   List.filter_map ~f:Fun.id all
@@ -285,6 +320,9 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
                dup [<> musicbrainz id || <> jellyfin id] *)
             Console.warn [ "Could not add artist into the db: "; name ];
             Console.warn [ Jv.Error.message error ];
+            (* Is the artists already stores ? *)
+            let* existing = find_artist_idx idb id in
+            Hashtbl.add artists_ids id (Fut.return existing);
             acc
         | Ok idx ->
             Hashtbl.add artists_ids id (Fut.return (Some idx));
