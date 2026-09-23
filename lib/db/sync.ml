@@ -305,8 +305,7 @@ let find_artists_idx source idb artist_items =
   let+ all = Fut.of_list future_artists in
   List.filter_map ~f:Fun.id all
 
-let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
-  let open Fut.Result_syntax in
+let sync_artists ~source:_ idb items : (unit, Jv.Error.t) Fut.result =
   let open Brr_io.Indexed_db in
   let transaction =
     Database.transaction [ (module Stores.Artists_store) ] ~mode:Readwrite idb
@@ -314,7 +313,7 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
   let store =
     Transaction.object_store (module Stores.Artists_store) transaction
   in
-  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc -> function
+  List.fold_left items ~init:(Fut.ok ()) ~f:(fun acc -> function
     | { Item.type_ = MusicArtist; name; id; _ } as artist -> (
         let open Fut.Syntax in
         let* result = store_artist store artist in
@@ -333,9 +332,7 @@ let sync_artists ~source:_ idb items : (Item.t list, Jv.Error.t) Fut.result =
         | Ok idx ->
             Hashtbl.add artists_ids id (Fut.return (Some idx));
             acc)
-    | item ->
-        let+ acc = acc in
-        item :: acc)
+    | _ -> failwith "Not an artist")
 
 let prepare_genres idb genre_items =
   let get_or_set_genre (name, canon) =
@@ -383,8 +380,7 @@ let prepare_genres idb genre_items =
       |> List.map ~f:get_or_set_genre)
   |> Fut.of_list |> Fut.map Result.flatten_l
 
-let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
-  let open Fut.Result_syntax in
+let sync_albums ~source idb items : (unit, Jv.Error.t) Fut.result =
   let open Brr_io.Indexed_db in
   let sync_album
       {
@@ -442,7 +438,7 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
     |> Request.on_error ~f:(fun e _ -> Ev.prevent_default e)
     |> Request.fut
   in
-  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->
+  List.fold_left items ~init:(Fut.ok ()) ~f:(fun acc item ->
       match item with
       | { Item.type_ = MusicAlbum; name; _ } as album -> (
           let open Fut.Syntax in
@@ -454,15 +450,12 @@ let sync_albums ~source idb items : (Item.t list, Jv.Error.t) Fut.result =
               Console.warn [ Jv.Error.message error ];
               acc
           | Ok _ -> acc)
-      | item ->
-          let+ acc = acc in
-          item :: acc)
+      | _ -> failwith "Not an album")
 
 let count_tracks = ref 0
 
-let sync_tracks ~collection_id ~source idb items :
-    (Item.t list, Jv.Error.t) Fut.result =
-  let open Fut.Result_syntax in
+let sync_tracks ~collection_id ~source idb items : (unit, Jv.Error.t) Fut.result
+    =
   let open Brr_io.Indexed_db in
   let sync_track
       {
@@ -550,21 +543,19 @@ let sync_tracks ~collection_id ~source idb items :
         Ev.prevent_default e)
     |> Request.fut
   in
-  List.fold_left items ~init:(Fut.ok []) ~f:(fun acc item ->
+  List.fold_left items ~init:(Fut.ok ()) ~f:(fun acc item ->
       match item with
-      | { Item.type_ = Audio; name; _ } as track -> (
+      | { Item.type_ = Audio; name; _ } as track ->
           let open Fut.Syntax in
           let* result = sync_track track in
-          match result with
-          | Error error ->
+          Result.iter_err
+            (fun error ->
               (* This happens when the item is already in the database *)
               Console.warn [ "Could not add track into the db: "; name ];
-              Console.warn [ Jv.Error.message error ];
-              acc
-          | Ok _ -> acc)
-      | item ->
-          let+ acc = acc in
-          item :: acc)
+              Console.warn [ Jv.Error.message error ])
+            result;
+          acc
+      | _ -> failwith "Not a track")
 
 (* A sync phase. The order matters: [sync_track] resolves a track's album
    through the [Albums_by_id] index, so every album must have been stored
@@ -651,13 +642,10 @@ let sync_page ~source ~idb { collection_id; view_id; phase; start_index; count }
       }
   in
   let* { Api.Items.items; _ } = query source (module Api.Items) req () in
-  let+ _remaining =
-    match phase with
-    | Artists -> sync_artists ~source idb items
-    | Albums -> sync_albums ~source idb items
-    | Tracks -> sync_tracks ~collection_id ~source idb items
-  in
-  ()
+  match phase with
+  | Artists -> sync_artists ~source idb items
+  | Albums -> sync_albums ~source idb items
+  | Tracks -> sync_tracks ~collection_id ~source idb items
 
 let pool_iter ~parallelism ?(on_start = fun _ -> ()) ?(on_done = fun _ _ -> ())
     ~f jobs =
