@@ -341,6 +341,110 @@ module System = struct
   end
 end
 
+module Playback_info = struct
+  type path_params = { item_id : string }
+
+  (* [PlaybackInfoDto] *)
+  type params = {
+    user_id : string option; [@option] [@key "UserId"]
+    max_streaming_bitrate : int option; [@option] [@key "MaxStreamingBitrate"]
+    start_time_ticks : int64 option; [@option] [@key "StartTimeTicks"]
+    audio_stream_index : int option; [@option] [@key "AudioStreamIndex"]
+    subtitle_stream_index : int option; [@option] [@key "SubtitleStreamIndex"]
+    max_audio_channels : int option; [@option] [@key "MaxAudioChannels"]
+    media_source_id : string option; [@option] [@key "MediaSourceId"]
+    live_stream_id : string option; [@option] [@key "LiveStreamId"]
+    device_profile : Device_profile.t option; [@option] [@key "DeviceProfile"]
+    auto_open_live_stream : bool option; [@option] [@key "AutoOpenLiveStream"]
+    enable_direct_play : bool option; [@option] [@key "EnableDirectPlay"]
+    enable_direct_stream : bool option; [@option] [@key "EnableDirectStream"]
+    enable_transcoding : bool option; [@option] [@key "EnableTranscoding"]
+    allow_audio_stream_copy : bool option;
+        [@option] [@key "AllowAudioStreamCopy"]
+    allow_video_stream_copy : bool option;
+        [@option] [@key "AllowVideoStreamCopy"]
+  }
+  [@@deriving jsont]
+
+  let params ?user_id ?max_streaming_bitrate ?start_time_ticks
+      ?audio_stream_index ?subtitle_stream_index ?max_audio_channels
+      ?media_source_id ?live_stream_id ?device_profile ?auto_open_live_stream
+      ?enable_direct_play ?enable_direct_stream ?enable_transcoding
+      ?allow_audio_stream_copy ?allow_video_stream_copy () =
+    {
+      user_id;
+      max_streaming_bitrate;
+      start_time_ticks;
+      audio_stream_index;
+      subtitle_stream_index;
+      max_audio_channels;
+      media_source_id;
+      live_stream_id;
+      device_profile;
+      auto_open_live_stream;
+      enable_direct_play;
+      enable_direct_stream;
+      enable_transcoding;
+      allow_audio_stream_copy;
+      allow_video_stream_copy;
+    }
+
+  (* Enums are kept as strings here: this is decoded from the server's answer
+     and an unknown member would make the whole response fail to decode. *)
+  type media_stream = {
+    index : int option; [@option] [@key "Index"]
+    type' : string option; [@option] [@key "Type"]
+    codec : string option; [@option] [@key "Codec"]
+    bit_rate : int option; [@option] [@key "BitRate"]
+    channels : int option; [@option] [@key "Channels"]
+    sample_rate : int option; [@option] [@key "SampleRate"]
+    bit_depth : int option; [@option] [@key "BitDepth"]
+    is_default : bool option; [@option] [@key "IsDefault"]
+  }
+  [@@deriving jsont]
+
+  type media_source_info = {
+    id : string option; [@option] [@key "Id"]
+    name : string option; [@option] [@key "Name"]
+    path : string option; [@option] [@key "Path"]
+    etag : string option; [@option] [@key "ETag"]
+    container : string option; [@option] [@key "Container"]
+    size : int64 option; [@option] [@key "Size"]
+    bitrate : int option; [@option] [@key "Bitrate"]
+    run_time_ticks : int64 option; [@option] [@key "RunTimeTicks"]
+    supports_direct_play : bool option; [@option] [@key "SupportsDirectPlay"]
+    supports_direct_stream : bool option;
+        [@option] [@key "SupportsDirectStream"]
+    supports_transcoding : bool option; [@option] [@key "SupportsTranscoding"]
+    supports_probing : bool option; [@option] [@key "SupportsProbing"]
+    protocol : string option; [@option] [@key "Protocol"]
+    media_streams : media_stream list; [@default []] [@key "MediaStreams"]
+    required_http_headers : string String.Map.t;
+        [@default String.Map.empty] [@key "RequiredHttpHeaders"]
+    live_stream_id : string option; [@option] [@key "LiveStreamId"]
+    transcoding_url : string option; [@option] [@key "TranscodingUrl"]
+    transcoding_sub_protocol : string option;
+        [@option] [@key "TranscodingSubProtocol"]
+    transcoding_container : string option;
+        [@option] [@key "TranscodingContainer"]
+    read_at_native_framerate : bool option;
+        [@option] [@key "ReadAtNativeFramerate"]
+    is_remote : bool option; [@option] [@key "IsRemote"]
+  }
+  [@@deriving jsont]
+
+  type response = {
+    media_sources : media_source_info list; [@key "MediaSources"]
+    play_session_id : string option; [@option] [@key "PlaySessionId"]
+    error_code : string option; [@option] [@key "ErrorCode"]
+    error_message : string option; [@option] [@key "ErrorMessage"]
+  }
+  [@@deriving jsont]
+
+  let method' = Post
+  let endpoint { item_id } = [ "Items"; item_id; "PlaybackInfo" ]
+end
+
 (* Forward declaration to be filled by the app *)
 let session_uuid = ref None
 let set_session_uuid s = session_uuid := Some s
@@ -355,21 +459,25 @@ let authorization ?token () =
      Version=\"0.1\"%s"
     session_uuid token
 
+(** [uri_of_endpoint ~base_url segments] appends an endpoint's path segments to
+    [base_url], preserving any path prefix the server is hosted under. *)
+let uri_of_endpoint ~base_url segments =
+  let base_uri = Uri.v (Jstr.v base_url) in
+  let base_path_segments = Result.get_exn @@ Uri.path_segments base_uri in
+  let endpoint_path_segments = List.map ~f:Jstr.v segments in
+  let path_segments =
+    if Equal.poly base_path_segments [ Jstr.empty ] then endpoint_path_segments
+    else List.concat [ base_path_segments; endpoint_path_segments ]
+  in
+  Uri.with_path_segments base_uri path_segments |> Result.get_exn
+
 let request (type pp p r) ~base_url ?token ?headers
     (module Q : Query
       with type path_params = pp
        and type params = p
        and type response = r) (params : p) (path_params : pp) : r Fut.or_error =
   let open Brr_io.Fetch in
-  let base_uri = Uri.v (Jstr.v base_url) in
-  let base_path_segments = Result.get_exn @@ Uri.path_segments base_uri in
-  let endpoint_path_segments = List.map ~f:Jstr.v (Q.endpoint path_params) in
-  let path_segments =
-    if Equal.poly base_path_segments [ Jstr.empty ] then endpoint_path_segments
-    else List.concat [ base_path_segments; endpoint_path_segments ]
-  in
-  let uri = Uri.with_path_segments base_uri path_segments in
-  let uri = Result.get_exn uri in
+  let uri = uri_of_endpoint ~base_url (Q.endpoint path_params) in
   let authorization = authorization ?token () in
   let headers =
     Headers.of_assoc ?init:headers
