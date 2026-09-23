@@ -58,6 +58,7 @@ let prepare (state : ('layout, 'data, 'error) state) ~total_items =
   let () = state.cache <- new_cache () in
   if state.table_length <> total_items then begin
     state.table_length <- total_items;
+    Hashtbl.clear state.row_index;
     let i = ref 0 in
     let current_row = ref (Lwd_table.first state.table) in
     while Option.is_some !current_row || !i <= total_items - 1 do
@@ -158,6 +159,7 @@ let load_or_bump_in_cache (state : ('layout, 'data, 'error) state) ~fetch rows =
 
 let update_visible_rows state fetch =
   let first, lenght = compute_visible_rows state.dom in
+  let lenght = min lenght (max 0 (state.table_length - first)) in
   let visible_rows = List.init ~len:lenght ~f:(fun i -> first + i) in
   let visible_rows =
     List.filter_map
