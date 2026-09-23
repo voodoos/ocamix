@@ -23,18 +23,27 @@ let fut_of_array (fs : 'a Fut.t array) : 'a array Fut.t =
   Obj.magic @@ fut @@ Jv.Promise.bind all to_array
 
 module Worker () = struct
-  let last_view : (int * Db.Generic_schema.Track.Key.t array) ref =
-    ref (-1, [||])
-
   let view_memo : (int, Tracks_store.Primary_key.t array) Hashtbl.t =
     Hashtbl.create 64
 
-  let invalidate_cache () = Hashtbl.reset view_memo
+  let view_memo_order : int Queue.t = Queue.create ()
+  let view_memo_max = 64
+
+  let memoize_view hash keys =
+    if not (Hashtbl.mem view_memo hash) then begin
+      if Queue.length view_memo_order >= view_memo_max then
+        Option.iter (Hashtbl.remove view_memo) (Queue.take_opt view_memo_order);
+      Queue.add hash view_memo_order;
+      Hashtbl.add view_memo hash keys
+    end
+
+  let invalidate_cache () =
+    Hashtbl.reset view_memo;
+    Queue.clear view_memo_order
 
   let check_db idb source =
     let server_id, source = source in
     let report status =
-      last_view := (-1, [||]);
       dispatch_event Servers_status_update (server_id, status)
     in
     Db.Sync.check_and_sync ~report ~source idb
@@ -61,6 +70,75 @@ module Worker () = struct
       | None_of none_of ->
           acc && (Int.Set.is_empty none_of || Int.Set.disjoint elements none_of))
 
+  (* The filters are compiled once for the whole scan, instead of being
+     interpreted again for each of the library's tracks. A [None] field means
+     "accepts everything". *)
+  type compiled_filters = {
+    collections : (int list -> bool) option;
+    name : (string -> bool) option;
+    genres : (Int.Set.t -> bool) option;
+    artists : (Int.Set.t -> bool) option;
+  }
+
+  let no_filter =
+    { collections = None; name = None; genres = None; artists = None }
+
+  (* Conjunction, so that repeating a filter kind keeps the [&&] semantics. *)
+  let both current f =
+    match current with
+    | None -> Some f
+    | Some current -> Some (fun x -> current x && f x)
+
+  let compile_filters ~src_views filters =
+    (* A selection made only of [All] accepts everything. *)
+    let accepts_all = List.for_all ~f:(Equal.poly Db.View.Selection.All) in
+    let collections =
+      match src_views with
+      | Db.View.Selection.All -> None
+      | One_of src_views ->
+          Some
+            (fun collections ->
+              List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
+      | None_of _ -> failwith "not implemented"
+    in
+    List.fold_left filters ~init:{ no_filter with collections }
+      ~f:(fun acc -> function
+      | Db.View.Search "" -> acc
+      | Search sub ->
+          let pattern = String.Find.compile (String.lowercase_ascii sub) in
+          let matches name =
+            String.Find.find ~pattern (String.lowercase_ascii name) >= 0
+          in
+          { acc with name = both acc.name matches }
+      | Genres filter when accepts_all filter -> acc
+      | Genres filter ->
+          { acc with genres = both acc.genres (match_filter ~filter) }
+      | Artists filter when accepts_all filter -> acc
+      | Artists filter ->
+          { acc with artists = both acc.artists (match_filter ~filter) })
+
+  let keep filters
+      {
+        Db.Generic_schema.Track.Key.name;
+        genres;
+        artists;
+        album_artists;
+        collections;
+        _;
+      } =
+    let test field value =
+      match field with None -> true | Some f -> f value
+    in
+    test filters.collections collections
+    && test filters.name name
+    && (match filters.genres with
+      | None -> true
+      | Some f -> f (Int.Set.of_list genres))
+    &&
+    match filters.artists with
+    | None -> true
+    | Some f -> f (Int.Set.add_list (Int.Set.of_list artists) album_artists)
+
   let get_view_keys store
       ({ Db.View.kind = _; src_views; sort; filters } as req) =
     (* todo: staged memoization + specialized queries using indexes *)
@@ -72,41 +150,8 @@ module Worker () = struct
       Console.log
         [ "Get all keys "; Performance.now_ms G.performance -. n; " ms" ];
       let n = Performance.now_ms G.performance in
-      let keys =
-        match src_views with
-        | All -> all_keys
-        | One_of src_views ->
-            Array.filter all_keys
-              ~f:(fun { Db.Generic_schema.Track.Key.collections; _ } ->
-                List.exists collections ~f:(fun v -> List.memq v ~set:src_views))
-        | None_of _ -> failwith "not implemented"
-      in
-      let keys =
-        Array.filter keys
-          ~f:(fun
-              {
-                Db.Generic_schema.Track.Key.name;
-                Db.Generic_schema.Track.Key.genres;
-                Db.Generic_schema.Track.Key.artists;
-                Db.Generic_schema.Track.Key.album_artists;
-                _;
-              }
-            ->
-            let genres = Int.Set.of_list genres in
-            let artists =
-              let track = Int.Set.of_list artists in
-              Int.Set.add_list track album_artists
-            in
-            List.fold_left filters ~init:true ~f:(fun acc -> function
-              | Db.View.Search "" -> true
-              | Search sub ->
-                  let sub = String.lowercase_ascii sub in
-                  let pattern = String.Find.compile (Printf.sprintf "%s" sub) in
-                  let name = String.lowercase_ascii name in
-                  acc && String.Find.find ~pattern name >= 0
-              | Genres filter -> acc && match_filter ~filter genres
-              | Artists filter -> acc && match_filter ~filter artists))
-      in
+      let filters = compile_filters ~src_views filters in
+      let keys = Array.filter all_keys ~f:(keep filters) in
       Console.log
         [ "Filter took "; Performance.now_ms G.performance -. n; " ms" ];
       let n = Performance.now_ms G.performance in
@@ -127,7 +172,7 @@ module Worker () = struct
                 -> String.compare sna snb)
       in
       Console.log [ "Sort took "; Performance.now_ms G.performance -. n; " ms" ];
-      Hashtbl.add view_memo (Db.View.hash req) keys;
+      memoize_view (Db.View.hash req) keys;
       keys
 
   (* TODO there is no reason to delegate everything to the worker, only view
