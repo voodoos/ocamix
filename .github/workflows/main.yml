@@ -26,11 +26,11 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: Set up OCaml 4.14.x
+      - name: Set up OCaml 5.3
         uses: ocaml/setup-ocaml@v3
         with:
           # Version of the OCaml compiler to initialise
-          ocaml-compiler: 5.2.x
+          ocaml-compiler: 5.3.x
 
       - name: Install dependencies
         run: |
