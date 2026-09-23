@@ -251,17 +251,47 @@ module Worker () = struct
         (* This request is critical to virtual lists performances and should
            be as fast as possible. *)
         let view, indexes = params in
-        let* store = get_store (module Db.Stores.Tracks_store) () in
-        let* keys = get_view_keys store view.request in
+        let* keys =
+          let* store = get_store (module Tracks_store) () in
+          get_view_keys store view.request
+        in
+        let* idb = idb in
+        let transaction =
+          IDB.Database.transaction
+            [ (module Tracks_store); (module Albums_store) ]
+            ~mode:Readonly idb
+        in
+        let store, album_store =
+          ( IDB.Transaction.object_store (module Tracks_store) transaction,
+            IDB.Transaction.object_store (module Albums_store) transaction )
+        in
+        let albums = Hashtbl.create 64 in
+        let get_album album_id =
+          match Hashtbl.get albums album_id with
+          | Some album -> album
+          | None ->
+              let open Fut.Syntax in
+              let album =
+                let+ result =
+                  Albums_store.get album_id album_store |> IDB.Request.fut
+                in
+                match result with
+                | Ok album -> album
+                | Error err ->
+                    Console.error [ "Could not load album"; album_id; err ];
+                    None
+              in
+              Hashtbl.add albums album_id album;
+              album
+        in
         let open Fut.Syntax in
         let+ results =
           Array.map indexes ~f:(fun index ->
-              try
+              (* The view may have shrunk since the table asked for this row. *)
+              if index < 0 || index >= Array.length keys then Fut.return None
+              else
                 let key = keys.(index) in
-                let open Fut.Syntax in
-                let* result =
-                  Db.Stores.Tracks_store.get key store |> IDB.Request.fut
-                in
+                let* result = Tracks_store.get key store |> IDB.Request.fut in
                 match result with
                 | Ok None -> Fut.return None
                 | Error err ->
@@ -269,18 +299,12 @@ module Worker () = struct
                       [ "An error occured while loading item"; key; err ];
                     Fut.return None
                 | Ok (Some v) ->
-                    let* album_store = get_store (module Albums_store) () in
                     let+ album =
-                      Option.map2
-                        (fun album_id album_store ->
-                          Albums_store.get album_id album_store
-                          |> IDB.Request.fut_exn)
-                        v.album_id
-                        (Result.to_opt album_store)
-                      |> Option.value ~default:(Fut.return None)
+                      match v.album_id with
+                      | None -> Fut.return None
+                      | Some album_id -> get_album album_id
                     in
-                    Some (key, v, album)
-              with _ -> Fut.return None)
+                    Some (key, v, album))
           |> fut_of_array
         in
         Ok results
