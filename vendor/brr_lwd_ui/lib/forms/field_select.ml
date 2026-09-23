@@ -136,7 +136,11 @@ let make_multiple ?(persist = false) ?(at = [])
             let on_click =
               Elwd.handler Ev.click (fun _ -> Lwd.set state None)
             in
-            Elwd.button ~ev:[ `P on_click ] [ `P (El.txt' "X") ]
+            let on_focusin =
+              Elwd.handler Ev.focusin (fun ev ->
+                  Ev.stop_immediate_propagation ev)
+            in
+            Elwd.button ~ev:[ `P on_click; `P on_focusin ] [ `P (El.txt' "X") ]
           in
           List.concat [ label (); [ `R unselect_button ] ] |> Elwd.span ~at)
         checkboxes.value
