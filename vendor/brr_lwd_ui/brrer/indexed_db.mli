@@ -85,25 +85,41 @@ module Content_access
   module Content : Store_content_intf with type t = Content.t
   module Primary_key : Key with type t = Primary_key.t
 
+  type prev = t
+
   module Cursor : sig
     type t
 
     val key : t -> Key.t option
     val primary_key : t -> Primary_key.t option
-    val advance : int -> t -> t
+    val source : t -> prev
 
-    val continue : ?key:Primary_key.t -> t -> unit
+    val advance : int -> t -> t
+    (** Move the cursor forward from a specific amount. *)
+
+    val continue : ?key:Key.t -> t -> unit
     (** [continue t] advances the cursor to the next position along its
         direction, to the item whose key matches the optional key parameter.
         This will re-trigger the [on_success] event of the cursor's query. *)
+
+    val continue_primary_key : Key.t -> Primary_key.t -> t -> unit
+    (** Advances the cursor to the item whose key matches the key parameter as
+        well as whose primary key matches the primary key parameter.
+
+        A typical use case, is to resume the iteration where a previous cursor
+        has been closed, without having to compare the keys one by one.
+
+        This method is only valid for cursors coming from an index. Using it for
+        cursors coming from an object store will throw an error. *)
+
+    val delete : t -> unit Request.t
+    val update : Content.t -> t -> Key.t Request.t
   end
 
   module Cursor_with_value : sig
     include module type of Cursor
 
-    val value : t -> Content.t option
-    val delete : t -> unit Request.t
-    val update : Content.t -> t -> Primary_key.t Request.t
+    val value : t -> Content.t
   end
 
   val count : unit -> t -> int Request.t
@@ -113,7 +129,7 @@ module Content_access
   val get_key : Key.t -> t -> Primary_key.t option Request.t
   (* TODO: other parameters are possible *)
 
-  val get_all : t -> Content.t Array.t Request.t
+  val get_all : ?query:Key_range.t -> t -> Content.t Array.t Request.t
   (** [get_all] retrieves all objects that are inside the index. There is a
       performance cost associated with looking at the value property of a
       cursor, because the object is created lazily and [get_all] force the
@@ -141,6 +157,8 @@ module Content_access
     ?direction:Direction.t ->
     t ->
     Cursor_with_value.t option Request.t
+  (** Used for iterating through an object store by primary key with a cursor.
+  *)
 
   val open_key_cursor :
     ?query:Jv.t -> ?direction:Direction.t -> t -> Cursor.t option Request.t
