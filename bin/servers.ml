@@ -96,14 +96,9 @@ let ui_form () =
 
 let ui_status server =
   let status =
-    Lwd.map (Lwd.get server.status) ~f:(fun { status; sync_progress } ->
-        match (status, sync_progress) with
-        | In_sync, None -> El.txt' "Synchronized"
-        | _, Some { Db.Sync.total; remaining; jobs } ->
-            El.txt'
-            @@ Printf.sprintf "Sync in progress: %i/%i (%i jobs)"
-                 (total - remaining) total jobs
-        | _ -> El.txt' "Desynchronized")
+    Lwd.map (Lwd.get server.status) ~f:(fun report ->
+        let report_txt = Format.asprintf "%a" Db.Sync.pp_report report in
+        El.txt' report_txt)
   in
   status
 
