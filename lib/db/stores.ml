@@ -190,7 +190,7 @@ module Tracks_store =
          duration;
         |] ->
             let id =
-              match String.split_on_char ~by:' ' @@ Jv.to_string id with
+              match String.split_on_char ~sep:' ' @@ Jv.to_string id with
               | [ "J"; id ] -> Generic_schema.Id.Jellyfin id
               | _ -> assert false
             in

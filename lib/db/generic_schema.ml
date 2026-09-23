@@ -18,7 +18,7 @@ module Id = struct
   let to_string = function Jellyfin id -> "J " ^ id
 
   let of_string id =
-    match String.split_on_char ~by:' ' id with
+    match String.split_on_char ~sep:' ' id with
     | [ "J"; id ] -> Jellyfin id
     | _ -> assert false
 

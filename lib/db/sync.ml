@@ -167,7 +167,7 @@ let get_music_brainz_id external_urls =
   List.find_map external_urls ~f:(fun { Source.Api.Item.name; url } ->
       if String.equal_caseless "MusicBrainz" name then
         (* https://musicbrainz.org/artist/d2e06763-1035-4b1a-82c7-b7c08e06ba48 *)
-        String.split_on_char ~by:'/' url |> List.last_opt
+        String.split_on_char ~sep:'/' url |> List.last_opt
       else None)
 
 let store_artist store { Item.type_; name; id; external_urls; _ } =
@@ -276,8 +276,8 @@ let prepare_genres idb genre_items =
   in
   List.concat_map genre_items
     ~f:(fun ({ name; _ } : Source.Api.Item.genre_item) ->
-      String.split_on_char ~by:';' name
-      |> List.concat_map ~f:(String.split_on_char ~by:',')
+      String.split_on_char ~sep:';' name
+      |> List.concat_map ~f:(String.split_on_char ~sep:',')
       |> List.map ~f:(fun name ->
           let name = String.trim name in
           (name, canonicalize_string name))
@@ -582,14 +582,14 @@ let pool_iter ~parallelism ?(on_start = fun _ -> ()) ?(on_done = fun _ _ -> ())
   in
   let open Fut.Syntax in
   let+ _ =
-    List.init (min parallelism n) ~f:(fun _ -> worker ()) |> Fut.of_list
+    List.init ~len:(min parallelism n) ~f:(fun _ -> worker ()) |> Fut.of_list
   in
   !failures
 
 let pages_of_count ~collection_id ~view_id ~phase total =
   let size = page_size phase in
   List.init
-    ((total + size - 1) / size)
+    ~len:((total + size - 1) / size)
     ~f:(fun i ->
       let start_index = i * size in
       {

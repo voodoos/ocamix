@@ -158,7 +158,7 @@ let load_or_bump_in_cache (state : ('layout, 'data, 'error) state) ~fetch rows =
 
 let update_visible_rows state fetch =
   let first, lenght = compute_visible_rows state.dom in
-  let visible_rows = List.init lenght ~f:(fun i -> first + i) in
+  let visible_rows = List.init ~len:lenght ~f:(fun i -> first + i) in
   let visible_rows =
     List.filter_map
       ~f:(fun idx ->
