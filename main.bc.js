@@ -4465,7 +4465,7 @@ Q2(a){var
 b=a[1];return c2(rz(b,0,0,rw,[0,a[2],a[3]],0),function(a){return[0,b,a]})}function
 r5(a,b,c){return c2(Q2([0,a,b,c]),function(b){var
 c=b[2][3];return AI(function(a){return cl(a,bh([0,c,b]))},ep)})}var
-C=hJ(aL(qe(0,0,0,0,[0,1],0,0,[0,"https://cine.u31.fr"])),function(a,b){return[0,b,a[2],a[3]]}),s=hJ(aL(qe(0,0,0,0,[0,1],0,0,[0,"demo"])),function(a,b){return[0,a[1],b,a[3]]}),f=hJ(aL(FL(0,0,0,0,[0,0],0,0,0)),function(a,b){return[0,a[1],a[2],b]}),TH=[0,[2,0,[15,0]],"%s%a"];function
+C=hJ(aL(qe(0,0,0,0,[0,1],0,0,[0,"https://demo.jellyfin.org/stable"])),function(a,b){return[0,b,a[2],a[3]]}),s=hJ(aL(qe(0,0,0,0,[0,1],0,0,[0,"demo"])),function(a,b){return[0,a[1],b,a[3]]}),f=hJ(aL(FL(0,0,0,0,[0,0],0,0,0)),function(a,b){return[0,a[1],a[2],b]}),TH=[0,[2,0,[15,0]],"%s%a"];function
 TG(a,b){var
 c=b[2],b=TB(b[1]);return _(az(a)(TH),b,function(a,b){return zT(0,TE,a,b)},c)}var
 UF=[0,[0,0,0,0],a4(cJ([0,C,[0,s,[0,f,[0,hJ(aL(FM(0,0,0,[0,80,"Connect"])),function(a,b){return a}),0]]]]))];function
