@@ -45,7 +45,17 @@ type status =
   | Partial_fetch of { first_unfetched_key : int; last_source_item_key : int }
 [@@deriving jsont]
 
-type progress = { total : int; remaining : int; jobs : int } [@@deriving jsont]
+type count = {
+  mutable artists : int;
+  mutable albums : int;
+  mutable tracks : int;
+}
+[@@deriving jsont]
+
+let new_count () = { artists = 0; albums = 0; tracks = 0 }
+
+type progress = { total : count; processed : count; jobs : int }
+[@@deriving jsont]
 
 type report = { status : status; sync_progress : progress option }
 [@@deriving jsont]
@@ -65,8 +75,10 @@ let status_to_string = function
       Format.sprintf "Partial: last: %i unfetched: %i" first_unfetched_key
         first_unfetched_key
 
-let pp_progress fmt { total; remaining; jobs } =
-  Format.fprintf fmt "(%i/%i) [%i jobs]" remaining total jobs
+let pp_progress fmt { total; processed; jobs } =
+  Format.fprintf fmt ": %i/%i artists; %i/%i albums; %i/%i tracks [%i jobs]"
+    processed.artists total.artists processed.albums total.albums
+    processed.tracks total.tracks jobs
 
 let pp_report fmt { status; sync_progress } =
   let status = status_to_string status in
@@ -149,11 +161,7 @@ let update_collections source idb =
    It runs in three phases, artists, then albums, then tracks, because
    [sync_track] resolves a track's album through the [Albums_by_id] index: the
    albums have to be in the database before the first track is stored. The
-   recursive traversal used to guarantee that by visiting parents first.
-
-   Artists only appearing in the tags are resolved on demand by
-   [find_artists_idx]. TODO is that still the happening with the new "flat" sync
-   ? *)
+   recursive traversal used to guarantee that by visiting parents first. *)
 
 let get_music_brainz_id external_urls =
   List.find_map external_urls ~f:(fun { Source.Api.Item.name; url } ->
@@ -192,117 +200,16 @@ let find_artist_idx idb id =
   in
   match result with Ok idx -> idx | Error _ -> None
 
-let store_or_find_artist idb store ({ Item.id; _ } as artist) =
+(* Lookup artists from the db. They should all be present after the "Artists"
+   phase *)
+let find_artists_idx _source idb artist_items =
   let open Fut.Syntax in
-  let* result = store_artist store artist in
-  match result with
-  | Ok idx -> Fut.return (Some idx)
-  | Error _ -> find_artist_idx idb id
-
-(* Todo: that's okay for the prototype, but there are alternative to these global
-   tables:
-      - Thread a map through the folds
-      - Query the DB itself *)
-let artists_ids : (string, int option Fut.t) Hashtbl.t = Hashtbl.create 128
-
-let genres_memo : (string, (int, Jv.Error.t) Fut.result) Hashtbl.t =
-  Hashtbl.create 256
-
-(* Max size for a [find_artists_idx] query batch *)
-let artists_query_batch = 100
-
-(* Only album artists are accessible via the recursive traversal. Other artists
-   items have no parent and must be fetch specifically. *)
-let find_artists_idx source idb artist_items =
-  let open Fut.Syntax in
-  (* Some artists might already have been queried for, others not. Note that it
-     is important to preserve the order of the initial list. Order matters in
-     the original files metadata and hopefully Jellyfin preserves it. *)
-  let now_futures : (string, int option -> unit) Hashtbl.t =
-    Hashtbl.create 16
+  let+ all =
+    List.map
+      ~f:(fun ({ id; _ } : Item.artist_item) -> find_artist_idx idb id)
+      artist_items
+    |> Fut.of_list
   in
-  let future_artists =
-    List.map artist_items ~f:(fun ({ id; _ } : Item.artist_item) ->
-        match Hashtbl.get artists_ids id with
-        | Some fut -> fut
-        | None -> begin
-            let* result = find_artist_idx idb id in
-            match result with
-            | Some v -> Fut.return (Some v)
-            | None ->
-                let fut, set = Fut.create () in
-                let set v =
-                  (* We remove elements when set. That allows us to tracked stalled
-                 queries by looking at the remaining elements in the table. *)
-                  Hashtbl.remove now_futures id;
-                  set v
-                in
-                Hashtbl.add artists_ids id fut;
-                Hashtbl.add now_futures id set;
-                fut
-          end)
-  in
-  let () =
-    let todo = Hashtbl.keys_list now_futures in
-    if List.is_empty todo then ()
-    else
-      let open Source in
-      let user_id = source.auth_response.user.id in
-      let fetch_chunk ids =
-        let params =
-          {
-            Api.Items.ids;
-            parent_id = None;
-            user_id;
-            (* [ExternalUrls] carries the MusicBrainz id *)
-            fields = [ ExternalUrls ];
-            include_item_types = [ MusicArtist ];
-            start_index = None;
-            limit = None;
-            sort_order = None;
-            sort_by = [];
-            recursive = false;
-            enable_user_data = false;
-            enable_images = false;
-            enable_total_record_count = false;
-          }
-        in
-        let* result = query source (module Api.Items) params () in
-        match result with
-        | Ok { items; _ } ->
-            let transaction =
-              Database.transaction
-                [ (module Stores.Artists_store) ]
-                ~mode:Readwrite idb
-            in
-            let store =
-              Transaction.object_store (module Stores.Artists_store) transaction
-            in
-            List.map items ~f:(fun (artist : Item.t) ->
-                match Hashtbl.get now_futures artist.id with
-                | None -> Fut.return ()
-                | Some set ->
-                    let+ idx = store_or_find_artist idb store artist in
-                    if Option.is_none idx then
-                      Console.warn [ "Store artist not found:"; artist.name ];
-                    set idx)
-            |> Fut.of_list |> Fut.map ignore
-        | Error err ->
-            Console.error [ "Artists fetch failed: "; err ];
-            Fut.return ()
-      in
-      let chunks = List.chunks artists_query_batch todo in
-      (* Invalidate not found artists. *)
-      Fut.await
-        (List.map chunks ~f:fetch_chunk |> Fut.of_list)
-        (fun _ ->
-          Hashtbl.iter
-            (fun v set ->
-              Console.error [ "Artist not found: "; v ];
-              set None)
-            now_futures)
-  in
-  let+ all = Fut.of_list future_artists in
   List.filter_map ~f:Fun.id all
 
 let sync_artists ~source:_ idb items : (unit, Jv.Error.t) Fut.result =
@@ -314,25 +221,23 @@ let sync_artists ~source:_ idb items : (unit, Jv.Error.t) Fut.result =
     Transaction.object_store (module Stores.Artists_store) transaction
   in
   List.fold_left items ~init:(Fut.ok ()) ~f:(fun acc -> function
-    | { Item.type_ = MusicArtist; name; id; _ } as artist -> (
+    | { Item.type_ = MusicArtist; name; _ } as artist ->
         let open Fut.Syntax in
         let* result = store_artist store artist in
-        match result with
-        | Error error ->
+        Result.iter_err
+          (fun error ->
             (* This happens when the item is already in the database *)
             (* TODO: It would be cleaner to check for dups before inserting.
                Especially since none of the current indexes clearly states what's a
                dup [<> musicbrainz id || <> jellyfin id] *)
             Console.warn [ "Could not add artist into the db: "; name ];
-            Console.warn [ Jv.Error.message error ];
-            (* Is the artists already stores ? *)
-            let* existing = find_artist_idx idb id in
-            Hashtbl.add artists_ids id (Fut.return existing);
-            acc
-        | Ok idx ->
-            Hashtbl.add artists_ids id (Fut.return (Some idx));
-            acc)
+            Console.warn [ Jv.Error.message error ])
+          result;
+        acc
     | _ -> failwith "Not an artist")
+
+let genres_memo : (string, (int, Jv.Error.t) Fut.result) Hashtbl.t =
+  Hashtbl.create 256
 
 let prepare_genres idb genre_items =
   let get_or_set_genre (name, canon) =
@@ -709,6 +614,12 @@ let get_db_track_count idb ~collection_id =
       if List.exists ~f:(Int.equal collection_id) collections then acc + 1
       else acc)
 
+let count_job count job =
+  match job.phase with
+  | Artists -> count.artists <- job.count + count.artists
+  | Albums -> count.albums <- job.count + count.albums
+  | Tracks -> count.tracks <- job.count + count.tracks
+
 let sync_v2 ~report ~(source : Source.connexion) idb =
   let open Fut.Result_syntax in
   Console.info [ "Syncing database" ];
@@ -764,13 +675,13 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
     |> Fut.of_list |> Fut.map Result.flatten_l
     |> Fut.map (Result.map List.concat)
   in
-  let total = List.fold_left jobs ~init:0 ~f:(fun acc job -> acc + job.count) in
-  let processed = ref 0 in
+  let total = new_count () in
+  let () = List.iter jobs ~f:(count_job total) in
+  let processed = new_count () in
   let running_jobs = ref 0 in
   let report_progress () =
-    if total > 0 then
-      report
-        (Some { total; remaining = total - !processed; jobs = !running_jobs })
+    if total.artists + total.albums + total.tracks > 0 then
+      report (Some { total; processed; jobs = !running_jobs })
   in
   let run_phase phase =
     let phase_jobs =
@@ -784,7 +695,7 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
           report_progress ())
         ~on_done:(fun job _ ->
           decr running_jobs;
-          processed := !processed + job.count;
+          count_job processed job;
           report_progress ())
         ~f:(sync_page ~source ~idb) phase_jobs
     in
@@ -797,7 +708,6 @@ let sync_v2 ~report ~(source : Source.connexion) idb =
   let* () = run_phase Albums in
   let+ () = run_phase Tracks in
   Hashtbl.reset genres_memo;
-  Hashtbl.reset artists_ids;
   Console.log [ "Sync finished. Added "; !count_tracks; " tracks" ]
 
 let check_and_sync ?(report = fun _ -> ()) ~source idb =

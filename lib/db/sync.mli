@@ -30,7 +30,14 @@ type status =
 
 val log_status : status -> unit
 
-type progress = { total : int; remaining : int; jobs : int }
+type count = {
+  mutable artists : int;
+  mutable albums : int;
+  mutable tracks : int;
+}
+[@@deriving jsont]
+
+type progress = { total : count; processed : count; jobs : int }
 
 type report = { status : status; sync_progress : progress option }
 [@@deriving jsont]
