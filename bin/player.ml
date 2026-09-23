@@ -21,20 +21,6 @@ type now_playing = {
 
 let now_playing = Lwd.var None
 
-(* see https://github.com/jellyfin/jellyfin/blob/4786901bb796c3e912f13b686571fde8d16f49c5/tests/Jellyfin.Model.Tests/Test%20Data/DeviceProfile-Firefox.json *)
-
-(** Playback issue with alac files (and probably all codecs non-natively
-    supported by the browser)
-    - Some clients (sonixd) give up, mpv based players work.
-    - The official client manage to play the file but gives a blob to the audio
-      player instead of a hls url as it does for other files.
-    - Jellyfin should use the device id and associated capabilities to
-      automatically transcode, shouldn't it ? *)
-let audio_url (server : DS.connexion) item_id =
-  Printf.sprintf
-    "%s/Audio/%s/universal?api_key=%s&audioCodec=aac&container=opus,mp3,aac,m4a,m4b,flac,wav,ogg&transcodingContainer=ts&transcodingProtocol=hls"
-    server.base_url item_id server.auth_response.access_token
-
 let idb =
   let idb, set_idb = Fut.create () in
   let _ = Db.with_idb @@ fun idb -> ignore (set_idb idb) in
@@ -63,6 +49,27 @@ let get_album_cover_link ~base_url ~size ~cover_type album =
   get_album_cover_link_opt ~base_url ~size ~cover_type album
   |> Option.value ~default:"track.png"
 
+let get_stream_url connexion ~name item_id =
+  let open Fut.Result_syntax in
+  let+ stream =
+    DS.audio_stream connexion
+      ~device_profile:(Lazy.force Browser_profile.t)
+      ~item_id
+    |> Fut.map (Result.map_err (fun e -> `Jv e))
+  in
+  match stream with
+  | None ->
+      Console.error [ "The server has no playable source for the track"; name ];
+      None
+  | Some { DS.url; play_method; _ } ->
+      Console.log
+        [
+          Format.asprintf "Now playing (%a):" DS.pp_play_method play_method;
+          name;
+          Jv.of_string url;
+        ];
+      Some url
+
 module Playback_controller (P : sig
   val fetch :
     View.ranged ->
@@ -79,48 +86,48 @@ struct
   let set_play_url playlist current_index =
     match playlist with
     | None -> Fut.ok ()
-    | Some playlist ->
+    | Some playlist -> (
         let open Db.Generic_schema in
         let open Fut.Result_syntax in
-        let+ item =
-          let+ result = P.fetch playlist [| current_index |] in
-          match result with
-          | [|
-           Some
-             Track.(
-               ( { Key.name; _ },
-                 { id = Jellyfin id; server_id = Jellyfin server_id; _ },
-                 album ) as item);
-          |] ->
-              let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
-              let connexion : DS.connexion = List.assq server_id servers in
-              let url = audio_url connexion id in
-              let () = Console.log [ "Now playing:"; name; Jv.of_string url ] in
-              let () =
-                let open Brr_io.Media.Session in
-                let session = of_navigator G.navigator in
-                let img_src =
-                  get_album_cover_link ~base_url:connexion.base_url ~size:500
-                    ~cover_type:Front album
+        let* result = P.fetch playlist [| current_index |] in
+        match result with
+        | [|
+         Some
+           Track.(
+             ( { Key.name; _ },
+               { id = Jellyfin id; server_id = Jellyfin server_id; _ },
+               album ) as item);
+        |] -> (
+            let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+            let connexion : DS.connexion = List.assq server_id servers in
+            let* stream = get_stream_url connexion ~name id in
+            match stream with
+            | None -> Fut.ok ()
+            | Some url ->
+                let () =
+                  let open Brr_io.Media.Session in
+                  let session = of_navigator G.navigator in
+                  let img_src =
+                    get_album_cover_link ~base_url:connexion.base_url ~size:500
+                      ~cover_type:Front album
+                  in
+                  let title = name in
+                  let album = "" in
+                  let artist = "" in
+                  let artwork =
+                    [
+                      {
+                        Media_metadata.src = img_src;
+                        sizes = "500x500";
+                        type' = "image/jpeg";
+                      };
+                    ]
+                  in
+                  set_metadata session { title; artist; album; artwork }
                 in
-                let title = name in
-                let album = "" in
-                let artist = "" in
-                let artwork =
-                  [
-                    {
-                      Media_metadata.src = img_src;
-                      sizes = "500x500";
-                      type' = "image/jpeg";
-                    };
-                  ]
-                in
-                set_metadata session { title; artist; album; artwork }
-              in
-              { item; url }
-          | _ -> raise Not_found
-        in
-        Lwd.set now_playing (Some item)
+                Lwd.set now_playing (Some { item; url });
+                Fut.ok ())
+        | _ -> raise Not_found)
 
   let reset_playlist playlist =
     ignore @@ set_play_url (Some playlist) 0;

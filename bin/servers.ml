@@ -57,8 +57,7 @@ module Connect_form = struct
     let url_field =
       field
         (Lwd.pure
-        @@ Field.text_input ~required:true
-             (Some "https://demo.jellyfin.org/stable"))
+        @@ Field.text_input ~required:true (Some "https://cine.u31.fr"))
         (fun t v -> { t with url = v })
     in
     let username_field =
