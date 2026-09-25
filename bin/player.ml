@@ -135,16 +135,7 @@ struct
     Lwd.set playstate.current_index 0
 
   let make idb () =
-    let audio_elt =
-      El.audio
-        ~at:
-          [
-            At.v (Jstr.v "controls") (Jstr.v "true");
-            At.v (Jstr.v "autoplay") (Jstr.v "true");
-            At.v (Jstr.v "preload") (Jstr.v "auto");
-          ]
-        []
-    in
+    let audio_elt, stream = Audio_player.make_player () in
     let set_src url = El.set_at (Jstr.v "src") (Some (Jstr.v url)) audio_elt in
     let _auto_play =
       (* We cannot rely on the main [Lwd] observer for playback control because
@@ -177,15 +168,22 @@ struct
       let open Brr_io.Media.Session in
       let session = of_navigator G.navigator in
       let set_position_state () =
-        let duration = El.prop (El.Prop.float (Jstr.v "duration")) audio_elt in
-        if not (Float.is_nan duration) then
-          let playback_rate =
-            El.prop (El.Prop.float (Jstr.v "playbackRate")) audio_elt
-          in
-          let position =
-            El.prop (El.Prop.float (Jstr.v "currentTime")) audio_elt
-          in
-          set_position_state ~duration ~playback_rate ~position session
+        Audio_stream.current_media_element stream
+        |> Option.iter @@ fun media ->
+           let duration =
+             Brr_io.Media.El.duration_s media
+             (* El.prop (El.Prop.float (Jstr.v "duration")) audio_elt *)
+           in
+           if not (Float.is_nan duration) then
+             let playback_rate =
+               Brr_io.Media.El.playback_rate media
+               (* El.prop (El.Prop.float (Jstr.v "playbackRate")) audio_elt *)
+             in
+             let position =
+               Brr_io.Media.El.current_time_s media
+               (* El.prop (El.Prop.float (Jstr.v "currentTime")) audio_elt *)
+             in
+             set_position_state ~duration ~playback_rate ~position session
       in
       set_action_handler session Action.next_track next;
       set_action_handler session Action.previous_track prev;

@@ -8,20 +8,40 @@ let fade_duration_ms = 5000.
 let fade_duration_s = fade_duration_ms /. 1000.
 
 type track_nodes = { source : Source.t; gain : Node.Gain.t }
+type state = [ `Playing | `Paused ]
+type playback_infos = { fade_out_start_time : float; track_duration_s : float }
+type progress = { current : float; total : float }
 
 type t = {
   audio_context : Context.t;
   mutable current : track_nodes option;
   mutable next : track_nodes option;
   queue : Source.t Queue.t;  (** the playlist *)
+  on_state_change : state -> unit;
+  on_progress : progress -> unit;
+  on_track_change : playback_infos -> unit;
 }
 
 let context t = Context.as_base t.audio_context
 let current_time t = context t |> Context.Base.current_time
 
-let init () =
+let current_media_element t =
+  Option.map (fun { source; _ } -> Source.media_element source) t.current
+
+let init ?on_progress ?on_state_change ?on_track_change () =
+  let on_progress = Option.value ~default:(Fun.const ()) on_progress in
+  let on_track_change = Option.value ~default:(Fun.const ()) on_track_change in
+  let on_state_change = Option.value ~default:(Fun.const ()) on_state_change in
   let audio_context = Context.create () in
-  { audio_context; current = None; next = None; queue = Queue.create () }
+  {
+    audio_context;
+    current = None;
+    next = None;
+    queue = Queue.create ();
+    on_progress;
+    on_track_change;
+    on_state_change;
+  }
 
 let prepare_next t =
   Console.log [ "Prepare next." ];
@@ -67,6 +87,7 @@ let rec start_playing t ~fade_in { source; gain } =
   let media = Source.media_element source in
   Console.log [ "Start playing "; Media_el.src media ];
   let+ () = Media_el.play media in
+  t.on_state_change `Playing;
   let track_duration_s = Media_el.duration_s media in
   let fade_duration_s = Float.min fade_duration_s (track_duration_s /. 2.) in
   let pgain = Node.Gain.gain gain in
@@ -75,16 +96,18 @@ let rec start_playing t ~fade_in { source; gain } =
     Console.log
       [ "Track duration:"; track_duration_s; "Fade in:"; fade_duration_s ]
   in
+  let threshold = track_duration_s -. fade_duration_s in
+  Console.log [ "Will crossfade in"; threshold ];
+  t.on_track_change { fade_out_start_time = threshold; track_duration_s };
   let _ =
-    let media = Source.media_element source in
-    let threshold = track_duration_s -. fade_duration_s in
-    Console.log [ "Will crossfade in"; threshold ];
     let listener = ref None in
     listener :=
       Some
         (Media_el.to_el media |> El.as_target
         |> Ev.listen Ev.timeupdate (fun _ev ->
             let media_current_time_s = Media_el.current_time_s media in
+            t.on_progress
+              { current = media_current_time_s; total = track_duration_s };
             if media_current_time_s > threshold then begin
               Option.iter
                 (fun next ->
@@ -134,7 +157,7 @@ let queue_song t url =
         [
           At.v (Jstr.v "controls") (Jstr.v "false");
           At.v (Jstr.v "autoplay") (Jstr.v "false");
-          At.v (Jstr.v "preload") (Jstr.v "auto");
+          At.v (Jstr.v "preload") (Jstr.v "true");
           At.src (Jstr.v url);
         ]
       []
@@ -149,10 +172,27 @@ let queue_song t url =
   in
   Queue.add source t.queue
 
+let pause t =
+  Option.iter
+    (fun { source; _ } ->
+      let media = Source.media_element source in
+      Media_el.pause media;
+      t.on_state_change `Paused)
+    t.current
+
 let resume t =
   match (t.current, t.next) with
-  | Some { source; _ }, _ -> Source.media_element source |> Media_el.play
+  | Some { source; _ }, _ ->
+      let+ () = Source.media_element source |> Media_el.play in
+      t.on_state_change `Playing
   | None, Some _ -> force_next t
   | None, None ->
       prepare_next t;
       force_next t
+
+let seek t time_s =
+  Option.iter
+    (fun { source; _ } ->
+      let media = Source.media_element source in
+      Media_el.set_current_time_s media time_s)
+    t.current

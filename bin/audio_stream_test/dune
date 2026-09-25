@@ -12,4 +12,5 @@
   brr-lwd-ui
   brr-lwd-ui.brrer
   lib
-  audio_stream))
+  audio_stream
+  audio_player))

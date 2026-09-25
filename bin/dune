@@ -16,4 +16,5 @@
   db
   blur_hashes_worker_api
   duration
-  containers-data))
+  containers-data
+  audio_player))
