@@ -83,130 +83,165 @@ module Playback_controller (P : sig
     Fut.result
 end) =
 struct
-  let set_play_url playlist current_index =
-    match playlist with
-    | None -> Fut.ok ()
-    | Some playlist -> (
-        let open Db.Generic_schema in
-        let open Fut.Result_syntax in
-        let* result = P.fetch playlist [| current_index |] in
-        match result with
-        | [|
-         Some
-           Track.(
-             ( { Key.name; _ },
-               { id = Jellyfin id; server_id = Jellyfin server_id; _ },
-               album ) as item);
-        |] -> (
-            let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
-            let connexion : DS.connexion = List.assq server_id servers in
-            let* stream = get_stream_url connexion ~name id in
-            match stream with
-            | None -> Fut.ok ()
-            | Some url ->
-                let () =
-                  let open Brr_io.Media.Session in
-                  let session = of_navigator G.navigator in
-                  let img_src =
-                    get_album_cover_link ~base_url:connexion.base_url ~size:500
-                      ~cover_type:Front album
-                  in
-                  let title = name in
-                  let album = "" in
-                  let artist = "" in
-                  let artwork =
-                    [
-                      {
-                        Media_metadata.src = img_src;
-                        sizes = "500x500";
-                        type' = "image/jpeg";
-                      };
-                    ]
-                  in
-                  set_metadata session { title; artist; album; artwork }
-                in
-                Lwd.set now_playing (Some { item; url });
-                Fut.ok ())
-        | _ -> raise Not_found)
+  type queued_track = { index : int; track : now_playing }
+
+  let playback_request : (View.ranged * int) option Lwd.var = Lwd.var None
+
+  let get_playable_track (playlist : View.ranged) index =
+    (* [index] is relative to the selected track. [item_count] includes the
+       skipped prefix, so use [View.item_count] to avoid indexing [order]
+       past its final element when playback reaches the playlist end. *)
+    if index < 0 || index >= View.item_count playlist.view then Fut.ok None
+    else
+      let open Db.Generic_schema in
+      let open Fut.Result_syntax in
+      let* result = P.fetch playlist [| index |] in
+      match result with
+      | [|
+       Some
+         Track.(
+           ( { Key.name; _ },
+             { id = Jellyfin id; server_id = Jellyfin server_id; _ },
+             _album ) as item);
+      |] ->
+          let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+          let connexion : DS.connexion = List.assq server_id servers in
+          let+ stream = get_stream_url connexion ~name id in
+          Option.map (fun url -> { item; url }) stream
+      | _ -> Fut.ok None
+
+  let set_current_track track =
+    let open Db.Generic_schema in
+    let open Track in
+    let { Key.name; _ }, { server_id = Jellyfin server_id; _ }, album =
+      track.item
+    in
+    Lwd.set now_playing (Some track);
+    let servers = Lwd_seq.to_list (Lwd.peek Servers.connexions) in
+    let connexion : DS.connexion = List.assq server_id servers in
+    let open Brr_io.Media.Session in
+    let session = of_navigator G.navigator in
+    let img_src =
+      get_album_cover_link ~base_url:connexion.base_url ~size:500
+        ~cover_type:Front album
+    in
+    let album = "" in
+    let artist = "" in
+    let artwork =
+      [
+        {
+          Media_metadata.src = img_src;
+          sizes = "500x500";
+          type' = "image/jpeg";
+        };
+      ]
+    in
+    set_metadata session { title = name; artist; album; artwork }
 
   let reset_playlist playlist =
-    ignore @@ set_play_url (Some playlist) 0;
     Lwd.set playstate.playlist (Some playlist);
-    Lwd.set playstate.current_index 0
+    Lwd.set playstate.current_index 0;
+    Lwd.set playback_request (Some (playlist, 0))
 
   let make idb () =
-    let audio_elt, stream = Audio_player.make_player () in
-    let set_src url = El.set_at (Jstr.v "src") (Some (Jstr.v url)) audio_elt in
-    let _auto_play =
-      (* We cannot rely on the main [Lwd] observer for playback control because
-         it is tied to the [requestAnimationFrames] callback. This prevent the
-         player to start playing the next song if the tab is in the background.
-      *)
-      let root = Lwd.observe (Lwd.get now_playing) in
-      Lwd.set_on_invalidate root (fun _ ->
-          match Lwd.quick_sample root with
-          | Some { url; _ } -> set_src url
-          | None -> ());
-      Lwd.quick_sample root |> ignore
+    let prepared_tracks : queued_track Queue.t = Queue.create () in
+    let next_track_index = ref 0 in
+    let generation = ref 0 in
+    let stream_ref : Audio_stream.t option ref = ref None in
+    let rec fill_prepared_tracks (playlist : View.ranged) request_generation
+        minimum on_ready =
+      if
+        request_generation = !generation
+        && Queue.length prepared_tracks < minimum
+        && !next_track_index < View.item_count playlist.view
+      then begin
+        let index = !next_track_index in
+        incr next_track_index;
+        Fut.await (get_playable_track playlist index) (function
+          | Error _ ->
+              fill_prepared_tracks playlist request_generation minimum on_ready
+          | Ok None ->
+              fill_prepared_tracks playlist request_generation minimum on_ready
+          | Ok (Some track) ->
+              if request_generation = !generation then begin
+                Queue.add { index; track } prepared_tracks;
+                Option.iter
+                  (fun stream -> Audio_stream.queue_song stream track.url)
+                  !stream_ref;
+                fill_prepared_tracks playlist request_generation minimum
+                  on_ready
+              end)
+      end
+      else if request_generation = !generation then on_ready ()
     in
-    let next () =
-      let playlist = Lwd.peek playstate.playlist in
-      let current_index = Lwd.peek playstate.current_index in
-      let next_index = current_index + 1 in
-      ignore @@ set_play_url playlist next_index;
-      Lwd.set playstate.current_index next_index
+    let on_track_started () =
+      match Queue.take_opt prepared_tracks with
+      | None -> ()
+      | Some { index; track } -> (
+          set_current_track track;
+          Lwd.set playstate.current_index index;
+          match Lwd.peek playstate.playlist with
+          | None -> ()
+          | Some playlist ->
+              fill_prepared_tracks playlist !generation 2 (fun () -> ()))
     in
+    let audio_controls, stream =
+      Audio_player.make_player ~on_track_change:on_track_started ()
+    in
+    stream_ref := Some stream;
+    let load_playlist playlist index =
+      incr generation;
+      let request_generation = !generation in
+      Audio_stream.reset stream;
+      Queue.clear prepared_tracks;
+      next_track_index := index;
+      Lwd.set playstate.playlist (Some playlist);
+      Lwd.set playstate.current_index index;
+      (* The stream promotes the first queued track to [current] and keeps the
+         following one ready for the crossfade. Queue one extra track so that
+         there are always two upcoming tracks available. *)
+      fill_prepared_tracks playlist request_generation 3 (fun () ->
+          ignore @@ Audio_stream.resume stream)
+    in
+    let _playback_requests =
+      (* Keep this observer independent from the main render loop: network
+         requests and audio preloading must continue while the tab is hidden. *)
+      let root = Lwd.observe (Lwd.get playback_request) in
+      let load () =
+        match Lwd.quick_sample root with
+        | None -> ()
+        | Some (playlist, index) -> load_playlist playlist index
+      in
+      Lwd.set_on_invalidate root (fun _ -> load ());
+      load ();
+      root
+    in
+    let next () = ignore @@ Audio_stream.force_next stream in
     let prev () =
-      let playlist = Lwd.peek playstate.playlist in
-      let current_index = Lwd.peek playstate.current_index in
-      let next_index = max 0 (current_index - 1) in
-      ignore @@ set_play_url playlist next_index;
-      Lwd.set playstate.current_index next_index
+      match Lwd.peek playstate.playlist with
+      | None -> ()
+      | Some playlist ->
+          let current_index = Lwd.peek playstate.current_index in
+          Lwd.set playback_request (Some (playlist, max 0 (current_index - 1)))
     in
-    let set_position_state =
+    let _set_position_state =
       (* Enable control from OS *)
       let open Brr_io.Media.Session in
       let session = of_navigator G.navigator in
       let set_position_state () =
         Audio_stream.current_media_element stream
         |> Option.iter @@ fun media ->
-           let duration =
-             Brr_io.Media.El.duration_s media
-             (* El.prop (El.Prop.float (Jstr.v "duration")) audio_elt *)
-           in
+           let duration = Brr_io.Media.El.duration_s media in
            if not (Float.is_nan duration) then
-             let playback_rate =
-               Brr_io.Media.El.playback_rate media
-               (* El.prop (El.Prop.float (Jstr.v "playbackRate")) audio_elt *)
-             in
-             let position =
-               Brr_io.Media.El.current_time_s media
-               (* El.prop (El.Prop.float (Jstr.v "currentTime")) audio_elt *)
-             in
+             let playback_rate = Brr_io.Media.El.playback_rate media in
+             let position = Brr_io.Media.El.current_time_s media in
              set_position_state ~duration ~playback_rate ~position session
       in
       set_action_handler session Action.next_track next;
       set_action_handler session Action.previous_track prev;
       set_position_state
     in
-    let on_error ev =
-      Ev.stop_immediate_propagation ev;
-      Ev.prevent_default ev;
-      Console.log
-        [
-          "A playback error happened. This is probably due to a codec \
-           unsupported by the browser.";
-          ev;
-        ];
-      next ()
-    in
     let next _ = next () in
-    let () =
-      let target = El.as_target audio_elt in
-      ignore @@ Ev.listen Ev.ended next target;
-      ignore @@ Ev.listen Ev.error on_error target;
-      ignore @@ Ev.listen Ev.play (fun _ -> set_position_state ()) target
-    in
     let btn_next =
       Brr_lwd_ui.Button.v ~ev:[ `P (Elwd.handler Ev.click next) ] (`P "NEXT")
     in
@@ -347,5 +382,5 @@ struct
         add At.Name.class' (`P "player-wrapper") []
         |> add At.Name.class' (`P "box"))
     in
-    Elwd.div ~at [ `R now_playing; `P audio_elt; `R btn_next ]
+    Elwd.div ~at [ `R now_playing; `R audio_controls; `R btn_next ]
 end
