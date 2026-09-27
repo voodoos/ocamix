@@ -45,7 +45,15 @@ jobs:
           rm -f web/.gitignore
           rm -f web/yjs/.gitignore
 
-      - name: Deploy 🚀
+      - name: Deploy main 🚀
         uses: JamesIves/github-pages-deploy-action@v4
+        if: github.event_name == 'push'
         with:
           folder: web # The folder the action should deploy.
+
+      - name: Deploy PR preview 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.event_name == 'pull_request'
+        with:
+          folder: web
+          target-folder: ${{ github.event.pull_request.number }}
