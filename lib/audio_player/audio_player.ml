@@ -62,7 +62,7 @@ let timeline { stream; progress; playback_infos; _ } =
                   Elwd.handler Ev.click @@ fun _ ->
                   let time_s =
                     Float.of_int i
-                    *. (track_duration_s /. Float.of_int ticks_number)
+                    *. (track_duration_s /. Float.of_int (ticks_number - 1))
                   in
                   Console.log [ "Seek"; time_s ];
                   Audio_stream.seek stream time_s)
@@ -126,16 +126,20 @@ let controls state =
     (* TODO play/pause on space ~ev:[ `R (play_pause Ev.keyup) ] *)
     [ `R (play_btn state); `R (timeline state); `R (timer state) ]
 
-let make_player () =
+let make_player ?on_track_change () =
   let status = Lwd.var `Paused in
   let playback_infos =
     Lwd.var { Audio_stream.fade_out_start_time = 0.; track_duration_s = 0. }
   in
   let progress = Lwd.var { Audio_stream.current = 0.; total = 0. } in
+  let update_playback_infos playback_info =
+    Lwd.set playback_infos playback_info;
+    Option.iter (fun callback -> callback ()) on_track_change
+  in
   let stream =
     Audio_stream.init ~on_progress:(Lwd.set progress)
-      ~on_track_change:(Lwd.set playback_infos)
-      ~on_state_change:(Lwd.set status) ()
+      ~on_track_change:update_playback_infos ~on_state_change:(Lwd.set status)
+      ()
   in
   let state = { stream; status; playback_infos; progress } in
   (controls state, state.stream)

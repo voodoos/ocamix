@@ -17,6 +17,8 @@ type t = {
   mutable current : track_nodes option;
   mutable next : track_nodes option;
   queue : Source.t Queue.t;  (** the playlist *)
+  mutable transition_in_progress : bool;
+  mutable transition_id : int;
   on_state_change : state -> unit;
   on_progress : progress -> unit;
   on_track_change : playback_infos -> unit;
@@ -38,6 +40,8 @@ let init ?on_progress ?on_state_change ?on_track_change () =
     current = None;
     next = None;
     queue = Queue.create ();
+    transition_in_progress = false;
+    transition_id = 0;
     on_progress;
     on_track_change;
     on_state_change;
@@ -68,6 +72,31 @@ let stop_and_disconnect_current t =
       Source.media_element source |> Media_el.pause;
       Node.disconnect (Node.Gain.as_node gain))
     t.current
+
+let reset t =
+  t.transition_id <- t.transition_id + 1;
+  t.transition_in_progress <- false;
+  stop_and_disconnect_current t;
+  Option.iter
+    (fun { source; gain } ->
+      Source.media_element source |> Media_el.pause;
+      Node.disconnect (Node.Gain.as_node gain))
+    t.next;
+  Queue.clear t.queue;
+  t.current <- None;
+  t.next <- None;
+  t.on_state_change `Paused
+
+let start_transition t =
+  t.transition_id <- t.transition_id + 1;
+  t.transition_in_progress <- true;
+  t.transition_id
+
+let finish_transition t id f =
+  if id = t.transition_id then begin
+    t.transition_in_progress <- false;
+    f ()
+  end
 
 let cancel_and_hold t param =
   let time = current_time t in
@@ -114,14 +143,27 @@ let rec start_playing t ~fade_in { source; gain } =
                   (* TODO The correct thing to do would be to know the duration
                      of the next track early to not start the fade if it is
                      shorter than it. *)
-                  Ev.unlisten (Option.get !listener);
-                  let duration_s = track_duration_s -. media_current_time_s in
-                  Console.log [ "Start crossfade: fade out:"; duration_s ];
-                  ramp_param t ~fade:true ~duration_s pgain 0.;
-                  ignore
-                  @@ let+ () = start_playing t ~fade_in:true next in
-                     t.current <- t.next;
-                     prepare_next t)
+                  if not t.transition_in_progress then begin
+                    Ev.unlisten (Option.get !listener);
+                    let id = start_transition t in
+                    let duration_s = track_duration_s -. media_current_time_s in
+                    Console.log [ "Start crossfade: fade out:"; duration_s ];
+                    ramp_param t ~fade:true ~duration_s pgain 0.;
+                    let playing = start_playing t ~fade_in:true next in
+                    Fut.await playing (function
+                      | Ok () ->
+                          finish_transition t id (fun () ->
+                              t.current <- Some next;
+                              prepare_next t)
+                      | Error error ->
+                          finish_transition t id (fun () ->
+                              Console.error
+                                [
+                                  "Unable to start crossfade track:";
+                                  Jv.Error.message error;
+                                ];
+                              ramp_param t ~fade:false ~duration_s:0. pgain 1.))
+                  end)
                 t.next
             end))
   in
@@ -137,17 +179,26 @@ let rec start_playing t ~fade_in { source; gain } =
 
 let force_next t =
   Console.log [ "Force next" ];
-  (* Stop the current playing track if any *)
-  (* TODO option to crossfade *)
-  stop_and_disconnect_current t;
-  (* Promote the next source *)
-  t.current <- t.next;
-  (* Start it *)
-  let+ () =
-    Option.fold t.current ~none:(Fut.ok ())
-      ~some:(start_playing t ~fade_in:false)
-  in
-  prepare_next t
+  if t.transition_in_progress then Fut.ok ()
+  else
+    match t.next with
+    | None -> Fut.ok ()
+    | Some next ->
+        (* Do not accept another skip until [play] settles. Otherwise quick
+           clicks promote the same [next] node several times before
+           [prepare_next] can replace it. *)
+        let id = start_transition t in
+        stop_and_disconnect_current t;
+        t.current <- Some next;
+        let playing = start_playing t ~fade_in:false next in
+        Fut.await playing (function
+          | Ok () -> finish_transition t id (fun () -> prepare_next t)
+          | Error error ->
+              finish_transition t id (fun () ->
+                  Console.error
+                    [ "Unable to start next track:"; Jv.Error.message error ];
+                  t.current <- None));
+        playing
 
 let queue_song t url =
   Console.log [ "Queue song:"; url ];
@@ -158,10 +209,16 @@ let queue_song t url =
           At.v (Jstr.v "controls") (Jstr.v "false");
           At.v (Jstr.v "autoplay") (Jstr.v "false");
           At.v (Jstr.v "preload") (Jstr.v "true");
-          At.src (Jstr.v url);
+          (* This must be set before [src]. A media element loaded without a
+             CORS mode may play normally, but Web Audio is required to silence
+             it when it is passed to [createMediaElementSource]. The Jellyfin
+             URLs carry their API key in the query string, so no cookies are
+             needed. *)
+          At.v (Jstr.v "crossorigin") (Jstr.v "anonymous");
         ]
       []
   in
+  El.set_at (Jstr.v "src") (Some (Jstr.v url)) audio_el;
   let context = Context.as_base t.audio_context in
   let source =
     let el = Media_el.of_el audio_el in
@@ -170,7 +227,8 @@ let queue_song t url =
     let opts = Source.opts ~el () in
     Source.create context ~opts
   in
-  Queue.add source t.queue
+  Queue.add source t.queue;
+  if Option.is_some t.current && Option.is_none t.next then prepare_next t
 
 let pause t =
   Option.iter
