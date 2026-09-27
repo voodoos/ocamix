@@ -1,0 +1,6 @@
+(copy_files
+ (alias default)
+ (mode
+  (promote (until-clean)))
+ (files
+  ../../vendor/brr_lwd_ui/examples/virtual-table/{main.bc.js,index.html,brr_lwd_ui.css}))

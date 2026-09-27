@@ -1,0 +1,118 @@
+body {
+    margin: 0;
+}
+
+.flex {
+    display: flex;
+    flex-direction: column;
+    /* height: 100vh; */
+    padding: 1rem;
+}
+
+.flex .table {
+    flex-grow: 1;
+}
+
+.flex .flex {
+    margin-top: 2rem;
+    height: 66vh;
+    flex-grow: 1;
+}
+
+/* ZE Table */
+
+.cell {
+    position: relative;
+}
+
+.cell-edit-btn {
+    position: absolute;
+    right: 1rem;
+}
+
+.cell-edit-overlay {
+    display: none;
+
+    &.visible {
+        display: flex;
+    }
+
+    align-items: center;
+
+    position: absolute;
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    height: 100%;
+}
+
+.row-actions {
+    position: absolute;
+    left: 0;
+    /* top: 2em; */
+    bottom: 0;
+}
+
+.lwdui-virtual-table-row {
+    position: relative;
+}
+
+.lwdui-lazy-table .lwdui-virtual-table-row>div,
+.cell-edit-overlay {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+}
+
+.inline-row-form {
+    display: flex;
+    flex-direction: row;
+}
+
+.lwdui-virtual-table-row .cell:has(.ql-container) {
+    padding: 0;
+}
+
+.lwdui-virtual-table-row .ql-container {
+    width: 100%;
+    height: 100%;
+}
+
+.lwdui-virtual-table-row .ql-toolbar {
+    border: 0;
+    padding: 0;
+    height: 100%;
+
+    & .ql-formats {
+        display: flex;
+        flex-direction: column;
+        margin-right: 0
+        ;
+    }
+}
+
+.p2p_status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-evenly;
+    width: 3rem;
+
+    border-radius: 2rem;
+    & .p2p_status_icon {
+        font-size: 2.5rem;
+        line-height: 2.1rem;
+        height: 2rem;
+
+        &.red {
+            color: red;
+        }
+        &.orange {
+            color: orange;
+        }
+        &.green {
+            color: green;
+        }
+    }
+}

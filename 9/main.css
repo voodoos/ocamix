@@ -1,0 +1,33 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Bungee+Spice&display=swap'); */
+
+body {
+    font-family: 'Bungee Spice', sans-serif;
+    color: #ffc334;
+    isolation: isolate;
+}
+
+a {
+    color: inherit;
+}
+
+.display-none {
+    display: none;
+}
+
+.on {
+    background-color: red;
+}
+
+.item-list>.lwdui-lazy-table {
+    height: auto;
+    flex-grow: 1;
+}
+
+#main-layout {
+    width: 100vw;
+    height: 100vh;
+}
+
+.ap-controls {
+    flex-grow: 1;
+}
