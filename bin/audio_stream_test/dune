@@ -1,5 +1,5 @@
 (executable
- (name main)
+ (name index)
  (modes js)
  (js_of_ocaml
   (flags
@@ -12,9 +12,5 @@
   brr-lwd-ui
   brr-lwd-ui.brrer
   lib
-  data_source
-  db
-  blur_hashes_worker_api
-  duration
-  containers-data
+  audio_stream
   audio_player))

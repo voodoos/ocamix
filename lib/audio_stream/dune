@@ -1,0 +1,3 @@
+(library
+ (name audio_stream)
+ (libraries brr))
