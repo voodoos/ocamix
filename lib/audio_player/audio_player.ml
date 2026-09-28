@@ -4,7 +4,7 @@ open Brr_lwd
 
 type state = {
   stream : Audio_stream.t;
-  status : Audio_stream.state Lwd.var;
+  status : Audio_stream.status Lwd.var;
   playback_infos : Audio_stream.playback_infos Lwd.var;
   progress : Audio_stream.progress Lwd.var;
 }
@@ -138,7 +138,7 @@ let make_player ?on_track_change () =
   in
   let stream =
     Audio_stream.init ~on_progress:(Lwd.set progress)
-      ~on_track_change:update_playback_infos ~on_state_change:(Lwd.set status)
+      ~on_track_change:update_playback_infos ~on_status_change:(Lwd.set status)
       ()
   in
   let state = { stream; status; playback_infos; progress } in

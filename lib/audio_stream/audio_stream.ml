@@ -8,7 +8,7 @@ let fade_duration_ms = 5000.
 let fade_duration_s = fade_duration_ms /. 1000.
 
 type track_nodes = { source : Source.t; gain : Node.Gain.t }
-type state = [ `Playing | `Paused ]
+type status = [ `Playing | `Paused ]
 type playback_infos = { fade_out_start_time : float; track_duration_s : float }
 type progress = { current : float; total : float }
 
@@ -19,7 +19,7 @@ type t = {
   queue : Source.t Queue.t;  (** the playlist *)
   mutable transition_in_progress : bool;
   mutable transition_id : int;
-  on_state_change : state -> unit;
+  on_status_change : status -> unit;
   on_progress : progress -> unit;
   on_track_change : playback_infos -> unit;
 }
@@ -30,10 +30,12 @@ let current_time t = context t |> Context.Base.current_time
 let current_media_element t =
   Option.map (fun { source; _ } -> Source.media_element source) t.current
 
-let init ?on_progress ?on_state_change ?on_track_change () =
+let init ?on_progress ?on_status_change ?on_track_change () =
   let on_progress = Option.value ~default:(Fun.const ()) on_progress in
   let on_track_change = Option.value ~default:(Fun.const ()) on_track_change in
-  let on_state_change = Option.value ~default:(Fun.const ()) on_state_change in
+  let on_status_change =
+    Option.value ~default:(Fun.const ()) on_status_change
+  in
   let audio_context = Context.create () in
   {
     audio_context;
@@ -44,7 +46,7 @@ let init ?on_progress ?on_state_change ?on_track_change () =
     transition_id = 0;
     on_progress;
     on_track_change;
-    on_state_change;
+    on_status_change;
   }
 
 let prepare_next t =
@@ -85,7 +87,7 @@ let reset t =
   Queue.clear t.queue;
   t.current <- None;
   t.next <- None;
-  t.on_state_change `Paused
+  t.on_status_change `Paused
 
 let start_transition t =
   t.transition_id <- t.transition_id + 1;
@@ -116,7 +118,7 @@ let rec start_playing t ~fade_in { source; gain } =
   let media = Source.media_element source in
   Console.log [ "Start playing "; Media_el.src media ];
   let+ () = Media_el.play media in
-  t.on_state_change `Playing;
+  t.on_status_change `Playing;
   let track_duration_s = Media_el.duration_s media in
   let fade_duration_s = Float.min fade_duration_s (track_duration_s /. 2.) in
   let pgain = Node.Gain.gain gain in
@@ -235,14 +237,14 @@ let pause t =
     (fun { source; _ } ->
       let media = Source.media_element source in
       Media_el.pause media;
-      t.on_state_change `Paused)
+      t.on_status_change `Paused)
     t.current
 
 let resume t =
   match (t.current, t.next) with
   | Some { source; _ }, _ ->
       let+ () = Source.media_element source |> Media_el.play in
-      t.on_state_change `Playing
+      t.on_status_change `Playing
   | None, Some _ -> force_next t
   | None, None ->
       prepare_next t;
