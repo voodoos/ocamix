@@ -1,0 +1,88 @@
+.ap-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  height: 4rem;
+  color: white;
+
+  >div {
+    padding: 0.25rem;
+  }
+}
+
+.ap-timer,
+.ap-play-btn {
+  >button {
+    width: 1.5rem;
+    border: none;
+    border-radius: 4px;
+    background-color: whitesmoke;
+    vertical-align: sub;
+  }
+
+  >span {
+    vertical-align: sub;
+  }
+}
+
+
+.ap-timeline {
+  overflow: hidden;
+  display: flex;
+
+  height: 100%;
+
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+
+  flex-grow: 1;
+
+  >div {
+    display: flex;
+    flex-grow: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+
+    height: 90%;
+
+    >div {
+      width: 2px;
+      height: 50%;
+      background-color: white;
+      border-radius: 1px;
+
+      transition: all 0.125s ease-out;
+    }
+
+    &.active~div div {
+      background-color: gray;
+    }
+
+    &.fade-out~div div {
+      background-color: black;
+    }
+
+    &.active,
+    &:hover {
+      >div {
+        height: 90% !important;
+        background-color: yellow !important;
+      }
+    }
+
+    &:hover {
+
+      &+div>div {
+        height: 70%;
+      }
+
+      :is(div):has(+ &)>div {
+        height: 70%;
+      }
+    }
+  }
+}
