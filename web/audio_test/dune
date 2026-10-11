@@ -1,0 +1,8 @@
+(alias
+ (name default)
+ (deps index.bc.js index.html))
+
+(copy_files
+ (mode
+  (promote (until-clean)))
+ (files ../../bin/audio_stream_test/index.bc.js))
