@@ -83,7 +83,7 @@ module Playback_controller (P : sig
     Fut.result
 end) =
 struct
-  type queued_track = { index : int; track : now_playing }
+  type queued_track = { stream_id : int; index : int; track : now_playing }
 
   let playback_request : (View.ranged * int) option Lwd.var = Lwd.var None
 
@@ -146,12 +146,12 @@ struct
   let make idb () =
     let prepared_tracks : queued_track Queue.t = Queue.create () in
     let next_track_index = ref 0 in
-    let generation = ref 0 in
+    let stamp = ref 0 in
     let stream_ref : Audio_stream.t option ref = ref None in
-    let rec fill_prepared_tracks (playlist : View.ranged) request_generation
-        minimum on_ready =
+    let rec fill_prepared_tracks (playlist : View.ranged) request_stamp minimum
+        on_ready =
       if
-        request_generation = !generation
+        request_stamp = !stamp
         && Queue.length prepared_tracks < minimum
         && !next_track_index < View.item_count playlist.view
       then begin
@@ -159,39 +159,52 @@ struct
         incr next_track_index;
         Fut.await (get_playable_track playlist index) (function
           | Error _ ->
-              fill_prepared_tracks playlist request_generation minimum on_ready
+              fill_prepared_tracks playlist request_stamp minimum on_ready
           | Ok None ->
-              fill_prepared_tracks playlist request_generation minimum on_ready
+              fill_prepared_tracks playlist request_stamp minimum on_ready
           | Ok (Some track) ->
-              if request_generation = !generation then begin
-                Queue.add { index; track } prepared_tracks;
-                Option.iter
-                  (fun stream -> Audio_stream.queue_song stream track.url)
-                  !stream_ref;
-                fill_prepared_tracks playlist request_generation minimum
-                  on_ready
+              if request_stamp = !stamp then begin
+                (match !stream_ref with
+                | None -> ()
+                | Some stream ->
+                    let stream_id = Audio_stream.queue_song stream track.url in
+                    Queue.add { stream_id; index; track } prepared_tracks);
+                fill_prepared_tracks playlist request_stamp minimum on_ready
               end)
       end
-      else if request_generation = !generation then on_ready ()
+      else if request_stamp = !stamp then on_ready ()
     in
-    let on_track_started () =
-      match Queue.take_opt prepared_tracks with
+    let on_track_started ({ id; _ } : Audio_stream.playback_infos) =
+      let rec take_started () =
+        (* One or multiple tracks may have been skipped *)
+        match Queue.peek_opt prepared_tracks with
+        | None -> None
+        | Some queued when queued.stream_id < id ->
+            (* Skipped by the stream *)
+            ignore (Queue.take prepared_tracks);
+            take_started ()
+        | Some queued when queued.stream_id = id ->
+            ignore (Queue.take prepared_tracks);
+            Some queued
+        | Some _ -> None
+      in
+      match take_started () with
       | None -> ()
-      | Some { index; track } -> (
+      | Some { index; track; _ } -> (
           set_current_track track;
           Lwd.set playstate.current_index index;
           match Lwd.peek playstate.playlist with
           | None -> ()
           | Some playlist ->
-              fill_prepared_tracks playlist !generation 2 (fun () -> ()))
+              fill_prepared_tracks playlist !stamp 2 (fun () -> ()))
     in
     let audio_controls, stream =
       Audio_player.make_player ~on_track_change:on_track_started ()
     in
     stream_ref := Some stream;
     let load_playlist playlist index =
-      incr generation;
-      let request_generation = !generation in
+      incr stamp;
+      let request_stamp = !stamp in
       Audio_stream.reset stream;
       Queue.clear prepared_tracks;
       next_track_index := index;
@@ -200,7 +213,7 @@ struct
       (* The stream promotes the first queued track to [current] and keeps the
          following one ready for the crossfade. Queue one extra track so that
          there are always two upcoming tracks available. *)
-      fill_prepared_tracks playlist request_generation 3 (fun () ->
+      fill_prepared_tracks playlist request_stamp 3 (fun () ->
           ignore @@ Audio_stream.resume stream)
     in
     let _playback_requests =
