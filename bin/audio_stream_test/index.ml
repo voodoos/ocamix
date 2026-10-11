@@ -3,12 +3,9 @@ open Brr
 
 let () = El.append_children (Document.body G.document) [ El.txt' "Pouet" ]
 let controls, stream = Audio_player.make_player ()
-let () = Audio_stream.queue_song stream "/audio_test/1-to-10.ogg"
-let () = Audio_stream.queue_song stream "/audio_test/10-to-0.mp3"
-
-let () =
-  Audio_stream.queue_song stream
-    "/audio_test/Amyl and the Sniffers - Giddy Up - 03 Mandalay.ogg"
+let () = ignore (Audio_stream.queue_song stream "/audio_test/1-to-10.ogg")
+let () = ignore (Audio_stream.queue_song stream "/audio_test/10-to-0.mp3")
+let () = ignore (Audio_stream.queue_song stream "/audio_test/1-to-10.mp3")
 
 (*let el_ns ~d name =
   Jv.call (Document.to_jv d) "createElementNS"
