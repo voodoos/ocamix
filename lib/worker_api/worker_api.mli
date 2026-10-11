@@ -11,9 +11,9 @@ module type Queries = sig
   (** Use a GADT to describe queries that have different parameters and return
       value. For example:
       {[
-        type 'a query =
-          | Next_int : (int, int) query
-          | Previous_letters : (char, char) list query
+      type 'a query =
+        | Next_int : (int, int) query
+        | Previous_letters : (char, char) list query
       ]} *)
 
   val jsont : ('a, 'b) query -> 'a Jsont.t * 'b transfer_or_conv
