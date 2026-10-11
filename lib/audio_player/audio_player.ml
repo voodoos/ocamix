@@ -37,7 +37,7 @@ let timeline { stream; progress; playback_infos; _ } =
         in
         let fade_out_start_tick =
           Lwd.map (Lwd.get playback_infos)
-            ~f:(fun { fade_out_start_time; track_duration_s } ->
+            ~f:(fun { fade_out_start_time; track_duration_s; _ } ->
               Console.log [ "FOST "; fade_out_start_time; track_duration_s ];
               Float.of_int (ticks_number - 1)
               *. (fade_out_start_time /. track_duration_s)
@@ -129,12 +129,13 @@ let controls state =
 let make_player ?on_track_change () =
   let status = Lwd.var `Paused in
   let playback_infos =
-    Lwd.var { Audio_stream.fade_out_start_time = 0.; track_duration_s = 0. }
+    Lwd.var
+      { Audio_stream.id = -1; fade_out_start_time = 0.; track_duration_s = 0. }
   in
   let progress = Lwd.var { Audio_stream.current = 0.; total = 0. } in
   let update_playback_infos playback_info =
     Lwd.set playback_infos playback_info;
-    Option.iter (fun callback -> callback ()) on_track_change
+    Option.iter (fun callback -> callback playback_info) on_track_change
   in
   let stream =
     Audio_stream.init ~on_progress:(Lwd.set progress)
